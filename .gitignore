@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+
+build/
+dist/
+release/
+
+.agents/
+.codex/
+*.bak
