@@ -1,0 +1,43 @@
+import { env } from 'cloudflare:workers';
+
+const validOptions = new Set(['timer', 'ios', 'android']);
+
+async function ensureTables() {
+  const db = env.DB;
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS votes (
+      visitor_id TEXT PRIMARY KEY,
+      option_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`),
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_votes_option_id ON votes(option_id)'),
+  ]);
+}
+
+export async function GET() {
+  await ensureTables();
+  const rows = await env.DB.prepare(
+    'SELECT option_id, COUNT(*) AS count FROM votes GROUP BY option_id',
+  ).all<{ option_id: string; count: number }>();
+  const counts = { timer: 0, ios: 0, android: 0 };
+  for (const row of rows.results) {
+    if (row.option_id in counts) counts[row.option_id as keyof typeof counts] = Number(row.count);
+  }
+  return Response.json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0) });
+}
+
+export async function POST(request: Request) {
+  await ensureTables();
+  const body = await request.json() as { visitorId?: string; optionId?: string };
+  if (!body.visitorId || !/^[a-zA-Z0-9-]{8,128}$/.test(body.visitorId) || !body.optionId || !validOptions.has(body.optionId)) {
+    return Response.json({ error: 'Invalid vote.' }, { status: 400 });
+  }
+  const now = new Date().toISOString();
+  await env.DB.prepare(`INSERT INTO votes (visitor_id, option_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(visitor_id) DO UPDATE SET option_id = excluded.option_id, updated_at = excluded.updated_at`)
+    .bind(body.visitorId, body.optionId, now, now)
+    .run();
+  return GET();
+}
