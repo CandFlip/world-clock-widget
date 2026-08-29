@@ -6,7 +6,7 @@ const manrope = Manrope({ variable: '--font-body', subsets: ['latin'] });
 const spaceGrotesk = Space_Grotesk({ variable: '--font-display', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
+  metadataBase: new URL('https://world-clock-next.decent-rat-2368.chatgpt.site'),
   title: 'What should I do next? — World Clock Widget',
   description: 'Vote on what should be built next for World Clock Widget.',
   openGraph: {
