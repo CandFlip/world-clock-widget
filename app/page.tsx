@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { AlarmClock, ArrowRight, ArrowUpRight, Check, Clock3, Smartphone, Sparkles } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { AlarmClock, ArrowRight, ArrowUpRight, Check, Clock3, LogIn, LogOut, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { GoogleSignIn, type GoogleUser } from '@/components/google-sign-in';
 
 type IdeaId = 'timer' | 'ios' | 'android';
 type Counts = Record<IdeaId, number>;
 type QuizAnswers = { context: string; placement: string; alertStyle: string; typicalDuration: string; notes: string };
+type AuthResponse = { user?: GoogleUser | null };
+type VotesResponse = { counts?: Counts; selected?: IdeaId | null };
 
 const emptyCounts: Counts = { timer: 0, ios: 0, android: 0 };
 const initialAnswers: QuizAnswers = { context: '', placement: '', alertStyle: '', typicalDuration: '', notes: '' };
@@ -27,16 +31,6 @@ const quizSteps = [
   { key: 'typicalDuration' as const, title: 'What do you usually time?', description: 'This helps decide which presets should be immediately available.', options: ['Under 5 minutes', '5–25 minutes', '25–60 minutes', '1–4 hours', 'A specific time of day', 'Multiple timers at once'] },
 ];
 
-function getVisitorId() {
-  const key = 'world-clock-roadmap-visitor';
-  let id = window.localStorage.getItem(key);
-  if (!id) {
-    id = crypto.randomUUID();
-    window.localStorage.setItem(key, id);
-  }
-  return id;
-}
-
 export default function Home() {
   const [counts, setCounts] = useState<Counts>(emptyCounts);
   const [selected, setSelected] = useState<IdeaId | null>(null);
@@ -46,28 +40,34 @@ export default function Home() {
   const [quizStep, setQuizStep] = useState(0);
   const [answers, setAnswers] = useState<QuizAnswers>(initialAnswers);
   const [quizDone, setQuizDone] = useState(false);
+  const [user, setUser] = useState<GoogleUser | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [pendingVote, setPendingVote] = useState<IdeaId | null>(null);
   const total = useMemo(() => Object.values(counts).reduce((sum, count) => sum + count, 0), [counts]);
 
   useEffect(() => {
-    setSelected(window.localStorage.getItem('world-clock-roadmap-vote') as IdeaId | null);
-    fetch('/api/votes').then((response) => response.json()).then((data) => {
-      setCounts(data.counts ?? emptyCounts);
+    Promise.all([
+      fetch('/api/auth/me').then((response) => response.json() as Promise<AuthResponse>),
+      fetch('/api/votes').then((response) => response.json() as Promise<VotesResponse>),
+    ]).then(([auth, votes]) => {
+      setUser(auth.user ?? null);
+      setCounts(votes.counts ?? emptyCounts);
+      setSelected(votes.selected ?? null);
     }).catch(() => setMessage('Live totals are temporarily unavailable.')).finally(() => setLoading(false));
   }, []);
 
-  async function vote(optionId: IdeaId) {
+  const submitVote = useCallback(async (optionId: IdeaId) => {
     setMessage('');
     setLoading(true);
     try {
       const response = await fetch('/api/votes', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visitorId: getVisitorId(), optionId }),
+        body: JSON.stringify({ optionId }),
       });
       if (!response.ok) throw new Error('Vote failed');
-      const data = await response.json();
+      const data = await response.json() as { counts: Counts };
       setCounts(data.counts);
       setSelected(optionId);
-      window.localStorage.setItem('world-clock-roadmap-vote', optionId);
       setMessage('Your vote is counted. You can change it anytime.');
       if (optionId === 'timer') {
         setQuizStep(0); setQuizDone(false); setQuizOpen(true);
@@ -75,6 +75,30 @@ export default function Home() {
     } catch {
       setMessage('Could not save your vote. Please try again.');
     } finally { setLoading(false); }
+  }, []);
+
+  function vote(optionId: IdeaId) {
+    if (!user) {
+      setPendingVote(optionId);
+      setAuthOpen(true);
+      return;
+    }
+    void submitVote(optionId);
+  }
+
+  const handleSignedIn = useCallback((signedInUser: GoogleUser) => {
+    setUser(signedInUser);
+    setAuthOpen(false);
+    setMessage(`Welcome, ${signedInUser.name}. Your vote will be tied to this Google account.`);
+    setPendingVote(null);
+    if (pendingVote) void submitVote(pendingVote);
+  }, [pendingVote, submitVote]);
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+    setSelected(null);
+    setMessage('Signed out.');
   }
 
   async function submitQuiz() {
@@ -82,7 +106,7 @@ export default function Home() {
     try {
       const response = await fetch('/api/timer-feedback', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visitorId: getVisitorId(), ...answers }),
+        body: JSON.stringify(answers),
       });
       if (!response.ok) throw new Error('Feedback failed');
       setQuizDone(true);
@@ -97,13 +121,19 @@ export default function Home() {
     <main className="site-shell">
       <nav className="topbar" aria-label="Main navigation">
         <a className="brand" href="#top" aria-label="World Clock roadmap home"><span className="brand-mark"><Clock3 size={18} /></span>World Clock</a>
-        <a className="quiet-link" href="#support">Support the project <ArrowUpRight size={14} /></a>
+        <div className="account-area">
+          {user ? <>
+            {user.isAdmin && <Link className="admin-link" href="/admin"><ShieldCheck size={15} /> Dashboard</Link>}
+            <span className="user-chip">{user.picture ? <span className="user-avatar" style={{ backgroundImage: `url(${JSON.stringify(user.picture).slice(1, -1)})` }} /> : null}<span>{user.name}</span></span>
+            <button type="button" onClick={logout} aria-label="Sign out"><LogOut size={16} /></button>
+          </> : <button type="button" className="signin-link" onClick={() => setAuthOpen(true)}><LogIn size={15} /> Sign in with Google</button>}
+        </div>
       </nav>
 
       <section className="hero" id="top">
         <p className="eyebrow"><span className="live-dot" /> You choose the roadmap</p>
         <h1>What should I do next?</h1>
-        <p className="hero-copy">Vote for the feature you want most. One person gets one vote, and you can change your mind whenever you like.</p>
+        <p className="hero-copy">Vote for the feature you want most. One verified Google account gets one vote, and you can change your mind whenever you like.</p>
       </section>
 
       <section className="ideas-section" aria-labelledby="ideas-title">
@@ -132,7 +162,7 @@ export default function Home() {
             );
           })}
         </div>
-        <p className="status-message" role="status" aria-live="polite">{message}</p>
+        <output className="status-message" aria-live="polite">{message}</output>
       </section>
 
       <section className="support-card" id="support">
@@ -158,6 +188,18 @@ export default function Home() {
 
       <footer><span>Built in public, one useful feature at a time.</span><span>World Clock Widget</span></footer>
 
+      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
+        <DialogContent className="auth-dialog">
+          <DialogHeader>
+            <span className="auth-icon"><ShieldCheck size={22} /></span>
+            <DialogTitle>Sign in to cast your vote</DialogTitle>
+            <DialogDescription>Google sign-in keeps the roadmap fair: one person, one current choice. Your name, email and vote are visible only to the project owner.</DialogDescription>
+          </DialogHeader>
+          <GoogleSignIn onSignedIn={handleSignedIn} />
+          <p className="privacy-note">The site never receives your Google password.</p>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={quizOpen} onOpenChange={setQuizOpen}>
         <DialogContent className="quiz-dialog">
           {quizDone ? (
@@ -180,7 +222,7 @@ export default function Home() {
               {currentStep ? (
                 <div className="quiz-options" role="radiogroup" aria-label={currentStep.title}>
                   {currentStep.options.map((option) => (
-                    <button key={option} type="button" role="radio" aria-checked={currentValue === option} className={currentValue === option ? 'chosen' : ''}
+                    <button key={option} type="button" aria-pressed={currentValue === option} className={currentValue === option ? 'chosen' : ''}
                       onClick={() => setAnswers((previous) => ({ ...previous, [currentStep.key]: option }))}>
                       <span>{option}</span>{currentValue === option && <Check size={16} />}
                     </button>

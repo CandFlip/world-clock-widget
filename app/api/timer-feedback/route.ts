@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
+import { getSessionUser } from '@/lib/auth';
 
-const limits = { visitorId: 128, context: 80, placement: 80, alertStyle: 80, typicalDuration: 80, notes: 600 } as const;
+const limits = { context: 80, placement: 80, alertStyle: 80, typicalDuration: 80, notes: 600 } as const;
 
 async function ensureTable() {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS timer_feedback (
@@ -17,14 +18,13 @@ async function ensureTable() {
 
 export async function POST(request: Request) {
   await ensureTable();
+  const user = await getSessionUser(request);
+  if (!user) return Response.json({ error: 'Sign in with Google to send feedback.' }, { status: 401 });
   const body = await request.json() as Record<keyof typeof limits, unknown>;
   for (const [key, limit] of Object.entries(limits)) {
     if (typeof body[key as keyof typeof limits] !== 'string' || (body[key as keyof typeof limits] as string).length > limit) {
       return Response.json({ error: 'Invalid feedback.' }, { status: 400 });
     }
-  }
-  if (!/^[a-zA-Z0-9-]{8,128}$/.test(body.visitorId as string)) {
-    return Response.json({ error: 'Invalid feedback.' }, { status: 400 });
   }
   const now = new Date().toISOString();
   await env.DB.prepare(`INSERT INTO timer_feedback
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
       typical_duration = excluded.typical_duration,
       notes = excluded.notes,
       updated_at = excluded.updated_at`)
-    .bind(body.visitorId, body.context, body.placement, body.alertStyle, body.typicalDuration, body.notes, now, now)
+    .bind(user.id, body.context, body.placement, body.alertStyle, body.typicalDuration, body.notes, now, now)
     .run();
   return Response.json({ ok: true });
 }

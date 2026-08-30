@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { getSessionUser } from '@/lib/auth';
 
 const validOptions = new Set(['timer', 'ios', 'android']);
 
@@ -15,7 +16,7 @@ async function ensureTables() {
   ]);
 }
 
-export async function GET() {
+async function totals(selected: string | null = null) {
   await ensureTables();
   const rows = await env.DB.prepare(
     'SELECT option_id, COUNT(*) AS count FROM votes GROUP BY option_id',
@@ -24,20 +25,32 @@ export async function GET() {
   for (const row of rows.results) {
     if (row.option_id in counts) counts[row.option_id as keyof typeof counts] = Number(row.count);
   }
-  return Response.json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0) });
+  return Response.json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0), selected });
+}
+
+export async function GET(request: Request) {
+  const user = await getSessionUser(request);
+  let selected: string | null = null;
+  if (user) {
+    const row = await env.DB.prepare('SELECT option_id FROM votes WHERE visitor_id = ?').bind(user.id).first<{ option_id: string }>();
+    selected = row?.option_id || null;
+  }
+  return totals(selected);
 }
 
 export async function POST(request: Request) {
   await ensureTables();
-  const body = await request.json() as { visitorId?: string; optionId?: string };
-  if (!body.visitorId || !/^[a-zA-Z0-9-]{8,128}$/.test(body.visitorId) || !body.optionId || !validOptions.has(body.optionId)) {
+  const user = await getSessionUser(request);
+  if (!user) return Response.json({ error: 'Sign in with Google to vote.' }, { status: 401 });
+  const body = await request.json() as { optionId?: string };
+  if (!body.optionId || !validOptions.has(body.optionId)) {
     return Response.json({ error: 'Invalid vote.' }, { status: 400 });
   }
   const now = new Date().toISOString();
   await env.DB.prepare(`INSERT INTO votes (visitor_id, option_id, created_at, updated_at)
     VALUES (?, ?, ?, ?)
     ON CONFLICT(visitor_id) DO UPDATE SET option_id = excluded.option_id, updated_at = excluded.updated_at`)
-    .bind(body.visitorId, body.optionId, now, now)
+    .bind(user.id, body.optionId, now, now)
     .run();
-  return GET();
+  return totals(body.optionId);
 }
