@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -60,3 +60,15 @@ jobs:
           name: WorldClockAlarm-v1.0.0
           path: android-output
           retention-days: 90
+      - name: Publish installable APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v1.0.0
+          name: World Clock Alarm v1.0.0
+          prerelease: true
+          generate_release_notes: false
+          body: |
+            Android companion for World Clock Widget. Install the APK, allow notifications and exact alarms, then scan the one-time QR shown in the Windows widget settings.
+          files: |
+            android-output/WorldClockAlarm-v1.0.0.apk
+            android-output/WorldClockAlarm-v1.0.0.aab
