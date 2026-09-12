@@ -1,0 +1,29 @@
+name: Publish Windows release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/android-companion]
+    paths:
+      - release/WorldClockWidget-Setup-v1.1.77.exe
+      - .github/workflows/windows-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish installer
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: windows-v1.1.77
+          name: World Clock Widget v1.1.77
+          body: |
+            Бесплатный Windows-виджет мирового времени, таймеров и напоминаний.
+
+            В этой версии внизу приложения появилась ссылка «Что дальше?» на публичную дорожную карту, голосование и поддержку проекта. Настройки и локальные напоминания сохраняются при обновлении.
+          files: release/WorldClockWidget-Setup-v1.1.77.exe
+          make_latest: true
