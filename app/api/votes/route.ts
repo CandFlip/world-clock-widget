@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { getSessionUser } from '@/lib/auth';
 
-const validOptions = new Set(['timer', 'ios', 'android']);
+import { IDEA_IDS as validOptions } from '@/lib/roadmap';
 
 async function ensureTables() {
   const db = env.DB;
@@ -21,9 +21,9 @@ async function totals(selected: string | null = null) {
   const rows = await env.DB.prepare(
     'SELECT option_id, COUNT(*) AS count FROM votes GROUP BY option_id',
   ).all<{ option_id: string; count: number }>();
-  const counts = { timer: 0, ios: 0, android: 0 };
+  const counts: Record<string, number> = {};
   for (const row of rows.results) {
-    if (row.option_id in counts) counts[row.option_id as keyof typeof counts] = Number(row.count);
+    if (validOptions.has(row.option_id)) counts[row.option_id] = Number(row.count);
   }
   return Response.json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0), selected });
 }

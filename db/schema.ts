@@ -36,3 +36,24 @@ export const timerFeedback = sqliteTable('timer_feedback', {
   createdAt: text('created_at').notNull(),
   updatedAt: text('updated_at').notNull(),
 });
+
+export const suggestions = sqliteTable('suggestions', {
+  id: text('id').primaryKey(), visitorId: text('visitor_id').notNull(), title: text('title').notNull(),
+  problem: text('problem').notNull(), outcome: text('outcome').notNull(), status: text('status').notNull(),
+  createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+}, (table) => [index('idx_suggestions_status_created').on(table.status, table.createdAt)]);
+
+export const contributions = sqliteTable('contributions', {
+  id: text('id').primaryKey(), visitorId: text('visitor_id').notNull(), targetId: text('target_id').notNull(),
+  amountCents: text('amount_cents').notNull(), currency: text('currency').notNull(), reference: text('reference').notNull(),
+  status: text('status').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+}, (table) => [index('idx_contributions_target_status').on(table.targetId, table.status)]);
+
+export const siteSettings = sqliteTable('site_settings', {
+  key: text('key').primaryKey(), value: text('value').notNull(), updatedAt: text('updated_at').notNull(),
+});
+
+export const supportMethods = sqliteTable('support_methods', {
+  id: text('id').primaryKey(), label: text('label').notNull(), url: text('url').notNull(), instructions: text('instructions').notNull(),
+  active: text('active').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+});

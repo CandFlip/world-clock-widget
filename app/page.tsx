@@ -2,248 +2,54 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlarmClock, ArrowRight, ArrowUpRight, Check, Clock3, LogIn, LogOut, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ArrowDownToLine, ArrowRight, Check, Clock3, ExternalLink, Heart, Lightbulb, LogIn, LogOut, MessageSquarePlus, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { GoogleSignIn, type GoogleUser } from '@/components/google-sign-in';
 
-type IdeaId = 'timer' | 'ios' | 'android';
-type Counts = Record<IdeaId, number>;
-type QuizAnswers = { context: string; placement: string; alertStyle: string; typicalDuration: string; notes: string };
-type AuthResponse = { user?: GoogleUser | null };
-type VotesResponse = { counts?: Counts; selected?: IdeaId | null };
+type Localized = { ru: string; en: string };
+type Idea = { id: string; status: string; goalCents: number; title: Localized; description: Localized; cost: Localized };
+type Method = { id: string; label: string; url: string; instructions: string };
+type Roadmap = { ideas: Idea[]; counts: Record<string,number>; funded: Record<string,number>; selected: string|null; settings: Record<string,string>; methods: Method[]; suggestions: Array<{id:string;title:string;problem:string;outcome:string}> };
+type Modal = null|'auth'|'suggest'|'contribute'|'support';
 
-const emptyCounts: Counts = { timer: 0, ios: 0, android: 0 };
-const initialAnswers: QuizAnswers = { context: '', placement: '', alertStyle: '', typicalDuration: '', notes: '' };
-const supportUrl = process.env.NEXT_PUBLIC_SUPPORT_URL ?? '';
+const defaults: Roadmap={ideas:[],counts:{},funded:{},selected:null,settings:{},methods:[],suggestions:[]};
+const strings={
+  ru:{navRoadmap:'Планы',navIdeas:'Предложить идею',navSupport:'Поддержать',signin:'Войти',free:'Бесплатно — сегодня и всегда',headline:'Полезное время без подписки.',intro:'World Clock Widget и его основные функции полностью бесплатны. Пользуйтесь сколько угодно. Если приложение помогает вам, можно поддержать выбранную новую функцию или автора — только добровольно.',download:'Скачать для Windows',source:'Официальная версия на GitHub',roadmap:'Что дальше?',roadmapCopy:'Выберите одну функцию, которая нужна вам больше всего. Голос можно изменить в любой момент.',votes:'голосов',vote:'Голосовать',choice:'Ваш выбор',fund:'Поддержать функцию',goal:'Собрано',ideaTitle:'Предложить свою функцию',ideaCopy:'Опишите реальную проблему. После проверки идея сможет появиться в общем голосовании.',suggest:'Предложить идею',community:'Идеи сообщества',supportTitle:'Поддержать автора',supportCopy:'Сейчас я восстанавливаюсь после ишемического инфаркта мозжечка. Цель — оплатить медицинские счета, вернуть долги за лечение и продолжить восстановление. Приложение остаётся бесплатным независимо от результата сбора.',authorGoal:'Лечение и восстановление',support:'Поддержать',transparent:'Переводы добровольны. Поддержка функции показывает её приоритет и не является предзаказом. Платёжные данные сайт не хранит.',loginTitle:'Войти за несколько секунд',loginCopy:'Вход нужен, чтобы один человек учитывался один раз, а ваши идеи и поддержка были видны вам и автору.',problem:'Какую проблему это решит?',outcome:'Как должен выглядеть хороший результат?',send:'Отправить',thanks:'Спасибо. Запись отправлена автору.',amount:'Сумма в эквиваленте USD',reference:'Комментарий или последние цифры перевода',reported:'Отправить на подтверждение',methods:'Способы перевода',noMethods:'Реквизиты добавляются. Пока можно проголосовать или оставить идею.',statusFunding:'Собираем поддержку',statusIdea:'Идея'},
+  en:{navRoadmap:'Roadmap',navIdeas:'Suggest an idea',navSupport:'Support',signin:'Sign in',free:'Free today and always',headline:'Useful time without a subscription.',intro:'World Clock Widget and its core features are completely free for as long as you need them. If it helps, you can voluntarily support a specific new feature or the person building it.',download:'Download for Windows',source:'Official GitHub release',roadmap:"What’s next?",roadmapCopy:'Choose the one feature you need most. You can change your vote at any time.',votes:'votes',vote:'Vote',choice:'Your choice',fund:'Fund this feature',goal:'Raised',ideaTitle:'Suggest a feature',ideaCopy:'Describe a real problem. After review, the idea can become part of the public vote.',suggest:'Suggest an idea',community:'Community ideas',supportTitle:'Support the author',supportCopy:'I am currently recovering from an ischemic cerebellar stroke. The goal is to cover medical bills, repay treatment debt and continue recovery. The app stays free regardless of the result.',authorGoal:'Treatment and recovery',support:'Support',transparent:'Contributions are voluntary. Funding a feature signals priority and is not a preorder. This site never stores card details.',loginTitle:'Sign in in seconds',loginCopy:'Sign-in keeps voting fair and lets the author connect your ideas and reported contributions to you.',problem:'What problem would this solve?',outcome:'What would a good result look like?',send:'Send',thanks:'Thank you. The author has received it.',amount:'Amount in USD equivalent',reference:'Note or last transfer digits',reported:'Send for confirmation',methods:'Ways to contribute',noMethods:'Transfer details are being added. You can still vote or suggest an idea.',statusFunding:'Funding',statusIdea:'Idea'}
+};
 
-const ideas = [
-  { id: 'timer' as const, title: 'Alarm & timer', description: 'A focused timer for work, cooking, rest and the moments you cannot afford to miss.', icon: AlarmClock, tag: 'Tell me how you would use it' },
-  { id: 'ios' as const, title: 'World Clock for iOS', description: 'The same glanceable time experience, adapted for iPhone and iOS widgets.', icon: Smartphone, tag: 'iPhone + home screen widgets' },
-  { id: 'android' as const, title: 'World Clock for Android', description: 'A native-feeling Android version for phones, tablets and home screens.', icon: Smartphone, tag: 'Android + home screen widgets' },
-];
+export default function Home(){
+  const [lang,setLang]=useState<'ru'|'en'>('ru'),[data,setData]=useState<Roadmap>(defaults),[user,setUser]=useState<GoogleUser|null>(null),[modal,setModal]=useState<Modal>(null),[pendingVote,setPendingVote]=useState<string|null>(null),[target,setTarget]=useState('author'),[message,setMessage]=useState(''),[busy,setBusy]=useState(true);
+  const [suggestion,setSuggestion]=useState({title:'',problem:'',outcome:''}),[contribution,setContribution]=useState({amount:'',reference:''});
+  const t=strings[lang];
+  const load=useCallback(async()=>{const [roadmap,auth]=await Promise.all([fetch('/api/roadmap').then(r=>r.json()),fetch('/api/auth/me').then(r=>r.json())]);setData(roadmap);setUser(auth.user||null);setBusy(false);},[]);
+  useEffect(()=>{const saved=localStorage.getItem('wc-lang');if(saved==='en')setLang('en');void load().catch(()=>setBusy(false));},[load]);
+  const chooseLang=(value:'ru'|'en')=>{setLang(value);localStorage.setItem('wc-lang',value);document.documentElement.lang=value;};
+  const totalVotes=useMemo(()=>Object.values(data.counts).reduce((a,b)=>a+b,0),[data.counts]);
+  const download=data.settings.download_url||'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.77/WorldClockWidget-Setup-v1.1.77.exe';
+  const version=data.settings.download_version||'v1.1.77';
+  async function saveVote(id:string){setBusy(true);const response=await fetch('/api/votes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({optionId:id})});if(response.ok)await load();else setMessage(lang==='ru'?'Не удалось сохранить голос.':'Could not save the vote.');setBusy(false);}
+  async function vote(id:string){if(!user){setPendingVote(id);setModal('auth');return;}await saveVote(id);}
+  function signedIn(next:GoogleUser){setUser(next);setModal(null);if(pendingVote){const id=pendingVote;setPendingVote(null);void saveVote(id);}}
+  async function sendSuggestion(){const response=await fetch('/api/suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(suggestion)});if(response.status===401){setModal('auth');return;}if(response.ok){setSuggestion({title:'',problem:'',outcome:''});setMessage(t.thanks);setModal(null);}else setMessage(lang==='ru'?'Проверьте заполнение формы.':'Please check the form.');}
+  function openSupport(id:string){setTarget(id);setModal('support');}
+  async function reportContribution(){const response=await fetch('/api/contributions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId:target,amount:Number(contribution.amount),currency:'USD',reference:contribution.reference})});if(response.status===401){setModal('auth');return;}if(response.ok){setContribution({amount:'',reference:''});setMessage(t.thanks);setModal(null);}else setMessage(lang==='ru'?'Проверьте сумму.':'Please check the amount.');}
+  async function logout(){await fetch('/api/auth/logout',{method:'POST'});setUser(null);}
+  const authorGoal=Number(data.settings.author_goal_cents||300000),authorRaised=Number(data.settings.author_raised_cents||0)+(data.funded.author||0);
+  return <main className="site-shell">
+    <nav className="topbar"><a className="brand" href="#top"><span className="brand-mark"><Clock3/></span><span>World Clock</span></a><div className="nav-links"><a href="#roadmap">{t.navRoadmap}</a><button onClick={()=>setModal('suggest')}>{t.navIdeas}</button><a href="#support">{t.navSupport}</a></div><div className="account-area"><div className="language"><button className={lang==='ru'?'active':''} onClick={()=>chooseLang('ru')}>RU</button><button className={lang==='en'?'active':''} onClick={()=>chooseLang('en')}>EN</button></div>{user?<>{user.isAdmin&&<Link className="admin-link" href="/admin"><ShieldCheck size={15}/></Link>}<span className="user-chip">{user.name}</span><button onClick={logout} aria-label="Sign out"><LogOut size={16}/></button></>:<button className="signin-link" onClick={()=>setModal('auth')}><LogIn size={15}/>{t.signin}</button>}</div></nav>
 
-const quizSteps = [
-  { key: 'context' as const, title: 'When would you use it?', description: 'Choose the situation where the timer matters most.', options: ['Focused work or study', 'Cooking', 'Exercise or stretching', 'Sleep or waking up', 'Medication or appointments', 'Travel and time zones', 'Something else'] },
-  { key: 'placement' as const, title: 'Where should it live?', description: 'Think about the moment you need to start or check it.', options: ['Inside the World Clock widget', 'A tiny always-on-top timer', 'Windows system tray', 'A full alarm screen', 'On my phone', 'Across desktop and phone'] },
-  { key: 'alertStyle' as const, title: 'How should it get your attention?', description: 'Pick the alert that would feel useful rather than annoying.', options: ['Sound and notification', 'Gentle sound only', 'Visual notification only', 'Persistent alarm until dismissed', 'Start quietly, then get louder'] },
-  { key: 'typicalDuration' as const, title: 'What do you usually time?', description: 'This helps decide which presets should be immediately available.', options: ['Under 5 minutes', '5–25 minutes', '25–60 minutes', '1–4 hours', 'A specific time of day', 'Multiple timers at once'] },
-];
+    <section className="hero" id="top"><div className="free-pill"><Sparkles size={15}/>{t.free}</div><h1>{t.headline}</h1><p>{t.intro}</p><div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine/>{t.download}<span>{version}</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases" target="_blank" rel="noreferrer">{t.source}<ExternalLink/></a></div><div className="promise"><strong>0 ₽</strong><span>{lang==='ru'?'Нет платных уровней, пробного периода или заблокированных основных функций.':'No paid tiers, trial period or locked core features.'}</span></div></section>
 
-export default function Home() {
-  const [counts, setCounts] = useState<Counts>(emptyCounts);
-  const [selected, setSelected] = useState<IdeaId | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
-  const [quizOpen, setQuizOpen] = useState(false);
-  const [quizStep, setQuizStep] = useState(0);
-  const [answers, setAnswers] = useState<QuizAnswers>(initialAnswers);
-  const [quizDone, setQuizDone] = useState(false);
-  const [user, setUser] = useState<GoogleUser | null>(null);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [pendingVote, setPendingVote] = useState<IdeaId | null>(null);
-  const total = useMemo(() => Object.values(counts).reduce((sum, count) => sum + count, 0), [counts]);
+    <section className="roadmap-section" id="roadmap"><header className="section-heading"><div><p className="section-kicker">{totalVotes} {t.votes}</p><h2>{t.roadmap}</h2><p>{t.roadmapCopy}</p></div><button className="secondary-action" onClick={()=>setModal('suggest')}><MessageSquarePlus/>{t.suggest}</button></header><div className="idea-list">{data.ideas.map((idea,index)=>{const votes=data.counts[idea.id]||0,funded=data.funded[idea.id]||0,percent=idea.goalCents?Math.min(100,Math.round(funded/idea.goalCents*100)):0,selected=data.selected===idea.id;return <article className={`idea-card ${index===0?'featured':''}`} key={idea.id}><div className="idea-number">0{index+1}</div><div className="idea-copy"><div className="idea-meta"><span>{idea.status==='funding'?t.statusFunding:t.statusIdea}</span><small>{idea.cost[lang]}</small></div><h3>{idea.title[lang]}</h3><p>{idea.description[lang]}</p>{idea.goalCents>0&&<div className="funding"><div><span>{t.goal}</span><strong>${(funded/100).toFixed(0)} / ${(idea.goalCents/100).toFixed(0)}</strong></div><div className="track"><i style={{width:`${percent}%`}}/></div></div>}</div><div className="idea-actions"><button className={selected?'selected':''} onClick={()=>vote(idea.id)} disabled={busy}>{selected?<Check/>:<Lightbulb/>}{selected?t.choice:t.vote}<span>{votes}</span></button>{idea.goalCents>0&&<button onClick={()=>openSupport(idea.id)}><Heart/>{t.fund}</button>}</div></article>})}</div>
+      {data.suggestions.length>0&&<div className="community"><p className="section-kicker">{t.community}</p>{data.suggestions.map(item=><article key={item.id}><h3>{item.title}</h3><p>{item.problem}</p>{item.outcome&&<small>{item.outcome}</small>}</article>)}</div>}<output className="status-message">{message}</output></section>
 
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/auth/me').then((response) => response.json() as Promise<AuthResponse>),
-      fetch('/api/votes').then((response) => response.json() as Promise<VotesResponse>),
-    ]).then(([auth, votes]) => {
-      setUser(auth.user ?? null);
-      setCounts(votes.counts ?? emptyCounts);
-      setSelected(votes.selected ?? null);
-    }).catch(() => setMessage('Live totals are temporarily unavailable.')).finally(() => setLoading(false));
-  }, []);
+    <section className="support-card" id="support"><div className="support-story"><p className="section-kicker">{t.authorGoal}</p><h2>{t.supportTitle}</h2><p>{data.settings[`author_story_${lang}`]||t.supportCopy}</p><p className="transparency">{t.transparent}</p></div><div className="support-panel"><div className="support-total"><strong>${(authorRaised/100).toLocaleString('en-US')}</strong><span>/ ${(authorGoal/100).toLocaleString('en-US')}</span></div><div className="track large"><i style={{width:`${Math.min(100,authorRaised/authorGoal*100)}%`}}/></div><button className="primary-action" onClick={()=>openSupport('author')}><Heart/>{t.support}</button></div></section>
+    <footer><span>World Clock Widget · {t.free}</span><a href="https://github.com/CandFlip/world-clock-widget" target="_blank" rel="noreferrer">GitHub <ExternalLink/></a></footer>
 
-  const submitVote = useCallback(async (optionId: IdeaId) => {
-    setMessage('');
-    setLoading(true);
-    try {
-      const response = await fetch('/api/votes', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ optionId }),
-      });
-      if (!response.ok) throw new Error('Vote failed');
-      const data = await response.json() as { counts: Counts };
-      setCounts(data.counts);
-      setSelected(optionId);
-      setMessage('Your vote is counted. You can change it anytime.');
-      if (optionId === 'timer') {
-        setQuizStep(0); setQuizDone(false); setQuizOpen(true);
-      }
-    } catch {
-      setMessage('Could not save your vote. Please try again.');
-    } finally { setLoading(false); }
-  }, []);
-
-  function vote(optionId: IdeaId) {
-    if (!user) {
-      setPendingVote(optionId);
-      setAuthOpen(true);
-      return;
-    }
-    void submitVote(optionId);
-  }
-
-  const handleSignedIn = useCallback((signedInUser: GoogleUser) => {
-    setUser(signedInUser);
-    setAuthOpen(false);
-    setMessage(`Welcome, ${signedInUser.name}. Your vote will be tied to this Google account.`);
-    setPendingVote(null);
-    if (pendingVote) void submitVote(pendingVote);
-  }, [pendingVote, submitVote]);
-
-  async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    setUser(null);
-    setSelected(null);
-    setMessage('Signed out.');
-  }
-
-  async function submitQuiz() {
-    setLoading(true);
-    try {
-      const response = await fetch('/api/timer-feedback', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(answers),
-      });
-      if (!response.ok) throw new Error('Feedback failed');
-      setQuizDone(true);
-    } catch { setMessage('Could not save the timer answers. Please try again.'); setQuizOpen(false); }
-    finally { setLoading(false); }
-  }
-
-  const currentStep = quizSteps[quizStep];
-  const currentValue = currentStep ? answers[currentStep.key] : '';
-
-  return (
-    <main className="site-shell">
-      <nav className="topbar" aria-label="Main navigation">
-        <a className="brand" href="#top" aria-label="World Clock roadmap home"><span className="brand-mark"><Clock3 size={18} /></span>World Clock</a>
-        <div className="account-area">
-          {user ? <>
-            {user.isAdmin && <Link className="admin-link" href="/admin"><ShieldCheck size={15} /> Dashboard</Link>}
-            <span className="user-chip">{user.picture ? <span className="user-avatar" style={{ backgroundImage: `url(${JSON.stringify(user.picture).slice(1, -1)})` }} /> : null}<span>{user.name}</span></span>
-            <button type="button" onClick={logout} aria-label="Sign out"><LogOut size={16} /></button>
-          </> : <button type="button" className="signin-link" onClick={() => setAuthOpen(true)}><LogIn size={15} /> Sign in with Google</button>}
-        </div>
-      </nav>
-
-      <section className="hero" id="top">
-        <p className="eyebrow"><span className="live-dot" /> You choose the roadmap</p>
-        <h1>What should I do next?</h1>
-        <p className="hero-copy">Vote for the feature you want most. One verified Google account gets one vote, and you can change your mind whenever you like.</p>
-      </section>
-
-      <section className="ideas-section" aria-labelledby="ideas-title">
-        <div className="section-heading">
-          <div><p className="section-kicker">Open voting</p><h2 id="ideas-title">Choose one idea</h2></div>
-          <p className="vote-count">{loading && total === 0 ? 'Loading votes…' : `${total} ${total === 1 ? 'vote' : 'votes'} so far`}</p>
-        </div>
-        <div className="idea-grid">
-          {ideas.map((idea, index) => {
-            const Icon = idea.icon;
-            const isSelected = selected === idea.id;
-            const share = total ? Math.round((counts[idea.id] / total) * 100) : 0;
-            return (
-              <article className={`idea-card idea-${index + 1} ${isSelected ? 'is-selected' : ''}`} key={idea.id}>
-                <div className="idea-topline"><span className="idea-icon"><Icon size={21} /></span><span className="idea-rank">0{index + 1}</span></div>
-                <span className="idea-tag">{idea.tag}</span>
-                <h3>{idea.title}</h3><p>{idea.description}</p>
-                <div className="mini-progress" aria-label={`${share}% of votes`}><span style={{ width: `${share}%` }} /></div>
-                <div className="vote-row">
-                  <button type="button" onClick={() => vote(idea.id)} disabled={loading} className={isSelected ? 'selected-button' : ''}>
-                    {isSelected ? <><Check size={15} /> Your choice</> : 'Vote for this'}
-                  </button>
-                  <span>{counts[idea.id]} {counts[idea.id] === 1 ? 'vote' : 'votes'} · {share}%</span>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-        <output className="status-message" aria-live="polite">{message}</output>
-      </section>
-
-      <section className="support-card" id="support">
-        <div>
-          <p className="section-kicker">Keep it independent</p><h2>Support the author</h2>
-          <p>Help fund design, testing and future platform versions. Payments are handled securely by Stripe in your local currency.</p>
-        </div>
-        <div className="support-actions">
-          <div className="support-progress" aria-label="Support goal: no contributions yet">
-            <div className="progress-label"><span>Current support</span><strong>$0 / $250</strong></div>
-            <div className="progress-track"><span /></div>
-          </div>
-          <div className="support-buttons">
-            {supportUrl ? (
-              <a href={supportUrl} target="_blank" rel="noreferrer">Choose amount & frequency <ArrowUpRight size={15} /></a>
-            ) : (
-              <button type="button" disabled title="The author is connecting a secure Stripe payment page">Payments coming soon</button>
-            )}
-          </div>
-          <p className="payment-note">One-time or monthly. Cancel a recurring contribution at any time.</p>
-        </div>
-      </section>
-
-      <footer><span>Built in public, one useful feature at a time.</span><span>World Clock Widget</span></footer>
-
-      <Dialog open={authOpen} onOpenChange={setAuthOpen}>
-        <DialogContent className="auth-dialog">
-          <DialogHeader>
-            <span className="auth-icon"><ShieldCheck size={22} /></span>
-            <DialogTitle>Sign in to cast your vote</DialogTitle>
-            <DialogDescription>Google sign-in keeps the roadmap fair: one person, one current choice. Your name, email and vote are visible only to the project owner.</DialogDescription>
-          </DialogHeader>
-          <GoogleSignIn onSignedIn={handleSignedIn} />
-          <p className="privacy-note">The site never receives your Google password.</p>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={quizOpen} onOpenChange={setQuizOpen}>
-        <DialogContent className="quiz-dialog">
-          {quizDone ? (
-            <div className="quiz-success">
-              <span className="success-icon"><Sparkles size={24} /></span>
-              <DialogTitle>That was genuinely useful.</DialogTitle>
-              <DialogDescription>Your answers will help decide what the timer should look like, where it should live and how it should alert you.</DialogDescription>
-              <Button onClick={() => setQuizOpen(false)}>Done</Button>
-            </div>
-          ) : (
-            <>
-              <DialogHeader>
-                <div className="quiz-meta"><span>Timer mini-quiz</span><strong>{quizStep + 1} / {quizSteps.length + 1}</strong></div>
-                <div className="quiz-progress" aria-label={`Step ${quizStep + 1} of ${quizSteps.length + 1}`}>
-                  <span style={{ width: `${((quizStep + 1) / (quizSteps.length + 1)) * 100}%` }} />
-                </div>
-                <DialogTitle>{currentStep ? currentStep.title : 'Anything else I should know?'}</DialogTitle>
-                <DialogDescription>{currentStep ? currentStep.description : 'Optional: describe a real moment when an alarm or timer would have helped.'}</DialogDescription>
-              </DialogHeader>
-              {currentStep ? (
-                <div className="quiz-options" role="radiogroup" aria-label={currentStep.title}>
-                  {currentStep.options.map((option) => (
-                    <button key={option} type="button" aria-pressed={currentValue === option} className={currentValue === option ? 'chosen' : ''}
-                      onClick={() => setAnswers((previous) => ({ ...previous, [currentStep.key]: option }))}>
-                      <span>{option}</span>{currentValue === option && <Check size={16} />}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <Textarea value={answers.notes} maxLength={600} rows={6} placeholder="For example: I lose track of short breaks when working across time zones…"
-                  onChange={(event) => setAnswers((previous) => ({ ...previous, notes: event.target.value }))} />
-              )}
-              <div className="quiz-footer">
-                <Button variant="ghost" disabled={quizStep === 0} onClick={() => setQuizStep((step) => step - 1)}>Back</Button>
-                {quizStep < quizSteps.length ? (
-                  <Button disabled={!currentValue} onClick={() => setQuizStep((step) => step + 1)}>Continue <ArrowRight /></Button>
-                ) : (
-                  <Button disabled={loading} onClick={submitQuiz}>Send answers <ArrowRight /></Button>
-                )}
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-    </main>
-  );
+    <Dialog open={modal==='auth'} onOpenChange={open=>!open&&setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.loginTitle}</DialogTitle><DialogDescription>{t.loginCopy}</DialogDescription></DialogHeader><GoogleSignIn lang={lang} onSignedIn={signedIn}/></DialogContent></Dialog>
+    <Dialog open={modal==='suggest'} onOpenChange={open=>!open&&setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.ideaTitle}</DialogTitle><DialogDescription>{t.ideaCopy}</DialogDescription></DialogHeader><label><span>{lang==='ru'?'Короткое название':'Short title'}</span><input maxLength={100} value={suggestion.title} onChange={e=>setSuggestion({...suggestion,title:e.target.value})}/></label><label><span>{t.problem}</span><Textarea maxLength={800} value={suggestion.problem} onChange={e=>setSuggestion({...suggestion,problem:e.target.value})}/></label><label><span>{t.outcome}</span><Textarea maxLength={800} value={suggestion.outcome} onChange={e=>setSuggestion({...suggestion,outcome:e.target.value})}/></label><button className="primary-action" onClick={sendSuggestion}><ArrowRight/>{t.send}</button></DialogContent></Dialog>
+    <Dialog open={modal==='support'} onOpenChange={open=>!open&&setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{target==='author'?t.supportTitle:t.fund}</DialogTitle><DialogDescription>{t.transparent}</DialogDescription></DialogHeader><h3>{t.methods}</h3>{data.methods.length?<div className="method-list">{data.methods.map(method=><div key={method.id}><strong>{method.label}</strong><p>{method.instructions}</p>{method.url&&<a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink/></a>}</div>)}</div>:<p className="empty-note">{t.noMethods}</p>}<label><span>{t.amount}</span><input type="number" min="1" step="1" value={contribution.amount} onChange={e=>setContribution({...contribution,amount:e.target.value})}/></label><label><span>{t.reference}</span><input maxLength={300} value={contribution.reference} onChange={e=>setContribution({...contribution,reference:e.target.value})}/></label><button className="primary-action" disabled={!contribution.amount} onClick={reportContribution}><Check/>{t.reported}</button></DialogContent></Dialog>
+  </main>;
 }

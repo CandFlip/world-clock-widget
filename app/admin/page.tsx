@@ -1,75 +1,23 @@
 'use client';
-
-import { useEffect, useState } from 'react';
+import { useCallback,useEffect,useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, BarChart3, Clock3, LogIn, MessageSquareText, Users } from 'lucide-react';
 
-type AdminUser = {
-  id: string; email: string; name: string; picture: string; first_seen: string; last_seen: string;
-  vote: string | null; voted_at: string | null; context: string | null; placement: string | null;
-  alert_style: string | null; typical_duration: string | null; notes: string | null;
-};
-type AdminOverview = { metrics: { registered: number; voters: number; timerResponses: number }; users: AdminUser[] };
+type Row=Record<string,string|null>;
+type Data={metrics:{registered:number;voters:number;suggestions:number;pendingContributions:number};users:Row[];suggestions:Row[];contributions:Row[];methods:Row[];settings:Record<string,string>};
 
-const voteLabels: Record<string, string> = { timer: 'Alarm & timer', ios: 'World Clock for iOS', android: 'World Clock for Android' };
-
-export default function AdminPage() {
-  const [data, setData] = useState<AdminOverview | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    fetch('/api/admin/overview').then(async (response) => {
-      const body = await response.json() as AdminOverview & { error?: string };
-      if (!response.ok) throw new Error(body.error || 'Could not open the dashboard.');
-      setData(body);
-    }).catch((reason) => setError(reason.message));
-  }, []);
-
-  return (
-    <main className="admin-shell">
-      <header className="admin-header">
-        <Link href="/" className="admin-back"><ArrowLeft size={16} /> Back to voting</Link>
-        <div className="brand"><span className="brand-mark"><Clock3 size={18} /></span>World Clock</div>
-      </header>
-      <section className="admin-intro">
-        <p className="section-kicker">Private dashboard</p>
-        <h1>Roadmap responses</h1>
-        <p>Everyone who signs in, what they voted for, and the context behind timer requests.</p>
-      </section>
-
-      {error ? (
-        <section className="admin-error"><LogIn size={22} /><h2>Dashboard unavailable</h2><p>{error}</p><Link href="/">Sign in on the voting page</Link></section>
-      ) : !data ? (
-        <p className="admin-loading">Loading dashboard…</p>
-      ) : (
-        <>
-          <section className="metric-grid">
-            <article><span><Users /></span><div><strong>{data.metrics.registered}</strong><p>Registered people</p></div></article>
-            <article><span><BarChart3 /></span><div><strong>{data.metrics.voters}</strong><p>Votes submitted</p></div></article>
-            <article><span><MessageSquareText /></span><div><strong>{data.metrics.timerResponses}</strong><p>Timer interviews</p></div></article>
-          </section>
-          <section className="responses-card">
-            <div className="responses-heading"><div><p className="section-kicker">Live data</p><h2>People and choices</h2></div><span>{data.users.length} total</span></div>
-            {data.users.length === 0 ? <p className="empty-responses">No one has registered yet. Share the public link to collect the first vote.</p> : (
-              <div className="response-list">
-                {data.users.map((user) => (
-                  <article className="response-row" key={user.id}>
-                    <div className="person-cell">
-                      {user.picture ? <span className="person-avatar" style={{ backgroundImage: `url(${JSON.stringify(user.picture).slice(1, -1)})` }} /> : <span>{user.name.slice(0, 1).toUpperCase()}</span>}
-                      <div><strong>{user.name}</strong><a href={`mailto:${user.email}`}>{user.email}</a><small>Joined {new Date(user.first_seen).toLocaleDateString()}</small></div>
-                    </div>
-                    <div className="choice-cell"><small>Vote</small><strong>{user.vote ? voteLabels[user.vote] : 'Not voted yet'}</strong>{user.voted_at && <span>{new Date(user.voted_at).toLocaleString()}</span>}</div>
-                    {user.context ? <details className="feedback-cell">
-                      <summary>View timer answers</summary>
-                      <div><p><b>Situation:</b> {user.context}</p><p><b>Placement:</b> {user.placement}</p><p><b>Alert:</b> {user.alert_style}</p><p><b>Duration:</b> {user.typical_duration}</p>{user.notes && <p><b>Notes:</b> {user.notes}</p>}</div>
-                    </details> : <span className="no-feedback">No timer answers</span>}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        </>
-      )}
-    </main>
-  );
+export default function AdminPage(){
+ const [data,setData]=useState<Data|null>(null),[error,setError]=useState(''),[method,setMethod]=useState({label:'',url:'',instructions:''}),[settings,setSettings]=useState<Record<string,string>>({});
+ const load=useCallback(()=>fetch('/api/admin/overview').then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.error);setData(b);setSettings(b.settings||{});}).catch(e=>setError(e.message)),[]);
+ useEffect(()=>{void load()},[load]);
+ async function manage(body:Record<string,unknown>){await fetch('/api/admin/manage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});await load();}
+ if(error)return <main className="admin-shell"><div className="admin-error">{error}<br/><Link href="/">Вернуться и войти</Link></div></main>;
+ if(!data)return <main className="admin-shell"><div className="admin-loading">Загрузка…</div></main>;
+ return <main className="admin-shell"><header className="admin-header"><Link href="/">← На сайт</Link><strong>World Clock · Админка</strong></header><section className="admin-intro"><p className="section-kicker">Закрытый раздел</p><h1>Люди, идеи и поддержка</h1><p>Здесь видны регистрации, голоса, предложения и переводы, ожидающие подтверждения.</p></section>
+ <section className="metric-grid"><article><strong>{data.metrics.registered}</strong><p>зарегистрировано</p></article><article><strong>{data.metrics.voters}</strong><p>проголосовало</p></article><article><strong>{data.metrics.suggestions}</strong><p>идей</p></article><article><strong>{data.metrics.pendingContributions}</strong><p>переводов ждут проверки</p></article></section>
+ <Card title="Настройки сайта"><div className="response-list"><div className="response-row"><label>Цель помощи автору, центы USD<input value={settings.author_goal_cents||'300000'} onChange={e=>setSettings({...settings,author_goal_cents:e.target.value})}/></label><label>Уже собрано вручную, центы<input value={settings.author_raised_cents||'0'} onChange={e=>setSettings({...settings,author_raised_cents:e.target.value})}/></label><button onClick={()=>manage({kind:'settings',values:settings})}>Сохранить</button></div><div className="response-row"><label>Ссылка на установщик<input value={settings.download_url||''} onChange={e=>setSettings({...settings,download_url:e.target.value})}/></label><label>Версия<input value={settings.download_version||''} onChange={e=>setSettings({...settings,download_version:e.target.value})}/></label><button onClick={()=>manage({kind:'settings',values:settings})}>Сохранить</button></div></div></Card>
+ <Card title="Способы перевода"><div className="response-list">{data.methods.map(x=><div className="response-row" key={x.id}><div><strong>{x.label}</strong><p>{x.instructions}</p></div><a href={x.url||'#'}>{x.url||'Без ссылки'}</a><button onClick={()=>manage({kind:'method',...x,active:false})}>Скрыть</button></div>)}<div className="response-row"><input placeholder="Название способа" value={method.label} onChange={e=>setMethod({...method,label:e.target.value})}/><div><input placeholder="Ссылка" value={method.url} onChange={e=>setMethod({...method,url:e.target.value})}/><input placeholder="Инструкция или реквизиты" value={method.instructions} onChange={e=>setMethod({...method,instructions:e.target.value})}/></div><button onClick={async()=>{await manage({kind:'method',...method});setMethod({label:'',url:'',instructions:''})}}>Добавить</button></div></div></Card>
+ <Card title="Предложения пользователей"><div className="response-list">{data.suggestions.length?data.suggestions.map(x=><div className="response-row" key={x.id}><div><strong>{x.title}</strong><p>{x.name} · {x.email}</p><p>{x.problem}</p><small>{x.outcome}</small></div><strong>{x.status}</strong><div><button onClick={()=>manage({kind:'suggestion',id:x.id,status:'published'})}>Опубликовать</button> <button onClick={()=>manage({kind:'suggestion',id:x.id,status:'declined'})}>Скрыть</button></div></div>):<p className="admin-loading">Пока нет идей</p>}</div></Card>
+ <Card title="Переводы на подтверждение"><div className="response-list">{data.contributions.length?data.contributions.map(x=><div className="response-row" key={x.id}><div><strong>${Number(x.amount_cents||0)/100} → {x.target_id}</strong><p>{x.name} · {x.email}</p><small>{x.reference}</small></div><strong>{x.status}</strong><div><button onClick={()=>manage({kind:'contribution',id:x.id,status:'confirmed'})}>Подтвердить</button> <button onClick={()=>manage({kind:'contribution',id:x.id,status:'declined'})}>Отклонить</button></div></div>):<p className="admin-loading">Пока нет переводов</p>}</div></Card>
+ <Card title="Пользователи"><div className="response-list">{data.users.map(x=><div className="response-row" key={x.id}><div><strong>{x.name}</strong><p>{x.email}</p></div><span>{x.vote||'Без голоса'}</span><small>{x.last_seen&&new Date(x.last_seen).toLocaleString()}</small></div>)}</div></Card></main>;
 }
+function Card({title,children}:{title:string;children:React.ReactNode}){return <section className="responses-card"><header className="responses-heading"><h2>{title}</h2></header>{children}</section>}
