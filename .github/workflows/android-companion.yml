@@ -68,7 +68,11 @@ jobs:
           prerelease: true
           generate_release_notes: false
           body: |
-            Android companion for World Clock Widget. Install the APK, allow notifications and exact alarms, then scan the one-time QR shown in the Windows widget settings.
+            ⚠️ Очень ранняя экспериментальная версия. Она пока не опубликована в Google Play и устанавливается вручную из APK, поэтому Android может показать предупреждения о неизвестном или ненадёжном источнике. Это ожидаемо для установки вне официального магазина.
+
+            После завершения сбора на обязательные аккаунты разработчика планируется официальная публикация в Google Play и Apple App Store. Сейчас APK предназначен только для добровольного тестирования: разрешите уведомления и точные будильники, затем отсканируйте одноразовый QR в настройках Windows-виджета.
+
+            ⚠️ Very early experimental build. It is installed manually from an APK and Android may show unknown or untrusted source warnings. Official store distribution is planned after the required developer-account costs are funded.
           files: |
             android-output/WorldClockAlarm-v1.0.0.apk
             android-output/WorldClockAlarm-v1.0.0.aab
