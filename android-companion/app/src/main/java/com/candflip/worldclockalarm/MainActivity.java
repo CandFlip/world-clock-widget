@@ -9,7 +9,7 @@ import android.provider.Settings;
 import android.graphics.Color;
 import android.view.*;
 import android.widget.*;
-import com.google.android.gms.mlkit.vision.codescanner.*;
+import com.google.mlkit.vision.codescanner.*;
 import com.google.mlkit.vision.barcode.common.Barcode;
 import org.json.JSONObject;
 import java.util.concurrent.Executors;
