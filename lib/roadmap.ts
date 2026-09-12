@@ -5,8 +5,8 @@ export const IDEAS = [
     goalCents: 15000,
     title: { ru: 'Официальные приложения для телефона', en: 'Official phone apps' },
     description: {
-      ru: 'Будильник ставится в Windows, а Android или iPhone тоже звонит. На телефоне можно завершить его или отложить на 5 минут. Цель покрывает обязательные аккаунты Google Play и Apple Developer.',
-      en: 'Set an alarm in Windows and have Android or iPhone ring too. Dismiss or snooze it by 5 minutes from the phone. The goal covers the required Google Play and Apple Developer accounts.',
+      ru: 'Сейчас Android-версия — очень ранний эксперимент. Она устанавливается вручную из APK, поэтому Android может предупреждать о неизвестном или ненадёжном источнике. После завершения сбора будут оплачены аккаунты Google Play и Apple Developer, чтобы Android и iPhone устанавливались официально. Будильник с Windows будет звонить на телефоне, где его можно завершить или отложить на 5 минут.',
+      en: 'The current Android build is a very early experiment installed manually from an APK, so Android may warn about an unknown or untrusted source. Once the goal is funded, Google Play and Apple Developer accounts can be paid for official Android and iPhone distribution. Windows alarms will ring on the phone and can be dismissed or snoozed by 5 minutes.',
     },
     cost: { ru: '$25 Google Play + $99 в год Apple', en: '$25 Google Play + $99/year Apple' },
   },
