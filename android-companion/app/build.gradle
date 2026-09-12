@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.candflip.worldclockalarm'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.candflip.worldclockalarm'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+    }
+    signingConfigs {
+        release {
+            def props = new Properties()
+            def propsFile = rootProject.file('signing.properties')
+            if (propsFile.exists()) {
+                propsFile.withInputStream { props.load(it) }
+                storeFile file(props['storeFile'])
+                storePassword props['storePassword']
+                keyAlias props['keyAlias']
+                keyPassword props['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (rootProject.file('signing.properties').exists()) signingConfig signingConfigs.release
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.google.android.gms:play-services-code-scanner:16.1.0'
+}

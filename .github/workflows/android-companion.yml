@@ -1,0 +1,53 @@
+name: Build Android companion
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/android-companion]
+    paths:
+      - 'android-companion/**'
+      - '.github/workflows/android-companion.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Create durable upload key
+        working-directory: android-companion
+        shell: bash
+        run: |
+          set +x
+          password="$(openssl rand -base64 36 | tr -d '\n=/+' | head -c 32)"
+          keytool -genkeypair -v -keystore app/release-upload.jks -storepass "$password" -keypass "$password" -alias worldclock -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=World Clock Alarm, O=CandFlip, C=RU"
+          {
+            echo "storeFile=release-upload.jks"
+            echo "storePassword=$password"
+            echo "keyAlias=worldclock"
+            echo "keyPassword=$password"
+          } > signing.properties
+      - name: Build signed APK and Play bundle
+        working-directory: android-companion
+        run: gradle --no-daemon :app:assembleRelease :app:bundleRelease
+      - name: Collect installation files
+        shell: bash
+        run: |
+          mkdir -p android-output
+          cp android-companion/app/build/outputs/apk/release/app-release.apk android-output/WorldClockAlarm-v1.0.0.apk
+          cp android-companion/app/build/outputs/bundle/release/app-release.aab android-output/WorldClockAlarm-v1.0.0.aab
+          cp android-companion/app/release-upload.jks android-output/release-upload.jks
+          cp android-companion/signing.properties android-output/signing.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WorldClockAlarm-v1.0.0
+          path: android-output
+          retention-days: 90
