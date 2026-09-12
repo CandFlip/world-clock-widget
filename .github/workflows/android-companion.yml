@@ -43,7 +43,8 @@ jobs:
           gradle --no-daemon :app:assembleRelease :app:bundleRelease 2>&1 | tee build.log
           result=${PIPESTATUS[0]}
           if [ "$result" -ne 0 ]; then
-            tail -n 80 build.log | sed 's/%/%25/g; s/\r/%0D/g; s/$/%0A/' | while IFS= read -r line; do echo "::error title=Android build::$line"; done
+            details="$(grep -E -B2 -A4 'error:|FAILURE:|What went wrong|Execution failed' build.log | tail -n 60 | tr '\n\r' '  ' | sed 's/%/%25/g' | head -c 6000)"
+            echo "::error title=Android compiler::$details"
           fi
           exit "$result"
       - name: Collect installation files
