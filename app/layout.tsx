@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   metadataBase: new URL('https://world-clock-next.decent-rat-2368.chatgpt.site'),
   title: 'Что дальше? — World Clock Widget',
   description: 'Бесплатный World Clock Widget для звонков, встреч и напоминаний между часовыми поясами.',
+  icons: { icon: '/favicon.svg', shortcut: '/favicon.svg' },
   openGraph: {
     title: 'Что дальше? — World Clock Widget',
     description: 'Бесплатный виджет мирового времени. Скачайте приложение и выберите, что стоит сделать следующим.',
