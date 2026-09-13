@@ -1,4 +1,4 @@
-import { index, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -44,10 +44,15 @@ export const suggestions = sqliteTable('suggestions', {
 }, (table) => [index('idx_suggestions_status_created').on(table.status, table.createdAt)]);
 
 export const contributions = sqliteTable('contributions', {
-  id: text('id').primaryKey(), visitorId: text('visitor_id').notNull(), targetId: text('target_id').notNull(),
+  id: text('id').primaryKey(), visitorId: text('visitor_id'), targetId: text('target_id').notNull(),
   amountCents: text('amount_cents').notNull(), currency: text('currency').notNull(), reference: text('reference').notNull(),
-  status: text('status').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
-}, (table) => [index('idx_contributions_target_status').on(table.targetId, table.status)]);
+  status: text('status').notNull(), provider: text('provider').notNull().default('legacy-manual'),
+  providerEventId: text('provider_event_id'), verifiedAt: text('verified_at'),
+  createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
+}, (table) => [
+  index('idx_contributions_target_status').on(table.targetId, table.status),
+  uniqueIndex('idx_contributions_provider_event').on(table.provider, table.providerEventId),
+]);
 
 export const siteSettings = sqliteTable('site_settings', {
   key: text('key').primaryKey(), value: text('value').notNull(), updatedAt: text('updated_at').notNull(),

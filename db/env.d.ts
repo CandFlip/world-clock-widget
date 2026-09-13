@@ -6,5 +6,9 @@ declare namespace Cloudflare {
     FIREBASE_PROJECT_ID: string;
     FIREBASE_APP_ID: string;
     ADMIN_EMAIL: string;
+    BYBIT_API_KEY?: string;
+    BYBIT_API_SECRET?: string;
+    BYBIT_API_BASE?: string;
+    BYBIT_TARGET_ID?: string;
   }
 }

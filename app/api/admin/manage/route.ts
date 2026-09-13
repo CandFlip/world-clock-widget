@@ -7,10 +7,8 @@ export async function POST(request: Request) {
   const body = await request.json() as Record<string, unknown>, now = new Date().toISOString();
   if (body.kind === 'suggestion' && typeof body.id === 'string' && ['pending','published','declined'].includes(String(body.status))) {
     await env.DB.prepare('UPDATE suggestions SET status=?,updated_at=? WHERE id=?').bind(body.status, now, body.id).run();
-  } else if (body.kind === 'contribution' && typeof body.id === 'string' && ['pending','confirmed','declined'].includes(String(body.status))) {
-    await env.DB.prepare('UPDATE contributions SET status=?,updated_at=? WHERE id=?').bind(body.status, now, body.id).run();
   } else if (body.kind === 'settings') {
-    const allowed = ['author_goal_cents','author_raised_cents','author_story_ru','author_story_en','download_url','download_version'];
+    const allowed = ['author_goal_cents','author_story_ru','author_story_en','download_url','download_version'];
     const values = body.values && typeof body.values === 'object' ? body.values as Record<string,string> : {};
     const entries = Object.entries(values).filter(([key]) => allowed.includes(key));
     if (entries.length) await env.DB.batch(entries.map(([key,value]) => env.DB.prepare('INSERT INTO site_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at').bind(key,String(value).slice(0,3000),now)));

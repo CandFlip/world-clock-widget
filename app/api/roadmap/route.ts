@@ -1,12 +1,14 @@
 import { env } from 'cloudflare:workers';
 import { getSessionUser } from '@/lib/auth';
 import { IDEAS } from '@/lib/roadmap';
+import { syncBybitLedger } from '@/lib/bybit-ledger';
 
 export async function GET(request: Request) {
+  await syncBybitLedger().catch((error) => console.error('Bybit ledger sync failed', error));
   const user = await getSessionUser(request);
   const [votes, funding, settings, methods, suggestions] = await Promise.all([
     env.DB.prepare('SELECT option_id, COUNT(*) count FROM votes GROUP BY option_id').all<{ option_id: string; count: number }>(),
-    env.DB.prepare("SELECT target_id, SUM(CAST(amount_cents AS INTEGER)) amount FROM contributions WHERE status='confirmed' GROUP BY target_id").all<{ target_id: string; amount: number }>(),
+    env.DB.prepare("SELECT target_id, SUM(CAST(amount_cents AS INTEGER)) amount FROM contributions WHERE status='confirmed' AND provider!='legacy-manual' AND provider_event_id IS NOT NULL GROUP BY target_id").all<{ target_id: string; amount: number }>(),
     env.DB.prepare('SELECT key, value FROM site_settings').all<{ key: string; value: string }>(),
     env.DB.prepare("SELECT id,label,url,instructions FROM support_methods WHERE active='1' ORDER BY created_at").all(),
     env.DB.prepare("SELECT id,title,problem,outcome,created_at FROM suggestions WHERE status='published' ORDER BY created_at DESC LIMIT 20").all(),
