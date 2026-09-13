@@ -23,5 +23,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ru"><body className={manrope.variable}>{children}</body></html>;
+  return <html lang="ru"><head><link rel="icon" href="/favicon.svg" type="image/svg+xml" /><link rel="shortcut icon" href="/favicon.svg" /></head><body className={manrope.variable}>{children}</body></html>;
 }
