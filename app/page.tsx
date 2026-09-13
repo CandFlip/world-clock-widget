@@ -17,19 +17,19 @@ const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, s
 const strings = {
   ru: {
     navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', account: 'Кабинет',
-    headline: 'Мировое время на рабочем столе.', intro: 'Скачайте приложение или выберите, что добавить следующим.',
+    headline: 'Время в разных часовых поясах и таймер поверх любых окон.', intro: 'Скачайте приложение или выберите, что добавить следующим.',
     download: 'Скачать для Windows', source: 'Официальная версия на GitHub', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
     vote: 'Голосовать', choice: 'Ваш выбор', ideaTitle: 'Предложить функцию', ideaCopy: 'Коротко опишите, что нужно добавить.', suggest: 'Предложить идею',
-    community: 'Идеи сообщества', mobileGoal: 'iOS и Android', supportTitle: 'Поддержка автора', supportLine: 'Фотографии из больницы, сентябрь 2026.', support: 'Поддержать',
+    community: 'Идеи сообщества', mobileGoal: 'Лицензии iOS и Android', supportTitle: 'Поддержка автора', supportLine: 'Фотографии из больницы, сентябрь 2026.', support: 'Поддержать',
     loginTitle: 'Войти', loginCopy: 'Вход нужен для голосования и предложений.', problem: 'Какую проблему это решит?', outcome: 'Как должен выглядеть результат?',
     send: 'Отправить', thanks: 'Спасибо. Запись отправлена.', methods: 'Поддержка автора', noMethods: 'Способы поддержки пока не подключены.', paymentNote: 'Выберите удобный способ.', copy: 'Копировать', copied: 'Скопировано',
   },
   en: {
     navRoadmap: 'Roadmap', navIdeas: 'Suggest an idea', navSupport: 'Support', signin: 'Sign in', account: 'Account',
-    headline: 'World time on your desktop.', intro: 'Download the app or vote for what should be added next.',
+    headline: 'Time across time zones and a timer above any window.', intro: 'Download the app or vote for what should be added next.',
     download: 'Download for Windows', source: 'Official release on GitHub', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
     vote: 'Vote', choice: 'Your choice', ideaTitle: 'Suggest a feature', ideaCopy: 'Briefly describe what should be added.', suggest: 'Suggest an idea',
-    community: 'Community ideas', mobileGoal: 'iOS and Android', supportTitle: 'Support the author', supportLine: 'Hospital photos, September 2026.', support: 'Support',
+    community: 'Community ideas', mobileGoal: 'iOS and Android licenses', supportTitle: 'Support the author', supportLine: 'Hospital photos, September 2026.', support: 'Support',
     loginTitle: 'Sign in', loginCopy: 'Sign in to vote or suggest an idea.', problem: 'What problem would this solve?', outcome: 'What should the result look like?',
     send: 'Send', thanks: 'Thank you. Your message was sent.', methods: 'Support the author', noMethods: 'Support options have not been connected yet.', paymentNote: 'Choose a payment method.', copy: 'Copy', copied: 'Copied',
   },
