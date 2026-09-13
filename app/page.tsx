@@ -21,7 +21,7 @@ const strings = {
     vote: 'Голосовать', choice: 'Ваш выбор', ideaTitle: 'Предложить функцию', ideaCopy: 'Коротко опишите, что нужно добавить.', suggest: 'Предложить идею',
     community: 'Идеи сообщества', mobileGoal: 'iOS и Android', supportTitle: 'Поддержка автора', supportLine: 'Фотографии из больницы, сентябрь 2026.', support: 'Поддержать',
     loginTitle: 'Войти', loginCopy: 'Вход нужен для голосования и предложений.', problem: 'Какую проблему это решит?', outcome: 'Как должен выглядеть результат?',
-    send: 'Отправить', thanks: 'Спасибо. Запись отправлена.', methods: 'Поддержка автора', noMethods: 'Способы поддержки пока не подключены.', paymentNote: 'Выберите удобный способ.',
+    send: 'Отправить', thanks: 'Спасибо. Запись отправлена.', methods: 'Поддержка автора', noMethods: 'Способы поддержки пока не подключены.', paymentNote: 'Выберите удобный способ.', copy: 'Копировать', copied: 'Скопировано',
   },
   en: {
     navRoadmap: 'Roadmap', navIdeas: 'Suggest an idea', navSupport: 'Support', signin: 'Sign in', account: 'Account',
@@ -30,7 +30,7 @@ const strings = {
     vote: 'Vote', choice: 'Your choice', ideaTitle: 'Suggest a feature', ideaCopy: 'Briefly describe what should be added.', suggest: 'Suggest an idea',
     community: 'Community ideas', mobileGoal: 'iOS and Android', supportTitle: 'Support the author', supportLine: 'Hospital photos, September 2026.', support: 'Support',
     loginTitle: 'Sign in', loginCopy: 'Sign in to vote or suggest an idea.', problem: 'What problem would this solve?', outcome: 'What should the result look like?',
-    send: 'Send', thanks: 'Thank you. Your message was sent.', methods: 'Support the author', noMethods: 'Support options have not been connected yet.', paymentNote: 'Choose a payment method.',
+    send: 'Send', thanks: 'Thank you. Your message was sent.', methods: 'Support the author', noMethods: 'Support options have not been connected yet.', paymentNote: 'Choose a payment method.', copy: 'Copy', copied: 'Copied',
   },
 };
 
@@ -126,6 +126,6 @@ export default function Home() {
 
     <Dialog open={modal === 'auth'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.loginTitle}</DialogTitle><DialogDescription>{t.loginCopy}</DialogDescription></DialogHeader><GoogleSignIn lang={lang} onSignedIn={signedIn} /></DialogContent></Dialog>
     <Dialog open={modal === 'suggest'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.ideaTitle}</DialogTitle><DialogDescription>{t.ideaCopy}</DialogDescription></DialogHeader><label><span>{lang === 'ru' ? 'Короткое название' : 'Short title'}</span><input maxLength={100} value={suggestion.title} onChange={(e) => setSuggestion({ ...suggestion, title: e.target.value })} /></label><label><span>{t.problem}</span><Textarea maxLength={800} value={suggestion.problem} onChange={(e) => setSuggestion({ ...suggestion, problem: e.target.value })} /></label><label><span>{t.outcome}</span><Textarea maxLength={800} value={suggestion.outcome} onChange={(e) => setSuggestion({ ...suggestion, outcome: e.target.value })} /></label><button className="primary-action" onClick={sendSuggestion}>{t.send}</button></DialogContent></Dialog>
-    <Dialog open={modal === 'support'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.instructions && <p>{method.instructions}</p>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
+    <Dialog open={modal === 'support'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.instructions && <code>{method.instructions}</code>}{method.instructions && <button onClick={() => void navigator.clipboard.writeText(method.instructions).then(() => setMessage(t.copied))}>{t.copy}</button>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
   </main>;
 }

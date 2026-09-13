@@ -19,5 +19,7 @@ export async function GET(request: Request) {
   for (const row of funding.results) funded[row.target_id] = Number(row.amount || 0);
   const config = Object.fromEntries(settings.results.map((row) => [row.key, row.value]));
   const selected = user ? await env.DB.prepare('SELECT option_id FROM votes WHERE visitor_id=?').bind(user.id).first<{ option_id: string }>() : null;
-  return Response.json({ ideas: IDEAS, counts, funded, selected: selected?.option_id || null, settings: config, methods: methods.results, suggestions: suggestions.results }, { headers: { 'Cache-Control': 'no-store' } });
+  const supportMethods = [...methods.results] as Array<{ id: string; label: string; url: string; instructions: string }>;
+  if (env.BYBIT_USDT_TRC20_ADDRESS) supportMethods.unshift({ id: 'bybit-usdt-trc20', label: 'USDT · TRC20', url: '', instructions: env.BYBIT_USDT_TRC20_ADDRESS });
+  return Response.json({ ideas: IDEAS, counts, funded, selected: selected?.option_id || null, settings: config, methods: supportMethods, suggestions: suggestions.results }, { headers: { 'Cache-Control': 'no-store' } });
 }
