@@ -41,6 +41,7 @@ export default function Home() {
   const [modal, setModal] = useState<Modal>(null);
   const [pendingVote, setPendingVote] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [copiedMethod, setCopiedMethod] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [suggestion, setSuggestion] = useState({ title: '', problem: '', outcome: '' });
   const t = strings[lang];
@@ -90,6 +91,21 @@ export default function Home() {
     else setMessage(lang === 'ru' ? 'Проверьте заполнение формы.' : 'Please check the form.');
   }
   async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); setUser(null); }
+  async function copyMethod(method: Method) {
+    try {
+      await navigator.clipboard.writeText(method.instructions);
+    } catch {
+      const field = document.createElement('textarea');
+      field.value = method.instructions;
+      field.style.position = 'fixed';
+      field.style.opacity = '0';
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand('copy');
+      field.remove();
+    }
+    setCopiedMethod(method.id);
+  }
 
   return <main className="site-shell">
     <nav className="topbar">
@@ -126,6 +142,6 @@ export default function Home() {
 
     <Dialog open={modal === 'auth'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.loginTitle}</DialogTitle><DialogDescription>{t.loginCopy}</DialogDescription></DialogHeader><GoogleSignIn lang={lang} onSignedIn={signedIn} /></DialogContent></Dialog>
     <Dialog open={modal === 'suggest'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.ideaTitle}</DialogTitle><DialogDescription>{t.ideaCopy}</DialogDescription></DialogHeader><label><span>{lang === 'ru' ? 'Короткое название' : 'Short title'}</span><input maxLength={100} value={suggestion.title} onChange={(e) => setSuggestion({ ...suggestion, title: e.target.value })} /></label><label><span>{t.problem}</span><Textarea maxLength={800} value={suggestion.problem} onChange={(e) => setSuggestion({ ...suggestion, problem: e.target.value })} /></label><label><span>{t.outcome}</span><Textarea maxLength={800} value={suggestion.outcome} onChange={(e) => setSuggestion({ ...suggestion, outcome: e.target.value })} /></label><button className="primary-action" onClick={sendSuggestion}>{t.send}</button></DialogContent></Dialog>
-    <Dialog open={modal === 'support'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.instructions && <code>{method.instructions}</code>}{method.instructions && <button onClick={() => void navigator.clipboard.writeText(method.instructions).then(() => setMessage(t.copied))}>{t.copy}</button>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
+    <Dialog open={modal === 'support'} onOpenChange={(open) => { if (!open) { setModal(null); setCopiedMethod(null); } }}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.instructions && <code>{method.instructions}</code>}{method.instructions && <button onClick={() => void copyMethod(method)}>{copiedMethod === method.id ? t.copied : t.copy}</button>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
   </main>;
 }
