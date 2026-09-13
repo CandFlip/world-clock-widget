@@ -21,5 +21,6 @@ export async function GET(request: Request) {
   const selected = user ? await env.DB.prepare('SELECT option_id FROM votes WHERE visitor_id=?').bind(user.id).first<{ option_id: string }>() : null;
   const supportMethods = [...methods.results] as Array<{ id: string; label: string; url: string; instructions: string }>;
   if (env.BYBIT_USDT_TRC20_ADDRESS) supportMethods.unshift({ id: 'bybit-usdt-trc20', label: 'USDT · TRC20', url: '', instructions: env.BYBIT_USDT_TRC20_ADDRESS });
+  if (env.BYBIT_UID) supportMethods.unshift({ id: 'bybit-internal', label: 'Bybit · UID', url: '', instructions: env.BYBIT_UID });
   return Response.json({ ideas: IDEAS, counts, funded, selected: selected?.option_id || null, settings: config, methods: supportMethods, suggestions: suggestions.results }, { headers: { 'Cache-Control': 'no-store' } });
 }

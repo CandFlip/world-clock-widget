@@ -10,6 +10,7 @@ declare namespace Cloudflare {
     BYBIT_API_SECRET?: string;
     BYBIT_API_BASE?: string;
     BYBIT_TARGET_ID?: string;
+    BYBIT_UID?: string;
     BYBIT_USDT_TRC20_ADDRESS?: string;
   }
 }
