@@ -3,10 +3,10 @@ export const IDEAS = [
     id: 'mobile-official',
     status: 'funding',
     goalCents: 15000,
-    title: { ru: 'Официальные приложения для телефона', en: 'Official phone apps' },
+    title: { ru: 'Приложения для iOS и Android', en: 'iOS and Android apps' },
     description: {
-      ru: 'Сейчас Android-версия — очень ранний эксперимент. Она устанавливается вручную из APK, поэтому Android может предупреждать о неизвестном или ненадёжном источнике. После завершения сбора будут оплачены аккаунты Google Play и Apple Developer, чтобы Android и iPhone устанавливались официально. Будильник с Windows будет звонить на телефоне, где его можно завершить или отложить на 5 минут.',
-      en: 'The current Android build is a very early experiment installed manually from an APK, so Android may warn about an unknown or untrusted source. Once the goal is funded, Google Play and Apple Developer accounts can be paid for official Android and iPhone distribution. Windows alarms will ring on the phone and can be dismissed or snoozed by 5 minutes.',
+      ru: 'Синхронизация будильников с телефоном.',
+      en: 'Sync alarms with your phone.',
     },
     cost: { ru: '$25 Google Play + $99 в год Apple', en: '$25 Google Play + $99/year Apple' },
   },
