@@ -16,6 +16,13 @@ export async function POST(request: Request) {
     const id=typeof body.id==='string'&&body.id?body.id:crypto.randomUUID();
     await env.DB.prepare('INSERT INTO support_methods(id,label,url,instructions,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET label=excluded.label,url=excluded.url,instructions=excluded.instructions,active=excluded.active,updated_at=excluded.updated_at')
       .bind(id,String(body.label||'').slice(0,80),String(body.url||'').slice(0,1000),String(body.instructions||'').slice(0,1000),body.active===false?'0':'1',now,now).run();
+  } else if (body.kind === 'manual-contribution') {
+    const amount = Number(String(body.amount).replace(',', '.'));
+    const target = body.target === 'author' ? 'author' : 'mobile-official';
+    if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) return Response.json({ error: 'Invalid amount.' }, { status: 400 });
+    const id = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO contributions(id,visitor_id,target_id,amount_cents,currency,reference,status,provider,provider_event_id,verified_at,created_at,updated_at) VALUES(?,NULL,?,?,?,?,'confirmed','admin-manual',?,?,?,?,?)")
+      .bind(id,target,String(Math.round(amount*100)),'USD',String(body.reference||'Ручная запись').slice(0,300),id,now,now,now).run();
   } else return Response.json({ error: 'Invalid operation.' }, { status: 400 });
   return Response.json({ ok: true });
 }

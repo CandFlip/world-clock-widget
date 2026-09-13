@@ -15,6 +15,7 @@ type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [] };
 const storyImages = ['/story/hospital-room.jpg', '/story/hospital-iv.jpg', '/story/mri-scan.jpg', '/story/mri-report.jpg', '/story/translated-result.jpg'];
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.78/WorldClockWidget-Setup-v1.1.78.exe';
 const strings = {
   ru: {
     navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', account: 'Кабинет',
@@ -44,7 +45,7 @@ export default function Home() {
   const [pendingVote, setPendingVote] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [copiedMethod, setCopiedMethod] = useState<string | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<number | null>(null);
   const [busy, setBusy] = useState(true);
   const [suggestion, setSuggestion] = useState({ title: '', problem: '', outcome: '' });
   const storyRef = useRef<HTMLDivElement>(null);
@@ -63,13 +64,23 @@ export default function Home() {
     void load().catch(() => setBusy(false));
   }, [load]);
 
+  useEffect(() => {
+    if (selectedPhoto === null) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft') setSelectedPhoto((current) => current === null ? null : (current - 1 + storyImages.length) % storyImages.length);
+      if (event.key === 'ArrowRight') setSelectedPhoto((current) => current === null ? null : (current + 1) % storyImages.length);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedPhoto]);
+
   const chooseLang = (value: 'ru' | 'en') => {
     setLang(value);
     localStorage.setItem('wc-lang', value);
     document.documentElement.lang = value;
   };
-  const download = data.settings.download_url || 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.77/WorldClockWidget-Setup-v1.1.77.exe';
-  const version = data.settings.download_version || 'v1.1.77';
+  const version = data.settings.download_version === 'v1.1.78' ? data.settings.download_version : 'v1.1.78';
+  const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   const mobileRaised = data.funded['mobile-official'] || 0;
 
   async function saveVote(id: string) {
@@ -113,6 +124,9 @@ export default function Home() {
   function scrollStory(direction: -1 | 1) {
     storyRef.current?.scrollBy({ left: direction * storyRef.current.clientWidth * 0.72, behavior: 'smooth' });
   }
+  function changePhoto(direction: -1 | 1) {
+    setSelectedPhoto((current) => current === null ? null : (current + direction + storyImages.length) % storyImages.length);
+  }
 
   return <main className="site-shell">
     <nav className="topbar">
@@ -141,7 +155,7 @@ export default function Home() {
     </section>
 
     <section className="support-section" id="support">
-      <div className="story-slider"><div className="story-collage" ref={storyRef} aria-label={t.supportLine}>{storyImages.map((src, index) => <button className="story-slide" key={src} aria-label={`${lang === 'ru' ? 'Открыть фотографию' : 'Open photo'} ${index + 1}`} onClick={() => setSelectedPhoto(src)}><img src={src} alt="" /></button>)}</div><div className="story-controls"><button aria-label={lang === 'ru' ? 'Предыдущие фотографии' : 'Previous photos'} onClick={() => scrollStory(-1)}><ChevronLeft /></button><button aria-label={lang === 'ru' ? 'Следующие фотографии' : 'Next photos'} onClick={() => scrollStory(1)}><ChevronRight /></button></div></div>
+      <div className="story-slider"><div className="story-collage" ref={storyRef} aria-label={t.supportLine}>{storyImages.map((src, index) => <button className="story-slide" key={src} aria-label={`${lang === 'ru' ? 'Открыть фотографию' : 'Open photo'} ${index + 1}`} onClick={() => setSelectedPhoto(index)}><img src={src} alt="" /></button>)}</div><div className="story-controls"><button aria-label={lang === 'ru' ? 'Предыдущие фотографии' : 'Previous photos'} onClick={() => scrollStory(-1)}><ChevronLeft /></button><button aria-label={lang === 'ru' ? 'Следующие фотографии' : 'Next photos'} onClick={() => scrollStory(1)}><ChevronRight /></button></div></div>
       <div className="support-story"><h2>{t.supportTitle}</h2><button className="support-action" onClick={() => setModal('support')}><Heart />{t.support}</button></div>
     </section>
 
@@ -150,6 +164,6 @@ export default function Home() {
     <Dialog open={modal === 'auth'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.loginTitle}</DialogTitle><DialogDescription>{t.loginCopy}</DialogDescription></DialogHeader><GoogleSignIn lang={lang} onSignedIn={signedIn} /></DialogContent></Dialog>
     <Dialog open={modal === 'suggest'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.ideaTitle}</DialogTitle><DialogDescription>{t.ideaCopy}</DialogDescription></DialogHeader><label><span>{lang === 'ru' ? 'Короткое название' : 'Short title'}</span><input maxLength={100} value={suggestion.title} onChange={(e) => setSuggestion({ ...suggestion, title: e.target.value })} /></label><label><span>{t.problem}</span><Textarea maxLength={800} value={suggestion.problem} onChange={(e) => setSuggestion({ ...suggestion, problem: e.target.value })} /></label><label><span>{t.outcome}</span><Textarea maxLength={800} value={suggestion.outcome} onChange={(e) => setSuggestion({ ...suggestion, outcome: e.target.value })} /></label><button className="primary-action" onClick={sendSuggestion}>{t.send}</button></DialogContent></Dialog>
     <Dialog open={modal === 'support'} onOpenChange={(open) => { if (!open) { setModal(null); setCopiedMethod(null); } }}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.id === 'bybit-usdt-trc20' && <QRCodeSVG className="payment-qr" value={method.instructions} size={144} level="M" marginSize={2} />}{method.instructions && <code>{method.instructions}</code>}{method.instructions && <button onClick={() => void copyMethod(method)}>{copiedMethod === method.id ? t.copied : t.copy}</button>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
-    <Dialog open={Boolean(selectedPhoto)} onOpenChange={(open) => !open && setSelectedPhoto(null)}><DialogContent className="image-dialog"><DialogTitle className="sr-only">{t.supportLine}</DialogTitle>{selectedPhoto && <img src={selectedPhoto} alt="" />}</DialogContent></Dialog>
+    <Dialog open={selectedPhoto !== null} onOpenChange={(open) => !open && setSelectedPhoto(null)}><DialogContent className="image-dialog"><DialogTitle className="sr-only">{t.supportLine}</DialogTitle>{selectedPhoto !== null && <><div className="image-stage"><img src={storyImages[selectedPhoto]} alt="" /></div><div className="image-controls"><button aria-label={lang === 'ru' ? 'Предыдущая фотография' : 'Previous photo'} onClick={() => changePhoto(-1)}><ChevronLeft /></button><span>{selectedPhoto + 1} / {storyImages.length}</span><button aria-label={lang === 'ru' ? 'Следующая фотография' : 'Next photo'} onClick={() => changePhoto(1)}><ChevronRight /></button></div></>}</DialogContent></Dialog>
   </main>;
 }
