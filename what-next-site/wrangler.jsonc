@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "world-clock-widget",
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-09-14",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "world-clock-widget-db",
+      "database_id": "91830f54-6aff-4a23-8d5b-5a8419c37308"
+    }
+  ]
+}
