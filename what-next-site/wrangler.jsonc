@@ -1,3 +1,4 @@
+// Cloudflare Workers deployment configuration
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "world-clock-widget",
@@ -14,4 +15,3 @@
     }
   ]
 }
-
