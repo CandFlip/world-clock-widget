@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788041025023,
+      "tag": "0000_wandering_blue_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789207712416,
+      "tag": "0001_spicy_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789268165932,
+      "tag": "0002_damp_felicia_hardy",
+      "breakpoints": true
+    }
+  ]
+}
