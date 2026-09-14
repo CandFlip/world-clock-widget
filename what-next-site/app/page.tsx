@@ -1,39 +1,158 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, Check, ChevronLeft, ChevronRight, Clock3, ExternalLink, Heart, Lightbulb, LogIn, LogOut, MessageSquarePlus } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  ArrowDownToLine,
+  Check,
+  Clock3,
+  ExternalLink,
+  Lightbulb,
+  LogIn,
+  LogOut,
+  MessageSquarePlus,
+} from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { GoogleSignIn, type GoogleUser } from '@/components/google-sign-in';
 
-type Localized = { ru: string; en: string };
-type Idea = { id: string; status: string; goalCents: number; title: Localized; description: Localized; cost: Localized };
-type Method = { id: string; label: string; url: string; instructions: string };
-type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<string, number>; selected: string | null; settings: Record<string, string>; methods: Method[]; suggestions: Array<{ id: string; title: string; problem: string; outcome: string }> };
-type Modal = null | 'auth' | 'suggest' | 'support';
+type Localized = {
+  ru: string;
+  en: string;
+};
 
-const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [] };
-const storyImages = ['/story/hospital-room.jpg', '/story/hospital-iv.jpg', '/story/mri-scan.jpg', '/story/mri-report.jpg', '/story/translated-result.jpg'];
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.78/WorldClockWidget-Setup-v1.1.78.exe';
+type Idea = {
+  id: string;
+  status: string;
+  goalCents: number;
+  title: Localized;
+  description: Localized;
+  cost: Localized;
+};
+
+type Roadmap = {
+  ideas: Idea[];
+  counts: Record<string, number>;
+  funded: Record<string, number>;
+  selected: string | null;
+  settings: Record<string, string>;
+  suggestions: Array<{
+    id: string;
+    title: string;
+    problem: string;
+    outcome: string;
+  }>;
+};
+
+type Modal = null | 'auth' | 'suggest';
+
+const defaults: Roadmap = {
+  ideas: [],
+  counts: {},
+  funded: {},
+  selected: null,
+  settings: {},
+  suggestions: [],
+};
+
+const CURRENT_VERSION = 'v1.1.82';
+const CURRENT_DOWNLOAD =
+  'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.82/WorldClockWidget-Setup-v1.1.82.exe';
+
 const strings = {
   ru: {
-    navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', account: 'Кабинет',
-    headline: 'Время в разных часовых поясах и таймер поверх любых окон.', intro: 'Скачайте приложение или выберите, что добавить следующим.',
-    download: 'Скачать для Windows', source: 'Официальная версия на GitHub', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
-    vote: 'Голосовать', choice: 'Ваш выбор', ideaTitle: 'Предложить функцию', ideaCopy: 'Коротко опишите, что нужно добавить.', suggest: 'Предложить идею',
-    community: 'Идеи сообщества', mobileGoal: 'Лицензии iOS и Android', supportTitle: 'Поддержка автора', supportLine: 'Фотографии из больницы', support: 'Поддержать',
-    loginTitle: 'Войти', loginCopy: 'Вход нужен для голосования и предложений.', problem: 'Какую проблему это решит?', outcome: 'Как должен выглядеть результат?',
-    send: 'Отправить', thanks: 'Спасибо. Запись отправлена.', methods: 'Поддержка автора', noMethods: 'Способы поддержки пока не подключены.', paymentNote: 'Выберите удобный способ.', copy: 'Копировать', copied: 'Скопировано',
+    navRoadmap: 'Что дальше?',
+    navGithub: 'GitHub',
+    signin: 'Войти',
+    account: 'Кабинет',
+
+    headline: 'Не считайте часовые пояса в голове.',
+    intro:
+      'World Clock — компактный виджет для Windows. Сдвиньте одну шкалу и сразу увидьте нужное время во всех городах.',
+    heroExtra:
+      'Выберите момент — и при необходимости поставьте напоминание.',
+    download: 'Скачать для Windows',
+    github: 'GitHub',
+
+    benefit1Title: 'Один момент — все города',
+    benefit1Copy:
+      'Двигайте одну шкалу, и время меняется сразу везде.',
+    benefit2Title: 'Поверх текущей работы',
+    benefit2Copy:
+      'Откройте виджет, посмотрите время и продолжайте работу.',
+    benefit3Title: 'Посмотрели — поставили будильник',
+    benefit3Copy:
+      'Выбранный момент можно сразу превратить в напоминание.',
+
+    roadmap: 'Что сделать следующим?',
+    roadmapCopy: 'Выберите функцию или предложите свою.',
+    vote: 'Голосовать',
+    choice: 'Ваш выбор',
+    ideaTitle: 'Предложить функцию',
+    ideaCopy: 'Коротко опишите, что нужно добавить.',
+    suggest: 'Предложить идею',
+    community: 'Идеи сообщества',
+    mobileGoal: 'Лицензии iOS и Android',
+
+    independent: 'Независимый проект',
+    supportWhy: 'Почему я собираю?',
+
+    loginTitle: 'Войти',
+    loginCopy: 'Вход нужен для голосования и предложений.',
+    problem: 'Какую проблему это решит?',
+    outcome: 'Как должен выглядеть результат?',
+    send: 'Отправить',
+    thanks: 'Спасибо. Запись отправлена.',
   },
+
   en: {
-    navRoadmap: 'Roadmap', navIdeas: 'Suggest an idea', navSupport: 'Support', signin: 'Sign in', account: 'Account',
-    headline: 'Time across time zones and a timer above any window.', intro: 'Download the app or vote for what should be added next.',
-    download: 'Download for Windows', source: 'Official release on GitHub', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
-    vote: 'Vote', choice: 'Your choice', ideaTitle: 'Suggest a feature', ideaCopy: 'Briefly describe what should be added.', suggest: 'Suggest an idea',
-    community: 'Community ideas', mobileGoal: 'iOS and Android licenses', supportTitle: 'Support the author', supportLine: 'Hospital photos', support: 'Support',
-    loginTitle: 'Sign in', loginCopy: 'Sign in to vote or suggest an idea.', problem: 'What problem would this solve?', outcome: 'What should the result look like?',
-    send: 'Send', thanks: 'Thank you. Your message was sent.', methods: 'Support the author', noMethods: 'Support options have not been connected yet.', paymentNote: 'Choose a payment method.', copy: 'Copy', copied: 'Copied',
+    navRoadmap: 'What next?',
+    navGithub: 'GitHub',
+    signin: 'Sign in',
+    account: 'Account',
+
+    headline: 'Stop doing time zone math in your head.',
+    intro:
+      'World Clock is a compact Windows widget. Move one timeline and instantly see the corresponding time in every city.',
+    heroExtra:
+      'Pick a moment and set a reminder when you need one.',
+    download: 'Download for Windows',
+    github: 'GitHub',
+
+    benefit1Title: 'One moment, every city',
+    benefit1Copy:
+      'Move one timeline and every city updates together.',
+    benefit2Title: 'Over whatever you’re doing',
+    benefit2Copy:
+      'Open the widget, check the time and get back to work.',
+    benefit3Title: 'See it, set an alarm',
+    benefit3Copy:
+      'Turn the selected moment into a reminder immediately.',
+
+    roadmap: 'What should I build next?',
+    roadmapCopy: 'Vote for a feature or suggest your own.',
+    vote: 'Vote',
+    choice: 'Your choice',
+    ideaTitle: 'Suggest a feature',
+    ideaCopy: 'Briefly describe what should be added.',
+    suggest: 'Suggest an idea',
+    community: 'Community ideas',
+    mobileGoal: 'iOS and Android licenses',
+
+    independent: 'Independent project',
+    supportWhy: 'Why I’m raising money',
+
+    loginTitle: 'Sign in',
+    loginCopy: 'Sign in to vote or suggest an idea.',
+    problem: 'What problem would this solve?',
+    outcome: 'What should the result look like?',
+    send: 'Send',
+    thanks: 'Thank you. Your message was sent.',
   },
 };
 
@@ -44,15 +163,21 @@ export default function Home() {
   const [modal, setModal] = useState<Modal>(null);
   const [pendingVote, setPendingVote] = useState<string | null>(null);
   const [message, setMessage] = useState('');
-  const [copiedMethod, setCopiedMethod] = useState<string | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<number | null>(null);
   const [busy, setBusy] = useState(true);
-  const [suggestion, setSuggestion] = useState({ title: '', problem: '', outcome: '' });
-  const storyRef = useRef<HTMLDivElement>(null);
+  const [suggestion, setSuggestion] = useState({
+    title: '',
+    problem: '',
+    outcome: '',
+  });
+
   const t = strings[lang];
 
   const load = useCallback(async () => {
-    const [roadmap, auth] = await Promise.all([fetch('/api/roadmap').then((r) => r.json()), fetch('/api/auth/me').then((r) => r.json())]);
+    const [roadmap, auth] = await Promise.all([
+      fetch('/api/roadmap').then((r) => r.json()),
+      fetch('/api/auth/me').then((r) => r.json()),
+    ]);
+
     setData(roadmap);
     setUser(auth.user || null);
     setBusy(false);
@@ -60,110 +185,420 @@ export default function Home() {
 
   useEffect(() => {
     const saved = localStorage.getItem('wc-lang');
-    if (saved === 'en') setLang('en');
+
+    if (saved === 'en') {
+      setLang('en');
+      document.documentElement.lang = 'en';
+    }
+
     void load().catch(() => setBusy(false));
   }, [load]);
-
-  useEffect(() => {
-    if (selectedPhoto === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') setSelectedPhoto((current) => current === null ? null : (current - 1 + storyImages.length) % storyImages.length);
-      if (event.key === 'ArrowRight') setSelectedPhoto((current) => current === null ? null : (current + 1) % storyImages.length);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedPhoto]);
 
   const chooseLang = (value: 'ru' | 'en') => {
     setLang(value);
     localStorage.setItem('wc-lang', value);
     document.documentElement.lang = value;
   };
-  const version = data.settings.download_version === 'v1.1.78' ? data.settings.download_version : 'v1.1.78';
-  const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
+
+  /*
+   * v1.1.78 is still being forced by the current roadmap API.
+   * Until that legacy fallback is removed, use the actual current release.
+   */
+  const apiVersion = data.settings.download_version;
+  const apiDownload = data.settings.download_url;
+
+  const version =
+    apiVersion && apiVersion !== 'v1.1.78'
+      ? apiVersion
+      : CURRENT_VERSION;
+
+  const download =
+    apiVersion &&
+    apiVersion !== 'v1.1.78' &&
+    apiDownload
+      ? apiDownload
+      : CURRENT_DOWNLOAD;
+
   const mobileRaised = data.funded['mobile-official'] || 0;
+
+  const authorRaised = data.funded.author || 0;
+  const authorGoal = Number(data.settings.author_goal_cents || 300000);
+
+  const supportProgress =
+    authorGoal > 0
+      ? Math.min(100, Math.max(0, (authorRaised / authorGoal) * 100))
+      : 0;
 
   async function saveVote(id: string) {
     setBusy(true);
-    const response = await fetch('/api/votes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionId: id }) });
-    if (response.ok) await load();
-    else setMessage(lang === 'ru' ? 'Не удалось сохранить голос.' : 'Could not save the vote.');
+
+    const response = await fetch('/api/votes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ optionId: id }),
+    });
+
+    if (response.ok) {
+      await load();
+    } else {
+      setMessage(
+        lang === 'ru'
+          ? 'Не удалось сохранить голос.'
+          : 'Could not save the vote.',
+      );
+    }
+
     setBusy(false);
   }
+
   async function vote(id: string) {
-    if (!user) { setPendingVote(id); setModal('auth'); return; }
+    if (!user) {
+      setPendingVote(id);
+      setModal('auth');
+      return;
+    }
+
     await saveVote(id);
   }
+
   function signedIn(next: GoogleUser) {
     setUser(next);
     setModal(null);
-    if (pendingVote) { const id = pendingVote; setPendingVote(null); void saveVote(id); }
-  }
-  async function sendSuggestion() {
-    const response = await fetch('/api/suggestions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(suggestion) });
-    if (response.status === 401) { setModal('auth'); return; }
-    if (response.ok) { setSuggestion({ title: '', problem: '', outcome: '' }); setMessage(t.thanks); setModal(null); }
-    else setMessage(lang === 'ru' ? 'Проверьте заполнение формы.' : 'Please check the form.');
-  }
-  async function logout() { await fetch('/api/auth/logout', { method: 'POST' }); setUser(null); }
-  async function copyMethod(method: Method) {
-    try {
-      await navigator.clipboard.writeText(method.instructions);
-    } catch {
-      const field = document.createElement('textarea');
-      field.value = method.instructions;
-      field.style.position = 'fixed';
-      field.style.opacity = '0';
-      document.body.appendChild(field);
-      field.select();
-      document.execCommand('copy');
-      field.remove();
+
+    if (pendingVote) {
+      const id = pendingVote;
+      setPendingVote(null);
+      void saveVote(id);
     }
-    setCopiedMethod(method.id);
-  }
-  function scrollStory(direction: -1 | 1) {
-    storyRef.current?.scrollBy({ left: direction * storyRef.current.clientWidth * 0.72, behavior: 'smooth' });
-  }
-  function changePhoto(direction: -1 | 1) {
-    setSelectedPhoto((current) => current === null ? null : (current + direction + storyImages.length) % storyImages.length);
   }
 
-  return <main className="site-shell">
-    <nav className="topbar">
-      <a className="brand" href="#top"><span className="brand-mark"><Clock3 /></span><span>World Clock</span></a>
-      <div className="nav-links"><a href="#roadmap">{t.navRoadmap}</a><button onClick={() => setModal('suggest')}>{t.navIdeas}</button><a href="#support">{t.navSupport}</a></div>
-      <div className="account-area">
-        <div className="language"><button className={lang === 'ru' ? 'active' : ''} onClick={() => chooseLang('ru')}>RU</button><button className={lang === 'en' ? 'active' : ''} onClick={() => chooseLang('en')}>EN</button></div>
-        {user ? <>{user.isAdmin ? <a className="account-link" href="/admin">{t.account}</a> : <span className="user-chip">{user.name}</span>}<button onClick={logout} aria-label="Sign out"><LogOut size={16} /></button></> : <button className="signin-link" onClick={() => setModal('auth')}><LogIn size={15} />{t.signin}</button>}
-      </div>
-    </nav>
+  async function sendSuggestion() {
+    const response = await fetch('/api/suggestions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(suggestion),
+    });
 
-    <section className="hero" id="top">
-      <h1>{t.headline}</h1><p className="hero-copy">{t.intro}</p>
-      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
-    </section>
+    if (response.status === 401) {
+      setModal('auth');
+      return;
+    }
 
-    <section className="roadmap-section" id="roadmap">
-      <header className="section-heading"><div><h2>{t.roadmap}</h2><p>{t.roadmapCopy}</p></div><button className="secondary-action" onClick={() => setModal('suggest')}><MessageSquarePlus />{t.suggest}</button></header>
-      <div className="idea-list">{data.ideas.map((idea) => {
-        const votes = data.counts[idea.id] || 0;
-        const selected = data.selected === idea.id;
-        return <article className="idea-card" key={idea.id}><div className="idea-copy"><h3>{idea.title[lang]}</h3><p>{idea.description[lang]}</p>{idea.id === 'mobile-official' && <div className="license-line"><span>{t.mobileGoal}</span><strong>${(mobileRaised / 100).toFixed(0)} / $124</strong></div>}</div><div className="idea-actions"><button className={selected ? 'selected' : ''} onClick={() => vote(idea.id)} disabled={busy}>{selected ? <Check /> : <Lightbulb />}{selected ? t.choice : t.vote}<span>{votes}</span></button></div></article>;
-      })}</div>
-      {data.suggestions.length > 0 && <div className="community"><p className="section-kicker">{t.community}</p>{data.suggestions.map((item) => <article key={item.id}><h3>{item.title}</h3><p>{item.problem}</p>{item.outcome && <small>{item.outcome}</small>}</article>)}</div>}
-      <output className="status-message">{message}</output>
-    </section>
+    if (response.ok) {
+      setSuggestion({
+        title: '',
+        problem: '',
+        outcome: '',
+      });
 
-    <section className="support-section" id="support">
-      <div className="story-slider"><div className="story-collage" ref={storyRef} aria-label={t.supportLine}>{storyImages.map((src, index) => <button className="story-slide" key={src} aria-label={`${lang === 'ru' ? 'Открыть фотографию' : 'Open photo'} ${index + 1}`} onClick={() => setSelectedPhoto(index)}><img src={src} alt="" /></button>)}</div><div className="story-controls"><button aria-label={lang === 'ru' ? 'Предыдущие фотографии' : 'Previous photos'} onClick={() => scrollStory(-1)}><ChevronLeft /></button><button aria-label={lang === 'ru' ? 'Следующие фотографии' : 'Next photos'} onClick={() => scrollStory(1)}><ChevronRight /></button></div></div>
-      <div className="support-story"><h2>{t.supportTitle}</h2><button className="support-action" onClick={() => setModal('support')}><Heart />{t.support}</button></div>
-    </section>
+      setMessage(t.thanks);
+      setModal(null);
+    } else {
+      setMessage(
+        lang === 'ru'
+          ? 'Проверьте заполнение формы.'
+          : 'Please check the form.',
+      );
+    }
+  }
 
-    <footer><span>World Clock Widget</span><a href="https://github.com/CandFlip/world-clock-widget" target="_blank" rel="noreferrer">GitHub <ExternalLink /></a></footer>
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    setUser(null);
+  }
 
-    <Dialog open={modal === 'auth'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.loginTitle}</DialogTitle><DialogDescription>{t.loginCopy}</DialogDescription></DialogHeader><GoogleSignIn lang={lang} onSignedIn={signedIn} /></DialogContent></Dialog>
-    <Dialog open={modal === 'suggest'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.ideaTitle}</DialogTitle><DialogDescription>{t.ideaCopy}</DialogDescription></DialogHeader><label><span>{lang === 'ru' ? 'Короткое название' : 'Short title'}</span><input maxLength={100} value={suggestion.title} onChange={(e) => setSuggestion({ ...suggestion, title: e.target.value })} /></label><label><span>{t.problem}</span><Textarea maxLength={800} value={suggestion.problem} onChange={(e) => setSuggestion({ ...suggestion, problem: e.target.value })} /></label><label><span>{t.outcome}</span><Textarea maxLength={800} value={suggestion.outcome} onChange={(e) => setSuggestion({ ...suggestion, outcome: e.target.value })} /></label><button className="primary-action" onClick={sendSuggestion}>{t.send}</button></DialogContent></Dialog>
-    <Dialog open={modal === 'support'} onOpenChange={(open) => { if (!open) { setModal(null); setCopiedMethod(null); } }}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.id === 'bybit-usdt-trc20' && <QRCodeSVG className="payment-qr" value={method.instructions} size={144} level="M" marginSize={2} />}{method.instructions && <code>{method.instructions}</code>}{method.instructions && <button onClick={() => void copyMethod(method)}>{copiedMethod === method.id ? t.copied : t.copy}</button>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
-    <Dialog open={selectedPhoto !== null} onOpenChange={(open) => !open && setSelectedPhoto(null)}><DialogContent className="image-dialog"><DialogTitle className="sr-only">{t.supportLine}</DialogTitle>{selectedPhoto !== null && <><div className="image-stage"><img src={storyImages[selectedPhoto]} alt="" /></div><div className="image-controls"><button aria-label={lang === 'ru' ? 'Предыдущая фотография' : 'Previous photo'} onClick={() => changePhoto(-1)}><ChevronLeft /></button><span>{selectedPhoto + 1} / {storyImages.length}</span><button aria-label={lang === 'ru' ? 'Следующая фотография' : 'Next photo'} onClick={() => changePhoto(1)}><ChevronRight /></button></div></>}</DialogContent></Dialog>
-  </main>;
+  return (
+    <main className="site-shell">
+      <nav className="topbar">
+        <a className="brand" href="#top">
+          <span className="brand-mark">
+            <Clock3 />
+          </span>
+          <span>World Clock</span>
+        </a>
+
+        <div className="nav-links">
+          <a href="#roadmap">{t.navRoadmap}</a>
+
+          <a
+            href="https://github.com/CandFlip/world-clock-widget"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t.navGithub}
+          </a>
+
+          <a className="nav-download" href={download}>
+            {lang === 'ru' ? 'Скачать' : 'Download'}
+          </a>
+        </div>
+
+        <div className="account-area">
+          <div className="language">
+            <button
+              className={lang === 'ru' ? 'active' : ''}
+              onClick={() => chooseLang('ru')}
+            >
+              RU
+            </button>
+
+            <button
+              className={lang === 'en' ? 'active' : ''}
+              onClick={() => chooseLang('en')}
+            >
+              EN
+            </button>
+          </div>
+
+          {user ? (
+            <>
+              {user.isAdmin ? (
+                <a className="account-link" href="/admin">
+                  {t.account}
+                </a>
+              ) : (
+                <span className="user-chip">{user.name}</span>
+              )}
+
+              <button onClick={logout} aria-label="Sign out">
+                <LogOut size={16} />
+              </button>
+            </>
+          ) : (
+            <button
+              className="signin-link"
+              onClick={() => setModal('auth')}
+            >
+              <LogIn size={15} />
+              {t.signin}
+            </button>
+          )}
+        </div>
+      </nav>
+
+      <section className="hero" id="top">
+        <h1>{t.headline}</h1>
+
+        <p className="hero-copy">{t.intro}</p>
+        <p className="hero-extra">{t.heroExtra}</p>
+
+        <div className="hero-actions">
+          <a className="primary-action" href={download}>
+            <ArrowDownToLine />
+            {t.download}
+            <span>{version}</span>
+          </a>
+
+          <a
+            className="text-action"
+            href="https://github.com/CandFlip/world-clock-widget"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t.github}
+            <ExternalLink />
+          </a>
+        </div>
+      </section>
+
+      <section className="benefits-section">
+        <article className="benefit-card">
+          <h2>{t.benefit1Title}</h2>
+          <p>{t.benefit1Copy}</p>
+        </article>
+
+        <article className="benefit-card">
+          <h2>{t.benefit2Title}</h2>
+          <p>{t.benefit2Copy}</p>
+        </article>
+
+        <article className="benefit-card">
+          <h2>{t.benefit3Title}</h2>
+          <p>{t.benefit3Copy}</p>
+        </article>
+      </section>
+
+      <section className="roadmap-section" id="roadmap">
+        <header className="section-heading">
+          <div>
+            <h2>{t.roadmap}</h2>
+            <p>{t.roadmapCopy}</p>
+          </div>
+
+          <button
+            className="secondary-action"
+            onClick={() => setModal('suggest')}
+          >
+            <MessageSquarePlus />
+            {t.suggest}
+          </button>
+        </header>
+
+        <div className="idea-list">
+          {data.ideas.map((idea) => {
+            const votes = data.counts[idea.id] || 0;
+            const selected = data.selected === idea.id;
+
+            return (
+              <article className="idea-card" key={idea.id}>
+                <div className="idea-copy">
+                  <h3>{idea.title[lang]}</h3>
+                  <p>{idea.description[lang]}</p>
+
+                  {idea.id === 'mobile-official' && (
+                    <div className="license-line">
+                      <span>{t.mobileGoal}</span>
+                      <strong>
+                        ${(mobileRaised / 100).toFixed(0)} / $124
+                      </strong>
+                    </div>
+                  )}
+                </div>
+
+                <div className="idea-actions">
+                  <button
+                    className={selected ? 'selected' : ''}
+                    onClick={() => vote(idea.id)}
+                    disabled={busy}
+                  >
+                    {selected ? <Check /> : <Lightbulb />}
+                    {selected ? t.choice : t.vote}
+                    <span>{votes}</span>
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        {data.suggestions.length > 0 && (
+          <div className="community">
+            <p className="section-kicker">{t.community}</p>
+
+            {data.suggestions.map((item) => (
+              <article key={item.id}>
+                <h3>{item.title}</h3>
+                <p>{item.problem}</p>
+                {item.outcome && <small>{item.outcome}</small>}
+              </article>
+            ))}
+          </div>
+        )}
+
+        <output className="status-message">{message}</output>
+      </section>
+
+      <section className="support-strip">
+        <div className="support-strip-copy">
+          <span className="section-kicker">{t.independent}</span>
+
+          <strong>
+            ${(authorRaised / 100).toFixed(0)} / $
+            {(authorGoal / 100).toFixed(0)}
+          </strong>
+        </div>
+
+        <div className="support-progress" aria-hidden="true">
+          <span style={{ width: `${supportProgress}%` }} />
+        </div>
+
+        <a className="support-link" href="/support">
+          {t.supportWhy}
+        </a>
+      </section>
+
+      <footer>
+        <span>World Clock Widget</span>
+
+        <a
+          href="https://github.com/CandFlip/world-clock-widget"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GitHub
+          <ExternalLink />
+        </a>
+      </footer>
+
+      <Dialog
+        open={modal === 'auth'}
+        onOpenChange={(open) => !open && setModal(null)}
+      >
+        <DialogContent className="modal">
+          <DialogHeader>
+            <DialogTitle>{t.loginTitle}</DialogTitle>
+            <DialogDescription>{t.loginCopy}</DialogDescription>
+          </DialogHeader>
+
+          <GoogleSignIn lang={lang} onSignedIn={signedIn} />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={modal === 'suggest'}
+        onOpenChange={(open) => !open && setModal(null)}
+      >
+        <DialogContent className="modal">
+          <DialogHeader>
+            <DialogTitle>{t.ideaTitle}</DialogTitle>
+            <DialogDescription>{t.ideaCopy}</DialogDescription>
+          </DialogHeader>
+
+          <label>
+            <span>
+              {lang === 'ru' ? 'Короткое название' : 'Short title'}
+            </span>
+
+            <input
+              maxLength={100}
+              value={suggestion.title}
+              onChange={(e) =>
+                setSuggestion({
+                  ...suggestion,
+                  title: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            <span>{t.problem}</span>
+
+            <Textarea
+              maxLength={800}
+              value={suggestion.problem}
+              onChange={(e) =>
+                setSuggestion({
+                  ...suggestion,
+                  problem: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <label>
+            <span>{t.outcome}</span>
+
+            <Textarea
+              maxLength={800}
+              value={suggestion.outcome}
+              onChange={(e) =>
+                setSuggestion({
+                  ...suggestion,
+                  outcome: e.target.value,
+                })
+              }
+            />
+          </label>
+
+          <button
+            className="primary-action"
+            onClick={sendSuggestion}
+          >
+            {t.send}
+          </button>
+        </DialogContent>
+      </Dialog>
+    </main>
+  );
 }
