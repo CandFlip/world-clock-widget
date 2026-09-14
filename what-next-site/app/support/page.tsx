@@ -69,6 +69,7 @@ const strings = {
     businessTitle: 'Есть задача в бизнесе?',
     businessCopy:
       'Я занимаюсь разбором процессов, интерфейсов и автоматизации. Если где-то теряются время, деньги или слишком много ручного труда, могу провести аудит и предложить практичный способ улучшения.',
+    businessAction: 'Обсудить задачу',
   },
 
   en: {
@@ -93,6 +94,7 @@ const strings = {
     businessTitle: 'Have a business problem?',
     businessCopy:
       'I work with processes, interfaces and automation. If a workflow is wasting time, money or too much manual effort, I can audit it and propose a practical way to improve it.',
+    businessAction: 'Discuss a project',
   },
 };
 
@@ -137,6 +139,7 @@ export default function SupportPage() {
     };
 
     window.addEventListener('keydown', onKeyDown);
+
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedPhoto]);
 
@@ -217,6 +220,7 @@ export default function SupportPage() {
 
       <section className="support-intro">
         <p className="section-kicker">World Clock</p>
+
         <h1>{t.title}</h1>
 
         <div className="support-story-copy">
@@ -266,7 +270,22 @@ export default function SupportPage() {
 
       <section className="business-support">
         <h2>{t.businessTitle}</h2>
+
         <p>{t.businessCopy}</p>
+
+        <a
+          className="secondary-action"
+          style={{
+            width: 'fit-content',
+            marginTop: 20,
+          }}
+          href="https://t.me/AndreyBerst"
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t.businessAction}
+          <ExternalLink />
+        </a>
       </section>
 
       <footer className="support-footer">
@@ -359,7 +378,9 @@ export default function SupportPage() {
       <Dialog
         open={selectedPhoto !== null}
         onOpenChange={(open) => {
-          if (!open) setSelectedPhoto(null);
+          if (!open) {
+            setSelectedPhoto(null);
+          }
         }}
       >
         <DialogContent className="image-dialog">
