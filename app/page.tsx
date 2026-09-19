@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, Check, ChevronLeft, ChevronRight, Clock3, ExternalLink, Heart, Lightbulb, LogIn, LogOut, MessageSquarePlus } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowDownToLine, Check, Clock3, ExternalLink, Heart, Lightbulb, LogIn, LogOut, MessageSquarePlus } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,15 +14,14 @@ type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<s
 type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [] };
-const storyImages = ['/story/hospital-room.jpg', '/story/hospital-iv.jpg', '/story/mri-scan.jpg', '/story/mri-report.jpg', '/story/translated-result.jpg'];
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.78/WorldClockWidget-Setup-v1.1.78.exe';
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.106/WorldClockWidget-Setup-v1.1.106.exe';
 const strings = {
   ru: {
     navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', account: 'Кабинет',
     headline: 'Время в разных часовых поясах и таймер поверх любых окон.', intro: 'Скачайте приложение или выберите, что добавить следующим.',
     download: 'Скачать для Windows', source: 'Официальная версия на GitHub', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
     vote: 'Голосовать', choice: 'Ваш выбор', ideaTitle: 'Предложить функцию', ideaCopy: 'Коротко опишите, что нужно добавить.', suggest: 'Предложить идею',
-    community: 'Идеи сообщества', mobileGoal: 'Лицензии iOS и Android', supportTitle: 'Поддержка автора', supportLine: 'Фотографии из больницы', support: 'Поддержать',
+    community: 'Идеи сообщества', mobileGoal: 'Лицензии iOS и Android', supportTitle: 'Поддержка проекта и автора', support: 'Поддержать', whySupport: 'Почему я собираю?',
     loginTitle: 'Войти', loginCopy: 'Вход нужен для голосования и предложений.', problem: 'Какую проблему это решит?', outcome: 'Как должен выглядеть результат?',
     send: 'Отправить', thanks: 'Спасибо. Запись отправлена.', methods: 'Поддержка автора', noMethods: 'Способы поддержки пока не подключены.', paymentNote: 'Выберите удобный способ.', copy: 'Копировать', copied: 'Скопировано',
   },
@@ -31,7 +30,7 @@ const strings = {
     headline: 'Time across time zones and a timer above any window.', intro: 'Download the app or vote for what should be added next.',
     download: 'Download for Windows', source: 'Official release on GitHub', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
     vote: 'Vote', choice: 'Your choice', ideaTitle: 'Suggest a feature', ideaCopy: 'Briefly describe what should be added.', suggest: 'Suggest an idea',
-    community: 'Community ideas', mobileGoal: 'iOS and Android licenses', supportTitle: 'Support the author', supportLine: 'Hospital photos', support: 'Support',
+    community: 'Community ideas', mobileGoal: 'iOS and Android licenses', supportTitle: 'Support the project and its author', support: 'Support', whySupport: 'Why am I raising funds?',
     loginTitle: 'Sign in', loginCopy: 'Sign in to vote or suggest an idea.', problem: 'What problem would this solve?', outcome: 'What should the result look like?',
     send: 'Send', thanks: 'Thank you. Your message was sent.', methods: 'Support the author', noMethods: 'Support options have not been connected yet.', paymentNote: 'Choose a payment method.', copy: 'Copy', copied: 'Copied',
   },
@@ -45,10 +44,8 @@ export default function Home() {
   const [pendingVote, setPendingVote] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [copiedMethod, setCopiedMethod] = useState<string | null>(null);
-  const [selectedPhoto, setSelectedPhoto] = useState<number | null>(null);
   const [busy, setBusy] = useState(true);
   const [suggestion, setSuggestion] = useState({ title: '', problem: '', outcome: '' });
-  const storyRef = useRef<HTMLDivElement>(null);
   const t = strings[lang];
 
   const load = useCallback(async () => {
@@ -64,22 +61,12 @@ export default function Home() {
     void load().catch(() => setBusy(false));
   }, [load]);
 
-  useEffect(() => {
-    if (selectedPhoto === null) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'ArrowLeft') setSelectedPhoto((current) => current === null ? null : (current - 1 + storyImages.length) % storyImages.length);
-      if (event.key === 'ArrowRight') setSelectedPhoto((current) => current === null ? null : (current + 1) % storyImages.length);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedPhoto]);
-
   const chooseLang = (value: 'ru' | 'en') => {
     setLang(value);
     localStorage.setItem('wc-lang', value);
     document.documentElement.lang = value;
   };
-  const version = data.settings.download_version === 'v1.1.78' ? data.settings.download_version : 'v1.1.78';
+  const version = data.settings.download_version === 'v1.1.106' ? data.settings.download_version : 'v1.1.106';
   const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   const mobileRaised = data.funded['mobile-official'] || 0;
 
@@ -121,13 +108,6 @@ export default function Home() {
     }
     setCopiedMethod(method.id);
   }
-  function scrollStory(direction: -1 | 1) {
-    storyRef.current?.scrollBy({ left: direction * storyRef.current.clientWidth * 0.72, behavior: 'smooth' });
-  }
-  function changePhoto(direction: -1 | 1) {
-    setSelectedPhoto((current) => current === null ? null : (current + direction + storyImages.length) % storyImages.length);
-  }
-
   return <main className="site-shell">
     <nav className="topbar">
       <a className="brand" href="#top"><span className="brand-mark"><Clock3 /></span><span>World Clock</span></a>
@@ -155,8 +135,8 @@ export default function Home() {
     </section>
 
     <section className="support-section" id="support">
-      <div className="story-slider"><div className="story-collage" ref={storyRef} aria-label={t.supportLine}>{storyImages.map((src, index) => <button className="story-slide" key={src} aria-label={`${lang === 'ru' ? 'Открыть фотографию' : 'Open photo'} ${index + 1}`} onClick={() => setSelectedPhoto(index)}><img src={src} alt="" /></button>)}</div><div className="story-controls"><button aria-label={lang === 'ru' ? 'Предыдущие фотографии' : 'Previous photos'} onClick={() => scrollStory(-1)}><ChevronLeft /></button><button aria-label={lang === 'ru' ? 'Следующие фотографии' : 'Next photos'} onClick={() => scrollStory(1)}><ChevronRight /></button></div></div>
-      <div className="support-story"><h2>{t.supportTitle}</h2><button className="support-action" onClick={() => setModal('support')}><Heart />{t.support}</button></div>
+      <h2>{t.supportTitle}</h2>
+      <div className="support-actions"><button className="support-action" onClick={() => setModal('support')}><Heart />{t.support}</button><a className="support-action support-story-link" href={`/support?lang=${lang}`}>{t.whySupport}</a></div>
     </section>
 
     <footer><span>World Clock Widget</span><a href="https://github.com/CandFlip/world-clock-widget" target="_blank" rel="noreferrer">GitHub <ExternalLink /></a></footer>
@@ -164,6 +144,5 @@ export default function Home() {
     <Dialog open={modal === 'auth'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.loginTitle}</DialogTitle><DialogDescription>{t.loginCopy}</DialogDescription></DialogHeader><GoogleSignIn lang={lang} onSignedIn={signedIn} /></DialogContent></Dialog>
     <Dialog open={modal === 'suggest'} onOpenChange={(open) => !open && setModal(null)}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.ideaTitle}</DialogTitle><DialogDescription>{t.ideaCopy}</DialogDescription></DialogHeader><label><span>{lang === 'ru' ? 'Короткое название' : 'Short title'}</span><input maxLength={100} value={suggestion.title} onChange={(e) => setSuggestion({ ...suggestion, title: e.target.value })} /></label><label><span>{t.problem}</span><Textarea maxLength={800} value={suggestion.problem} onChange={(e) => setSuggestion({ ...suggestion, problem: e.target.value })} /></label><label><span>{t.outcome}</span><Textarea maxLength={800} value={suggestion.outcome} onChange={(e) => setSuggestion({ ...suggestion, outcome: e.target.value })} /></label><button className="primary-action" onClick={sendSuggestion}>{t.send}</button></DialogContent></Dialog>
     <Dialog open={modal === 'support'} onOpenChange={(open) => { if (!open) { setModal(null); setCopiedMethod(null); } }}><DialogContent className="modal"><DialogHeader><DialogTitle>{t.methods}</DialogTitle><DialogDescription>{t.paymentNote}</DialogDescription></DialogHeader>{data.methods.length ? <div className="method-list">{data.methods.map((method) => <div key={method.id}><strong>{method.label}</strong>{method.id === 'bybit-usdt-trc20' && <QRCodeSVG className="payment-qr" value={method.instructions} size={144} level="M" marginSize={2} />}{method.instructions && <code>{method.instructions}</code>}{method.instructions && <button onClick={() => void copyMethod(method)}>{copiedMethod === method.id ? t.copied : t.copy}</button>}{method.url && <a href={method.url} target="_blank" rel="noreferrer">{t.support}<ExternalLink /></a>}</div>)}</div> : <p className="empty-note">{t.noMethods}</p>}</DialogContent></Dialog>
-    <Dialog open={selectedPhoto !== null} onOpenChange={(open) => !open && setSelectedPhoto(null)}><DialogContent className="image-dialog"><DialogTitle className="sr-only">{t.supportLine}</DialogTitle>{selectedPhoto !== null && <><div className="image-stage"><img src={storyImages[selectedPhoto]} alt="" /></div><div className="image-controls"><button aria-label={lang === 'ru' ? 'Предыдущая фотография' : 'Previous photo'} onClick={() => changePhoto(-1)}><ChevronLeft /></button><span>{selectedPhoto + 1} / {storyImages.length}</span><button aria-label={lang === 'ru' ? 'Следующая фотография' : 'Next photo'} onClick={() => changePhoto(1)}><ChevronRight /></button></div></>}</DialogContent></Dialog>
   </main>;
 }
