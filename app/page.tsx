@@ -121,7 +121,7 @@ export default function Home() {
 
     <section className="hero" id="top">
       <h1>{t.headline}</h1><p className="hero-copy">{t.intro}</p>
-      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action mac-action" href={macDownload}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.107" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
+      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action" href={macDownload}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.107" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
       <p className="download-note">{t.downloadNote}</p>
     </section>
 
