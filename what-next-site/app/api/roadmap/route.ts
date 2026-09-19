@@ -18,10 +18,10 @@ export async function GET(request: Request) {
   const funded: Record<string, number> = {};
   for (const row of funding.results) funded[row.target_id] = Number(row.amount || 0);
   const config = Object.fromEntries(settings.results.map((row) => [row.key, row.value]));
-  if (config.download_version !== 'v1.1.78') {
+  if (config.download_version !== 'v1.1.106') {
     const now = new Date().toISOString();
-    config.download_version = 'v1.1.78';
-    config.download_url = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.78/WorldClockWidget-Setup-v1.1.78.exe';
+    config.download_version = 'v1.1.106';
+    config.download_url = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.106/WorldClockWidget-Setup-v1.1.106.exe';
     await env.DB.batch(Object.entries({ download_version: config.download_version, download_url: config.download_url }).map(([key, value]) => env.DB.prepare('INSERT INTO site_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at').bind(key,value,now)));
   }
   const selected = user ? await env.DB.prepare('SELECT option_id FROM votes WHERE visitor_id=?').bind(user.id).first<{ option_id: string }>() : null;
