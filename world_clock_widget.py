@@ -1,18 +1,32 @@
 ﻿import ctypes
 import gzip
 import json
+import math
 import os
 import sys
 import threading
 import time
+import webbrowser
 from dataclasses import dataclass
 from ctypes import wintypes
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import font as tkfont
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
+from reminders import ReminderStore, ReminderUI, ScrollThumb
+
+try:
+    import winreg
+except ImportError:
+    winreg = None
+
+try:
+    from tzlocal import get_localzone_name
+except ImportError:
+    get_localzone_name = None
 
 try:
     import pystray
@@ -25,8 +39,21 @@ except ImportError:
 
 
 APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.11"
+APP_VERSION = "v1.1.107"
 APP_DIR_NAME = "WorldClockWidget"
+ROADMAP_URL = "https://world-clock-next.decent-rat-2368.chatgpt.site"
+MIN_WIDGET_HEIGHT = 640
+SHUTDOWN_EVENT_NAME = "Local\\WorldClockWidgetShutdown"
+SHOW_EVENT_NAME = "Local\\WorldClockWidgetShow"
+SINGLE_INSTANCE_MUTEX_NAME = "Local\\WorldClockWidgetSingleInstance"
+GWL_EXSTYLE = -20
+WS_EX_NOACTIVATE = 0x08000000
+HWND_TOPMOST = -1
+SW_SHOWNOACTIVATE = 4
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_NOACTIVATE = 0x0010
+SWP_SHOWWINDOW = 0x0040
 DEFAULT_OVERLAY_DIRECTION = "right"
 OVERLAY_DIRECTIONS = {
     "right": "Справа",
@@ -39,6 +66,7 @@ DEFAULT_TIMEZONES = [
     "Asia/Vladivostok",
     "Asia/Almaty",
 ]
+DEFAULT_REMINDER_INTERVALS = [15, 30, 60]
 LOCAL_TIME_OPTION = "Локальное время Windows"
 
 # Visual tokens from the Figma frame (node 1906:14898).
@@ -97,6 +125,10 @@ STRINGS = {
         "search_city": "Поиск города...",
         "from_base": "от базы",
         "system_city": "Ханой",
+        "system_time": "Время Windows",
+        "reminder_intervals": "Интервалы напоминания",
+        "minutes": "мин",
+        "save": "Сохранить",
     },
     "en": {
         "world_time": "World time",
@@ -116,6 +148,10 @@ STRINGS = {
         "search_city": "Search city...",
         "from_base": "from base",
         "system_city": "Hanoi",
+        "system_time": "Windows time",
+        "reminder_intervals": "Reminder intervals",
+        "minutes": "min",
+        "save": "Save",
     },
 }
 
@@ -138,6 +174,22 @@ def tr(key: str, language: str = "ru") -> str:
     return STRINGS.get(language, STRINGS["ru"]).get(key, key)
 
 
+def normalize_reminder_intervals(values) -> list[int]:
+    try:
+        result = [int(value) for value in values]
+    except (TypeError, ValueError):
+        return list(DEFAULT_REMINDER_INTERVALS)
+    if len(result) != 3 or len(set(result)) != 3 or any(value < 1 or value > 10080 for value in result):
+        return list(DEFAULT_REMINDER_INTERVALS)
+    return result
+
+
+def format_reminder_interval(minutes: int, language: str) -> str:
+    if minutes % 60 == 0:
+        return f"{minutes // 60} ч" if language == "ru" else f"{minutes // 60} h"
+    return f"{minutes} мин" if language == "ru" else f"{minutes} min"
+
+
 def resource_path(*parts: str) -> Path:
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return base.joinpath(*parts)
@@ -153,6 +205,35 @@ def register_bundled_font():
         ctypes.windll.gdi32.AddFontResourceExW(str(font_path), 0x10, 0)
     except Exception:
         pass
+
+
+def acquire_single_instance():
+    """Hold one widget instance and ask the existing one to show on relaunch."""
+    if os.name != "nt":
+        return True
+    kernel32 = ctypes.windll.kernel32
+    create_mutex = kernel32.CreateMutexW
+    create_mutex.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    create_mutex.restype = wintypes.HANDLE
+    kernel32.SetLastError(0)
+    mutex = create_mutex(None, False, SINGLE_INSTANCE_MUTEX_NAME)
+    if not mutex:
+        return True
+    if kernel32.GetLastError() != 183:
+        return mutex
+
+    kernel32.CloseHandle(mutex)
+    open_event = kernel32.OpenEventW
+    open_event.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.LPCWSTR]
+    open_event.restype = wintypes.HANDLE
+    for _ in range(20):
+        show_event = open_event(0x0002, False, SHOW_EVENT_NAME)
+        if show_event:
+            kernel32.SetEvent(show_event)
+            kernel32.CloseHandle(show_event)
+            break
+        time.sleep(0.1)
+    return None
 
 
 def ui_font(size: int, weight: str = "normal") -> tuple[str, int, str]:
@@ -188,6 +269,12 @@ def _rounded_polygon(canvas: tk.Canvas, x1, y1, x2, y2, radius, **kwargs):
         x2, y2 - radius, x2, y2, x2 - radius, y2, x1 + radius, y2,
         x1, y2, x1, y2 - radius, x1, y1 + radius, x1, y1,
     ]
+    tag = kwargs.get("tags")
+    existing = canvas.find_withtag(tag) if isinstance(tag, str) else ()
+    if existing:
+        canvas.coords(existing[0], *points)
+        canvas.itemconfigure(existing[0], **kwargs)
+        return existing[0]
     return canvas.create_polygon(points, smooth=True, splinesteps=24, **kwargs)
 
 
@@ -219,7 +306,6 @@ class RoundedPanel(tk.Canvas):
     def _redraw(self, _event=None):
         width = max(1, self.winfo_width())
         height = max(1, self.winfo_height())
-        self.delete("panel_shape")
         _rounded_polygon(
             self,
             1,
@@ -243,8 +329,21 @@ class RoundedPanel(tk.Canvas):
         )
 
     def set_outline(self, color: str):
+        if color == self.outline_color:
+            return
         self.outline_color = color
-        self._redraw()
+        self.itemconfigure("panel_shape", outline=color)
+
+
+def draw_trash_icon(canvas, center_x, center_y, size=16, color=None):
+    """Shared outline glyph for city and reminder deletion."""
+    scale = size / 24
+    for points in ((3, 6, 21, 6), (9, 6, 9, 3, 15, 3, 15, 6),
+                   (5, 6, 6, 21, 18, 21, 19, 6), (10, 10, 10, 17), (14, 10, 14, 17)):
+        coords = [((center_x if i % 2 == 0 else center_y) - size / 2 + value * scale)
+                  for i, value in enumerate(points)]
+        canvas.create_line(*coords, fill=color or TEXT, width=max(1, 1.8 * scale),
+                           capstyle="round", joinstyle="round")
 
 
 class IconButton(tk.Canvas):
@@ -262,6 +361,8 @@ class IconButton(tk.Canvas):
         if source is not None and ImageTk is not None:
             self._photo = ImageTk.PhotoImage(source)
             self.create_image(size / 2, size / 2, image=self._photo)
+        elif icon_name == "trash":
+            draw_trash_icon(self, size / 2, size / 2, icon_size)
         self.bind("<Enter>", lambda _e: self._draw(True))
         self.bind("<Leave>", lambda _e: self._draw(False))
         self.bind("<Button-1>", lambda _e: self.command())
@@ -284,6 +385,199 @@ class IconButton(tk.Canvas):
             self.tag_lower("button_shape")
 
 
+class ReminderButton(tk.Canvas):
+    """One rounded, mouse-draggable hit area including its stock wheel icon."""
+    def __init__(self, master, text, command):
+        super().__init__(master, width=108, height=40, bg=BG, bd=0, highlightthickness=0, cursor="hand2", takefocus=True)
+        self.command, self.caption, self.foreground = command, text, TEXT
+        self.text_opacity = 1.0
+        self.hovered = False
+        self._photo = ImageTk.PhotoImage(tinted_icon("pan-vertical", 16))
+        self.bind("<Configure>", self.redraw)
+        self.bind("<Enter>", lambda _e: self.set_hover(True))
+        self.bind("<Leave>", lambda _e: self.set_hover(False))
+        self.bind("<Return>", lambda _e: self.invoke())
+        self.bind("<space>", lambda _e: self.invoke())
+
+    def invoke(self):
+        self.command()
+
+    def set_hover(self, active):
+        self.hovered = active
+        self.redraw()
+
+    def set_caption(self, text, foreground):
+        if (text, foreground) != (self.caption, self.foreground):
+            self.caption, self.foreground = text, foreground
+            self.redraw()
+
+    def set_text_opacity(self, opacity):
+        self.text_opacity = opacity
+        self.redraw()
+
+    def redraw(self, _event=None):
+        width = max(1, self.winfo_width())
+        self.delete("all")
+        _rounded_polygon(self, 1, 1, width - 1, 39, 10, fill=SURFACE_HOVER if self.hovered else SURFACE,
+                         outline=ACCENT if self.hovered or self.foreground == ACCENT else BORDER, width=1)
+        foreground = ToggleSwitch._blend_color(SURFACE_HOVER if self.hovered else SURFACE,
+                                              self.foreground, self.text_opacity)
+        self.create_text(12, 20, text=self.caption, anchor="w", font=ui_font(13), fill=foreground)
+        self.create_image(width - 16, 20, image=self._photo)
+
+
+class RemainingMeter(tk.Canvas):
+    def __init__(self, master):
+        super().__init__(master, height=22, width=70, bg=BG, bd=0, highlightthickness=0, cursor="hand2")
+        self.fraction, self.caption = 1.0, ""
+        self.bind("<Configure>", self.redraw)
+
+    def set_value(self, fraction, text):
+        self.fraction, self.caption = max(0, min(1, fraction)), text
+        self.redraw()
+
+    def redraw(self, _event=None):
+        width = max(2, self.winfo_width())
+        self.delete("all")
+        _rounded_polygon(self, 0, 0, width, 22, 6, fill=SURFACE, outline=BORDER, width=1)
+        # Dark enough for white text throughout the green -> amber -> red fade.
+        stops = ((0.0, "#A52F3D"), (1/3, "#A52F3D"), (0.5, "#AD7520"), (2/3, "#267A52"), (1.0, "#267A52"))
+        color = stops[-1][1]
+        for (lo, first), (hi, second) in zip(stops, stops[1:]):
+            if self.fraction <= hi:
+                color = ToggleSwitch._blend_color(first, second, (self.fraction - lo) / (hi - lo))
+                break
+        end = round((width - 2) * self.fraction)
+        if end > 0:
+            _rounded_polygon(self, width - 1 - end, 1, width - 1, 21, min(5, end / 2), fill=color, outline="")
+        self.create_text(width / 2, 11, text=self.caption, fill="#FFFFFF", font=ui_font(10, "bold"))
+
+
+class ReminderCard(tk.Canvas):
+    """Compact reminder painted on a single surface, including its fade."""
+    def __init__(self, master, on_edit, on_delete, fade=False):
+        super().__init__(master, height=49, bg=BG, bd=0, highlightthickness=0, cursor="hand2")
+        self.on_edit, self.on_delete = on_edit, on_delete
+        self.opacity = 0.0 if fade and ToggleSwitch._animations_enabled() else 1.0
+        self.payload = ("", "", "", 1.0, "")
+        self._text_font = tkfont.Font(self, font=ui_font(11))
+        self._fade_timer = None
+        self._motion_timer = None
+        self._motion_start = time.perf_counter()
+        self._motion_enabled = ToggleSwitch._animations_enabled()
+        self._frame_index = 0
+        self._hourglass_item = None
+        with Image.open(resource_path("assets", "icons", "hourglass-frames.png")) as atlas:
+            self._frames = [atlas.crop((0, i * 64, 64, (i + 1) * 64)).resize((12, 12), Image.Resampling.LANCZOS) for i in range(50)]
+        self._frame_photos = [ImageTk.PhotoImage(frame, master=self) for frame in self._frames]
+        self._photos = []
+        self._clock_icon = tinted_icon("clock-outline", 11)
+        self.bind("<Configure>", self.redraw)
+        self.bind("<Button-1>", self.click)
+        self.bind("<Map>", self._on_map)
+        self.bind("<Unmap>", lambda _event: self._stop_motion())
+
+    def _on_map(self, _event=None):
+        self._start_motion()
+        if self.opacity < 1 and self._fade_timer is None:
+            self._fade_start = time.perf_counter()
+            self.redraw()
+            self._fade_timer = self.after(16, self.fade_step)
+
+    def click(self, event):
+        if event.x >= self.winfo_width() - 40:
+            self.on_delete()
+        else:
+            self.on_edit(self)
+        return "break"
+
+    def set_entry(self, city, alarm, remaining, fraction, remaining_prefix=""):
+        payload = (city, alarm, remaining, max(0, min(1, fraction)), remaining_prefix)
+        if payload != self.payload:
+            self.payload = payload
+            self.redraw()
+            if payload[3] > 0:
+                self._start_motion()
+            else:
+                self._stop_motion()
+
+    def _start_motion(self):
+        if self._motion_enabled and self._motion_timer is None and self.payload[3] > 0 and self.winfo_viewable():
+            self._motion_timer = self.after(50, self._animate_hourglass)
+
+    def _stop_motion(self):
+        if self._motion_timer is not None:
+            self.after_cancel(self._motion_timer)
+            self._motion_timer = None
+
+    def _animate_hourglass(self):
+        self._motion_timer = None
+        if not self.winfo_viewable() or self.payload[3] <= 0:
+            return
+        self._frame_index = int((time.perf_counter() - self._motion_start) * 20) % 50
+        # Only the icon changes; the card's text and geometry remain untouched.
+        if self.opacity >= 1 and self._hourglass_item is not None:
+            self.itemconfigure(self._hourglass_item, image=self._frame_photos[self._frame_index])
+        self._start_motion()
+
+    def fade_step(self):
+        self._fade_timer = None
+        if not self.winfo_viewable():
+            return
+        progress = min(1, (time.perf_counter() - self._fade_start) / .32)
+        self.opacity = progress * progress * (3 - 2 * progress)
+        self.redraw()
+        if self.opacity < 1:
+            self._fade_timer = self.after(16, self.fade_step)
+
+    def redraw(self, _event=None):
+        width = max(2, self.winfo_width())
+        city, alarm, remaining, fraction, prefix = self.payload
+        color = lambda value: ToggleSwitch._blend_color(BG, value, self.opacity)
+        self.delete("all")
+        _rounded_polygon(self, 1, 1, width - 1, 48, 8, fill=color(SURFACE), outline=color(BORDER), width=1)
+        title = self.create_text(7, 13, text=city + " ✎", anchor="w", fill=color(TEXT), font=ui_font(11))
+        divider_x = width - 40
+        while city and self.bbox(title)[2] > divider_x - 8:
+            city = city[:-1]
+            self.itemconfigure(title, text=city + "… ✎")
+        self.create_line(divider_x, 7, divider_x, 42, fill=color(BORDER), width=1)
+        draw_trash_icon(self, width - 20, 24, 16, color(TEXT))
+        # The remaining segment is right-anchored: elapsed time clears from left.
+        left, right = 7, divider_x - 58
+        caption = prefix + remaining
+        if width < 220 or self._text_font.measure(caption) > right - left - 22:
+            caption = remaining
+        _rounded_polygon(self, left, 27, right, 43, 5, fill=color("#30363D"), outline="")
+        stops = ((0, "#A52F3D"), (1/3, "#A52F3D"), (.5, "#AD7520"), (2/3, "#267A52"), (1, "#267A52"))
+        fill = stops[-1][1]
+        for (lo, first), (hi, second) in zip(stops, stops[1:]):
+            if fraction <= hi:
+                fill = ToggleSwitch._blend_color(first, second, (fraction-lo)/(hi-lo))
+                break
+        length = round(max(0, right-left) * fraction)
+        if length:
+            _rounded_polygon(self, right-length, 27, right, 43, min(5,length/2), fill=color(fill), outline="")
+        self._photos = []
+        for index, (source, px) in enumerate(zip((self._clock_icon, self._frames[self._frame_index]), (divider_x-44, left+8))):
+            bitmap = source.copy()
+            bitmap.putalpha(bitmap.getchannel("A").point(lambda a: round(a * self.opacity)))
+            photo = ImageTk.PhotoImage(bitmap)
+            self._photos.append(photo)
+            item = self.create_image(px, 35, image=photo)
+            if index == 1:
+                self._hourglass_item = item
+        self.create_text(divider_x-7, 35, text=alarm, anchor="e", fill=color(TEXT), font=ui_font(11), tags="alarm_time")
+        self.create_text((left+16+right)/2, 35, text=caption, fill=color("#FFFFFF"), font=ui_font(11), tags="remaining_time")
+
+    def destroy(self):
+        self._stop_motion()
+        if self._fade_timer is not None:
+            self.after_cancel(self._fade_timer)
+            self._fade_timer = None
+        super().destroy()
+
+
 class StarButton(tk.Canvas):
     def __init__(self, master, command, selected=False, size=28):
         parent_bg = master.cget("bg") if "bg" in master.keys() else BG
@@ -302,18 +596,120 @@ class StarButton(tk.Canvas):
         self.create_text(self.size / 2, self.size / 2 - 1, text="★" if self.selected else "☆", fill=ACCENT if self.selected or hovered else MUTED, font=ui_font(18), anchor="center")
 
 
+class ToggleSwitch(tk.Canvas):
+    WIDTH = 40
+    HEIGHT = 22
+    THUMB_RADIUS = 9
+    THUMB_OFF_X = 11
+    THUMB_ON_X = 29
+    ACTIVE_COLOR = "#7C5CFC"
+    INACTIVE_COLOR = "#D8D8DD"
+    ANIMATION_MS = 150
+    ANIMATION_FRAMES = 10
+
+    def __init__(self, master, selected: bool, command, size=(40, 22)):
+        parent_bg = master.cget("bg") if "bg" in master.keys() else BG
+        self.width, self.height = size
+        super().__init__(master, width=self.width, height=self.height, bg=parent_bg, highlightthickness=0, bd=0, cursor="hand2")
+        self.selected = bool(selected)
+        self.command = command
+        self._thumb_x = self.THUMB_ON_X if self.selected else self.THUMB_OFF_X
+        self._color_mix = 1.0 if self.selected else 0.0
+        self._animation_after_id = None
+        self._photo = None
+        self.bind("<Button-1>", self._toggle)
+        self._draw(self._thumb_x, self._color_mix)
+
+    def _toggle(self, _event=None):
+        start_x = self._thumb_x
+        self.selected = not self.selected
+        target_x = self.THUMB_ON_X if self.selected else self.THUMB_OFF_X
+        target_mix = 1.0 if self.selected else 0.0
+        start_mix = self._color_mix
+        if self._animation_after_id is not None:
+            try:
+                self.after_cancel(self._animation_after_id)
+            except tk.TclError:
+                pass
+            self._animation_after_id = None
+        if self._animations_enabled():
+            self._animate(0, start_x, target_x, start_mix, target_mix)
+        else:
+            self._thumb_x = target_x
+            self._draw(target_x, target_mix)
+        self.command(self.selected)
+        return "break"
+
+    @staticmethod
+    def _animations_enabled() -> bool:
+        if os.name != "nt":
+            return True
+        enabled = wintypes.BOOL()
+        try:
+            ok = ctypes.windll.user32.SystemParametersInfoW(0x1042, 0, ctypes.byref(enabled), 0)
+            return bool(enabled.value) if ok else True
+        except Exception:
+            return True
+
+    @staticmethod
+    def _blend_color(start: str, end: str, amount: float) -> str:
+        start_rgb = tuple(int(start[index:index + 2], 16) for index in (1, 3, 5))
+        end_rgb = tuple(int(end[index:index + 2], 16) for index in (1, 3, 5))
+        mixed = tuple(round(a + (b - a) * amount) for a, b in zip(start_rgb, end_rgb))
+        return "#{:02X}{:02X}{:02X}".format(*mixed)
+
+    def _animate(self, frame: int, start_x: float, target_x: float, start_mix: float, target_mix: float):
+        progress = frame / self.ANIMATION_FRAMES
+        eased = progress * progress * (3 - 2 * progress)
+        self._thumb_x = start_x + (target_x - start_x) * eased
+        color_mix = start_mix + (target_mix - start_mix) * eased
+        self._color_mix = color_mix
+        self._draw(self._thumb_x, color_mix)
+        if frame < self.ANIMATION_FRAMES:
+            interval = self.ANIMATION_MS // self.ANIMATION_FRAMES
+            self._animation_after_id = self.after(
+                interval,
+                lambda: self._animate(frame + 1, start_x, target_x, start_mix, target_mix),
+            )
+        else:
+            self._animation_after_id = None
+
+    def _draw(self, thumb_x: float, color_mix: float):
+        self.delete("all")
+        scale = 4
+        track = self._blend_color(self.INACTIVE_COLOR, self.ACTIVE_COLOR, color_mix)
+        image = Image.new("RGBA", (self.WIDTH * scale, self.HEIGHT * scale), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle(
+            (0, 0, self.WIDTH * scale - 1, self.HEIGHT * scale - 1),
+            radius=11 * scale,
+            fill=track,
+        )
+        center_x = round(thumb_x * scale)
+        center_y = 11 * scale
+        radius = self.THUMB_RADIUS * scale
+        draw.ellipse(
+            (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
+            fill="#FFFFFF",
+        )
+        image = image.resize((self.WIDTH, self.HEIGHT), Image.Resampling.LANCZOS)
+        self._photo = ImageTk.PhotoImage(image)
+        self.create_image(0, 0, anchor="nw", image=self._photo)
+
+
 class TimeSlider(tk.Canvas):
-    def __init__(self, master, variable: tk.IntVar, command):
-        super().__init__(master, height=86, bg=BG, highlightthickness=0, bd=0, cursor="hand2")
+    def __init__(self, master, variable: tk.IntVar, command, language: str = "ru"):
+        super().__init__(master, height=90, bg=BG, highlightthickness=0, bd=0, cursor="hand2")
         self.variable = variable
         self.command = command
+        self.language = language
         self.bind("<Configure>", self.redraw)
         self.bind("<Button-1>", self._set_from_event)
         self.bind("<B1-Motion>", self._set_from_event)
 
     def _set_from_event(self, event):
-        width = max(1, self.winfo_width() - 2)
-        value = int(round(max(0, min(width, event.x - 1)) / width * 24))
+        width = max(1, self.winfo_width() - 22)
+        value = int(round(max(0, min(width, event.x - 11)) / width * 24))
         self.variable.set(value)
         self.redraw()
         self.command()
@@ -322,15 +718,26 @@ class TimeSlider(tk.Canvas):
     def redraw(self, _event=None):
         self.delete("all")
         width = max(1, self.winfo_width() - 22)
-        track_y = 17
+        track_y = 39
         self.create_line(11, track_y, width + 11, track_y, fill=BORDER, width=6, capstyle="round")
         x = 11 + width * self.variable.get() / 24
         self.create_line(11, track_y, x, track_y, fill=ACCENT, width=6, capstyle="round")
         self.create_oval(x - 10, track_y - 10, x + 10, track_y + 10, fill=BG, outline=ACCENT, width=3)
-        for value, label in zip((0, 6, 12, 18, 24), ("00", "06", "12", "18", "24")):
+        now_label = "Now" if self.language == "en" else "Сейчас"
+        hours = self.variable.get()
+        shift_text = now_label if hours == 0 else f"+{hours} {'h' if self.language == 'en' else 'ч'}"
+        shift_label = self.create_text(x, 11, text=shift_text, fill=MUTED, font=ui_font(13), tags="shift_label")
+        bounds = self.bbox(shift_label)
+        if bounds:
+            # Keep the moving label readable at both ends of the track.
+            shift_x = max(2 - bounds[0], 0) - max(bounds[2] - (self.winfo_width() - 2), 0)
+            self.move(shift_label, shift_x, 0)
+        for value, label in zip((0, 6, 12, 18, 24), (now_label, "06", "12", "18", "24")):
             tx = 10 + (self.winfo_width() - 20) * value / 24
-            self.create_line(tx, 54, tx, 61, fill=BORDER, width=2)
-            self.create_text(tx, 75, text=label, fill=MUTED, font=ui_font(16), anchor="center")
+            self.create_line(tx, 60, tx, 67, fill=BORDER, width=2)
+            text_x = 0 if value == 0 else tx
+            anchor = "w" if value == 0 else "center"
+            self.create_text(text_x, 81, text=label, fill=MUTED, font=ui_font(16), anchor=anchor)
 
 
 def resolve_config_file() -> Path:
@@ -412,10 +819,69 @@ def display_timezone_label(tz_name: str, language: str = "ru") -> str:
     return f"{city} ({region})" if region else city
 
 
+def system_timezone_name() -> str:
+    if get_localzone_name is not None:
+        try:
+            return get_localzone_name()
+        except Exception:
+            pass
+    return "Etc/UTC"
+
+
+def system_city_name(language: str = "ru") -> str:
+    label = display_timezone_label(system_timezone_name(), language)
+    return label.rsplit(" (", 1)[0]
+
+
+def windows_timezone_cities(language: str = "ru") -> str:
+    if winreg is not None:
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",
+            ) as current_zone:
+                zone_key = winreg.QueryValueEx(current_zone, "TimeZoneKeyName")[0]
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                rf"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Time Zones\{zone_key}",
+            ) as zone_data:
+                display_name = winreg.QueryValueEx(zone_data, "Display")[0]
+            if ") " in display_name:
+                cities = display_name.split(") ", 1)[1].strip()
+                if cities:
+                    return cities
+        except OSError:
+            pass
+    return system_city_name(language)
+
+
 def format_offset(delta_seconds: float) -> str:
     hours = int(delta_seconds // 3600)
     sign = "+" if hours > 0 else ""
     return f"{sign}{hours} ч." if hours != 0 else "0 ч."
+
+
+def format_time_until(target: datetime, now: datetime, language: str = "ru") -> str:
+    """Describe the displayed instant relative to now, not the slider offset."""
+    seconds = target.timestamp() - now.timestamp()
+    if seconds == 0:
+        return "Now" if language == "en" else "Сейчас"
+    if abs(seconds) < 60:
+        if language == "en":
+            return "In < 1 min" if seconds > 0 else "< 1 min ago"
+        return "Через < 1 мин" if seconds > 0 else "< 1 мин назад"
+    # Round up future durations so the label never reports zero minutes early.
+    minutes = math.ceil(seconds / 60) if seconds > 0 else int(-seconds // 60)
+    hours, minutes = divmod(minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours} h" if language == "en" else f"{hours} ч")
+    if minutes:
+        parts.append(f"{minutes} min" if language == "en" else f"{minutes} мин")
+    duration = " ".join(parts)
+    if language == "en":
+        return f"In {duration}" if seconds > 0 else f"{duration} ago"
+    return f"Через {duration}" if seconds > 0 else f"{duration} назад"
 
 
 def get_available_tz_names() -> set[str]:
@@ -434,6 +900,7 @@ class GlobalHotkeyListener(threading.Thread):
     HOTKEY_ID = 1
     MOD_ALT = 0x0001
     MOD_SHIFT = 0x0004
+    MOD_NOREPEAT = 0x4000
     VK_T = 0x54
     PM_REMOVE = 0x0001
     WM_HOTKEY = 0x0312
@@ -448,7 +915,7 @@ class GlobalHotkeyListener(threading.Thread):
         registered = self.user32.RegisterHotKey(
             None,
             self.HOTKEY_ID,
-            self.MOD_ALT | self.MOD_SHIFT,
+            self.MOD_ALT | self.MOD_SHIFT | self.MOD_NOREPEAT,
             self.VK_T,
         )
         if not registered:
@@ -1064,10 +1531,33 @@ class SettingsDialog(tk.Toplevel):
 
 
 class FigmaDialog(tk.Toplevel):
-    def __init__(self, master, title: str):
+    def __init__(self, master, title: str, *, height=750, on_close=None, modal=True, anchor=None):
         super().__init__(master)
+        self.withdraw()
+        self.on_close = on_close
+        self.modal = modal
+        self.previous_grab = master.grab_current()
+        self.root_window = master._root()
         self.title(title)
-        self.geometry(self._dialog_geometry(master))
+        root = master._root()
+        if root.winfo_viewable():
+            actual = root._actual_window_rect()
+            bounds = ((actual[0], actual[1], actual[2]-actual[0], actual[3]-actual[1]) if actual else
+                      (root.winfo_rootx(), root.winfo_rooty(), root.winfo_width(), root.winfo_height()))
+        else:
+            target = root.overlay_target
+            bounds = (target["x"], target["y"], target["width"], target["height"])
+        x, y, available_width, available_height = bounds
+        width = min(400, available_width)
+        self.dialog_width, self.dialog_height = width, min(height, available_height)
+        self.dialog_x = x + (available_width - width) // 2
+        self.dialog_y = y + (available_height - self.dialog_height) // 2
+        if anchor is not None and anchor.winfo_exists():
+            # Keep the editor's first controls near the clicked card, and its
+            # complete rectangle inside the real native widget bounds.
+            self.dialog_x = max(x, min(x+available_width-width, anchor.winfo_rootx()-18))
+            self.dialog_y = max(y, min(y+available_height-self.dialog_height, anchor.winfo_rooty()-74))
+        self.geometry(f"{width}x{self.dialog_height}")
         self.resizable(False, False)
         self.configure(bg=TRANSPARENT_KEY)
         self.overrideredirect(True)
@@ -1076,19 +1566,76 @@ class FigmaDialog(tk.Toplevel):
             self.wm_attributes("-transparentcolor", TRANSPARENT_KEY)
         except tk.TclError:
             self.configure(bg=BG)
-        self.transient(master)
-        self.grab_set()
+        if modal:
+            self.transient(master)
         self._images: list[object] = []
 
-        chrome = tk.Canvas(self, width=400, height=750, bg=TRANSPARENT_KEY, highlightthickness=0, bd=0)
+        chrome = tk.Canvas(self, width=width, height=self.dialog_height, bg=TRANSPARENT_KEY, highlightthickness=0, bd=0)
         chrome.pack(fill="both", expand=True)
-        _rounded_polygon(chrome, 1, 1, 399, 749, 20, fill=BG, outline=BORDER, width=1)
-        self.shell = tk.Frame(chrome, bg=BG, width=364, height=714)
+        _rounded_polygon(chrome, 1, 1, width - 1, self.dialog_height - 1, 20, fill=BG, outline=BORDER, width=1)
+        viewport = tk.Canvas(chrome, bg=BG, highlightthickness=0, bd=0)
+        viewport.place(x=18, y=18, width=width - 36, height=self.dialog_height - 36)
+        self.shell = tk.Frame(viewport, bg=BG, width=width - 36, height=height - 36)
         self.shell.pack_propagate(False)
-        chrome.create_window(18, 18, anchor="nw", width=364, height=714, window=self.shell)
+        viewport.create_window(0, 0, anchor="nw", width=width - 36, height=height - 36, window=self.shell)
+        viewport.configure(scrollregion=(0, 0, width - 36, height - 36))
+        if height > self.dialog_height:
+            scroll = ScrollThumb(chrome, viewport.yview_moveto, BG, MUTED)
+            scroll.place(x=width - 12, y=18, width=6, height=self.dialog_height - 36)
+            viewport.configure(yscrollcommand=scroll.set)
+            self.bind("<MouseWheel>", lambda e: viewport.yview_scroll(-1 if e.delta > 0 else 1, "units"))
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.bind("<Escape>", lambda _e: self.close())
-        self.after_idle(lambda: (self.lift(), self.focus_force()))
+        self.after_idle(self._show_dialog)
+
+    def _native_window_handle(self):
+        return WorldClockWidget._native_window_handle(self)
+
+    def _format_geometry(self, width, height, x, y):
+        return WorldClockWidget._format_geometry(self, width, height, x, y)
+
+    def _actual_window_rect(self):
+        return WorldClockWidget._actual_window_rect(self)
+
+    def _set_overlay_geometry(self, width, height, x, y):
+        return WorldClockWidget._set_overlay_geometry(self, width, height, x, y)
+
+    def _show_dialog(self):
+        if not self.winfo_exists():
+            return
+        # Give Tk an initial position too; otherwise mapping can restore its
+        # stale (0,0) geometry after a native SetWindowPos call.
+        self.geometry(f"{self.dialog_width}x{self.dialog_height}+{max(0,self.dialog_x)}+{max(0,self.dialog_y)}")
+        self.deiconify()
+        self.update_idletasks()
+        self._attach_to_owner_window()
+        WorldClockWidget._place_overlay_exact(self, self.dialog_width, self.dialog_height, self.dialog_x, self.dialog_y)
+        if self.modal:
+            self.root_window._set_active_modal(self)
+            self.grab_set()
+            self.focus_force()
+        self.lift()
+
+    def _attach_to_owner_window(self):
+        """Make Windows keep this borderless dialog above its owner.
+
+        Tk's transient hint is not sufficient for two borderless topmost
+        windows: activating the widget can otherwise put it above the dialog
+        while the dialog still owns the input grab.
+        """
+        if os.name != "nt":
+            return
+        try:
+            dialog_hwnd = self._native_window_handle()
+            owner_hwnd = self.master._native_window_handle()
+            if not dialog_hwnd or not owner_hwnd:
+                return
+            set_window_long = ctypes.windll.user32.SetWindowLongPtrW
+            set_window_long.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+            set_window_long.restype = ctypes.c_ssize_t
+            set_window_long(dialog_hwnd, -8, owner_hwnd)  # GWL_HWNDPARENT
+        except (AttributeError, OSError, tk.TclError):
+            pass
 
     @staticmethod
     def _dialog_geometry(master) -> str:
@@ -1109,10 +1656,6 @@ class FigmaDialog(tk.Toplevel):
         label = tk.Label(row, text=title, bg=BG, fg=TEXT, font=ui_font(17, "bold"), anchor="w")
         self.header_title_label = label
         label.pack(side="left", padx=(8, 0), fill="y")
-        row.bind("<ButtonPress-1>", self._start_drag)
-        row.bind("<B1-Motion>", self._drag)
-        label.bind("<ButtonPress-1>", self._start_drag)
-        label.bind("<B1-Motion>", self._drag)
         return row
 
     def _start_drag(self, event):
@@ -1132,7 +1675,20 @@ class FigmaDialog(tk.Toplevel):
         return label
 
     def close(self):
-        self.destroy()
+        if self.on_close is not None:
+            self.on_close()
+        else:
+            self.destroy()
+
+    def destroy(self):
+        previous = self.previous_grab
+        root = self.root_window
+        super().destroy()
+        if previous is not None and previous.winfo_exists() and previous.winfo_viewable():
+            previous.grab_set()
+            root._set_active_modal(previous)
+        elif getattr(root, "_active_modal", None) is self:
+            root._set_active_modal(None)
 
 
 class FigmaChoiceDialog(FigmaDialog):
@@ -1239,7 +1795,7 @@ class FigmaChoiceDialog(FigmaDialog):
 class FigmaAddCityDialog(FigmaDialog):
     POPULAR = ["Asia/Tokyo", "America/New_York", "Europe/London", "Asia/Dubai", "Australia/Sydney", "Europe/Berlin"]
 
-    def __init__(self, master, all_timezones: list[TimezoneItem], on_add, title: str = "Добавить город", language: str = "ru", favorite_timezones=None, on_favorite_add=None, on_favorite_remove=None, stay_open=False):
+    def __init__(self, master, all_timezones: list[TimezoneItem], on_add, title: str = "Добавить город", language: str = "ru", favorite_timezones=None, on_favorite_add=None, on_favorite_remove=None, stay_open=False, system_time_enabled=None, on_system_time_change=None):
         self.all_timezones = all_timezones
         self.item_by_zone = {item.key: item for item in all_timezones}
         self.on_add = on_add
@@ -1249,13 +1805,18 @@ class FigmaAddCityDialog(FigmaDialog):
         self.stay_open = stay_open
         self.current_query = ""
         self.language = language
+        self.system_time_enabled = system_time_enabled
+        self.on_system_time_change = on_system_time_change
+        self._system_clock_after_id = None
         super().__init__(master, title)
         self.header(title)
         self.body = tk.Frame(self.shell, bg=BG)
         self.body.pack(fill="both", expand=True, pady=(16, 0))
         self._build_search()
+        if self.on_system_time_change is not None:
+            self._build_system_time_card()
         self.section_label = tk.Label(self.body, text=tr("popular_cities", language), bg=BG, fg=MUTED, font=ui_font(12, "bold"), anchor="w")
-        self.section_label.pack(fill="x", pady=(16, 10))
+        self.section_label.pack(fill="x", pady=(20, 10))
         self.list_canvas = tk.Canvas(self.body, bg=BG, highlightthickness=0, bd=0)
         self.list_canvas.pack(fill="both", expand=True)
         self.list_inner = tk.Frame(self.list_canvas, bg=BG)
@@ -1266,6 +1827,12 @@ class FigmaAddCityDialog(FigmaDialog):
         self._render_items("")
 
     def destroy(self):
+        if self._system_clock_after_id is not None:
+            try:
+                self.after_cancel(self._system_clock_after_id)
+            except tk.TclError:
+                pass
+            self._system_clock_after_id = None
         try:
             self.list_canvas.unbind_all("<MouseWheel>")
         except (AttributeError, tk.TclError):
@@ -1301,6 +1868,64 @@ class FigmaAddCityDialog(FigmaDialog):
         entry.bind("<FocusIn>", focus_in)
         entry.bind("<FocusOut>", focus_out)
         entry.bind("<KeyRelease>", lambda _e: self._render_items(entry.get()))
+
+    def _build_system_time_card(self):
+        panel = RoundedPanel(
+            self.body,
+            height=58,
+            fill=SURFACE,
+            outline=BORDER,
+            radius=12,
+            padding=10,
+        )
+        panel.pack(fill="x", pady=(20, 0))
+        line = tk.Frame(panel.content, bg=SURFACE)
+        line.pack(side="left", fill="both", expand=True)
+        city = windows_timezone_cities(self.language)
+        title = tk.Label(
+            line,
+            text=tr("system_time", self.language),
+            bg=SURFACE,
+            fg=TEXT,
+            font=ui_font(13, "bold"),
+            anchor="w",
+        )
+        title.pack(anchor="w")
+        city_label = tk.Label(
+            line,
+            text=f"({city})",
+            bg=SURFACE,
+            fg=MUTED,
+            font=ui_font(10),
+            anchor="w",
+        )
+        city_label.pack(anchor="w", pady=(3, 0))
+        self.system_time_switch = ToggleSwitch(
+            panel.content,
+            bool(self.system_time_enabled),
+            self._change_system_time,
+        )
+        self.system_time_switch.pack(side="right", padx=(10, 0), pady=3)
+        self.system_time_label = tk.Label(
+            panel.content,
+            text="",
+            bg=SURFACE,
+            fg=TEXT,
+            font=ui_font(14, "bold"),
+            anchor="e",
+        )
+        self.system_time_label.pack(side="right")
+        self._update_system_time_card()
+
+    def _update_system_time_card(self):
+        if not self.winfo_exists() or not hasattr(self, "system_time_label"):
+            return
+        self.system_time_label.configure(text=datetime.now().astimezone().strftime("%H:%M"))
+        self._system_clock_after_id = self.after(1000, self._update_system_time_card)
+
+    def _change_system_time(self, enabled: bool):
+        self.system_time_enabled = enabled
+        self.on_system_time_change(enabled)
 
     @staticmethod
     def _split_label(label: str) -> tuple[str, str]:
@@ -1360,7 +1985,7 @@ class FigmaAddCityDialog(FigmaDialog):
             if region:
                 tk.Label(line, text=region, bg=SURFACE, fg=MUTED, font=ui_font(11), anchor="w").pack(side="left", padx=(8, 0))
             if item.key in self.favorite_timezones and self.on_favorite_remove is not None:
-                remove = IconButton(panel.content, "close", lambda zone=item.key: self._remove_favorite(zone), size=28, icon_size=14, button_fill=BORDER)
+                remove = IconButton(panel.content, "trash", lambda zone=item.key: self._remove_favorite(zone), size=28, icon_size=14, button_fill=BORDER)
                 remove.pack(side="right", pady=1)
             favorite = StarButton(panel.content, lambda zone=item.key: self._toggle_favorite(zone), selected=item.key in self.favorite_timezones)
             favorite.pack(side="right", pady=1)
@@ -1400,6 +2025,65 @@ class FigmaAddCityDialog(FigmaDialog):
             self._render_items(self.current_query)
 
 
+class FigmaReminderIntervalsDialog(FigmaDialog):
+    def __init__(self, master, values, language: str, on_save):
+        self.language = language
+        self.on_save = on_save
+        self.variables = [tk.StringVar(value=str(value)) for value in normalize_reminder_intervals(values)]
+        title = tr("reminder_intervals", language)
+        super().__init__(master, title, height=420)
+        self.header(title)
+        body = tk.Frame(self.shell, bg=BG)
+        body.pack(fill="both", expand=True, pady=(16, 0))
+
+        hint = "Задайте три интервала в минутах" if language == "ru" else "Set three intervals in minutes"
+        tk.Label(body, text=hint, bg=BG, fg=MUTED, font=ui_font(12), anchor="w").pack(fill="x", pady=(0, 12))
+
+        for index, variable in enumerate(self.variables, start=1):
+            panel = RoundedPanel(body, height=52, fill=SURFACE, outline=BORDER, radius=12, padding=12)
+            panel.pack(fill="x", pady=(0, 10))
+            label = f"Интервал {index}" if language == "ru" else f"Interval {index}"
+            tk.Label(panel.content, text=label, bg=SURFACE, fg=TEXT, font=ui_font(13), anchor="w").pack(side="left", fill="y")
+            tk.Label(panel.content, text=tr("minutes", language), bg=SURFACE, fg=MUTED, font=ui_font(12)).pack(side="right", padx=(8, 0))
+            entry = tk.Entry(
+                panel.content,
+                textvariable=variable,
+                justify="right",
+                width=7,
+                bg=SURFACE,
+                fg=TEXT,
+                insertbackground=TEXT,
+                relief="flat",
+                borderwidth=0,
+                font=ui_font(14, "bold"),
+            )
+            entry.pack(side="right", fill="y")
+            entry.bind("<Return>", lambda _event: self._save())
+
+        self.error_label = tk.Label(body, text="", bg=BG, fg=DANGER, font=ui_font(11), anchor="w")
+        self.error_label.pack(fill="x", pady=(0, 8))
+
+        button = RoundedPanel(body, height=44, fill=ACCENT, outline=ACCENT, radius=12, padding=0)
+        button.configure(cursor="hand2")
+        button.pack(fill="x")
+        caption = tk.Label(button.content, text=tr("save", language), bg=ACCENT, fg="#FFFFFF", font=ui_font(13, "bold"), cursor="hand2")
+        caption.pack(fill="both", expand=True)
+        for widget in (button, button.content, caption):
+            widget.bind("<Button-1>", lambda _event: self._save())
+
+    def _save(self):
+        try:
+            values = [int(variable.get().strip()) for variable in self.variables]
+        except ValueError:
+            values = []
+        if len(values) != 3 or len(set(values)) != 3 or any(value < 1 or value > 10080 for value in values):
+            message = "Введите три разных значения от 1 до 10080 минут" if self.language == "ru" else "Enter three different values from 1 to 10080 minutes"
+            self.error_label.configure(text=message)
+            return
+        self.on_save(values)
+        self.destroy()
+
+
 class FigmaSettingsDialog(FigmaDialog):
     def __init__(self, master, settings: dict, timezone_items: list[TimezoneItem], city_timezones: list[str], on_save, favorite_timezones=None, on_favorite_add=None, on_favorite_remove=None):
         self.settings = settings
@@ -1412,11 +2096,11 @@ class FigmaSettingsDialog(FigmaDialog):
         self.on_favorite_add = on_favorite_add
         self.theme = settings.get("theme", "dark")
         self.language = settings.get("language", "ru")
+        self.use_system_time = settings.get("top_clock_mode", "auto") == "auto"
         self.base_changed = False
-        if settings.get("top_clock_mode", "auto") == "auto":
-            self.base_timezone = "Asia/Ho_Chi_Minh" if "Asia/Ho_Chi_Minh" in self.item_by_zone else settings.get("manual_top_timezone", "Etc/UTC")
-        else:
-            self.base_timezone = settings.get("base_timezone") or settings.get("manual_top_timezone", "Etc/UTC")
+        self.base_timezone = settings.get("base_timezone") or settings.get("manual_top_timezone", "Etc/UTC")
+        if self.base_timezone not in self.item_by_zone:
+            self.base_timezone = "Asia/Ho_Chi_Minh" if "Asia/Ho_Chi_Minh" in self.item_by_zone else next(iter(self.item_by_zone), "Etc/UTC")
         title = tr("settings", self.language)
         super().__init__(master, title)
         self.header(title)
@@ -1459,8 +2143,15 @@ class FigmaSettingsDialog(FigmaDialog):
         language_label = tr("russian" if self.language == "ru" else "english", self.language)
         self._row(group2.content, tr("language", self.language), language_label, command=self._open_language, chevron=True)
         self._separator(group2.content)
-        base_name = self._split_city(self.base_timezone)[0]
+        base_name = tr("system_time", self.language) if self.use_system_time else self._split_city(self.base_timezone)[0]
         self._row(group2.content, tr("base_city", self.language), base_name, command=self._open_base_city, chevron=True)
+
+        intervals = normalize_reminder_intervals(self.settings.get("reminder_intervals", DEFAULT_REMINDER_INTERVALS))
+        interval_summary = " · ".join(format_reminder_interval(value, self.language) for value in intervals)
+        group3 = RoundedPanel(self.body, height=50, fill=SURFACE, outline=BORDER, radius=12)
+        group3.pack(fill="x", pady=(14, 0))
+        self._row(group3.content, tr("reminder_intervals", self.language), interval_summary,
+                  command=self._open_reminder_intervals, chevron=True)
 
     def _split_city(self, timezone_name: str) -> tuple[str, str]:
         item = self.item_by_zone.get(timezone_name)
@@ -1505,7 +2196,22 @@ class FigmaSettingsDialog(FigmaDialog):
             favorite_timezones=self.favorite_timezones,
             on_favorite_add=self._add_favorite,
             on_favorite_remove=self._remove_favorite,
+            system_time_enabled=self.use_system_time,
+            on_system_time_change=self._set_system_time,
         )
+
+    def _open_reminder_intervals(self):
+        FigmaReminderIntervalsDialog(
+            self,
+            self.settings.get("reminder_intervals", DEFAULT_REMINDER_INTERVALS),
+            self.language,
+            self._set_reminder_intervals,
+        )
+
+    def _set_reminder_intervals(self, values: list[int]):
+        self.settings["reminder_intervals"] = normalize_reminder_intervals(values)
+        self.on_save(self.settings.copy())
+        self._rebuild()
 
     def _add_favorite(self, timezone_name: str):
         if timezone_name not in self.favorite_timezones:
@@ -1520,7 +2226,18 @@ class FigmaSettingsDialog(FigmaDialog):
 
     def _set_base_city(self, value: str):
         self.base_timezone = value
+        self.use_system_time = False
         self.base_changed = True
+        updated = self._updated_settings()
+        self.settings.update(updated)
+        self.on_save(self.settings.copy())
+        self._rebuild()
+
+    def _set_system_time(self, enabled: bool):
+        self.use_system_time = enabled
+        updated = self._updated_settings()
+        self.settings.update(updated)
+        self.on_save(self.settings.copy())
         self._rebuild()
 
     def _rebuild(self):
@@ -1533,9 +2250,13 @@ class FigmaSettingsDialog(FigmaDialog):
             "theme": self.theme,
             "language": self.language,
             "time_format": "24",
+            "top_clock_mode": "auto" if self.use_system_time else "manual",
+            "manual_top_timezone": self.base_timezone,
+            "base_timezone": "" if self.use_system_time else self.base_timezone,
+            "reminder_intervals": normalize_reminder_intervals(
+                self.settings.get("reminder_intervals", DEFAULT_REMINDER_INTERVALS)
+            ),
         }
-        if self.base_changed:
-            payload["base_timezone"] = self.base_timezone
         return payload
 
     def close(self):
@@ -1577,6 +2298,7 @@ class WorldClockWidget(tk.Tk):
             "base_timezone": "",
             "theme": "dark",
             "language": "ru",
+            "reminder_intervals": list(DEFAULT_REMINDER_INTERVALS),
         }
 
         self.overlay_visible = True
@@ -1586,13 +2308,16 @@ class WorldClockWidget(tk.Tk):
         self._animation_after_id: Optional[str] = None
         self.hotkey_listener: Optional[GlobalHotkeyListener] = None
         self.tray_icon = None
+        self.shutdown_event_handle = None
+        self.show_event_handle = None
+        self._active_modal = None
 
         width, height, x, y = self._default_overlay_geometry()
         self.overlay_target = {"width": width, "height": height, "x": x, "y": y}
 
         self.title(APP_TITLE)
         self.geometry(self._format_geometry(width, height, x, y))
-        self.minsize(400, 750)
+        self.minsize(400, MIN_WIDGET_HEIGHT)
         self.resizable(True, True)
         self.configure(bg=TRANSPARENT_KEY)
         try:
@@ -1603,6 +2328,9 @@ class WorldClockWidget(tk.Tk):
         self.attributes("-topmost", True)
 
         self.load_config()
+        self.reminder_store = ReminderStore(CONFIG_FILE.with_name("reminders.json"))
+        self.reminder_ui = None
+        self._reminder_pressed_panel = None
         set_theme(self.settings.get("theme", "dark"))
         self.configure(bg=TRANSPARENT_KEY)
         self.geometry(self._format_geometry(**self.overlay_target))
@@ -1610,6 +2338,7 @@ class WorldClockWidget(tk.Tk):
         self.render_city_cards()
 
         self.bind("<Escape>", lambda _e: self.hide_overlay())
+        self.bind("<FocusIn>", lambda _e: self.after_idle(self._raise_active_modal), add="+")
         self.protocol("WM_DELETE_WINDOW", self.hide_overlay)
 
         self.start_background_services()
@@ -1619,16 +2348,188 @@ class WorldClockWidget(tk.Tk):
         self.after(250, lambda: self.hide_overlay(animated=False))
 
     def _default_overlay_geometry(self) -> tuple[int, int, int, int]:
-        width = 400
-        height = 750
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        x = max(12, screen_w - width - 20)
-        y = max(12, screen_h - height - 60)
+        left, top, right, bottom = self._work_area_for_rect()
+        width = min(400, max(400, right - left - 20))
+        height = min(750, max(MIN_WIDGET_HEIGHT, bottom - top - 20))
+        x = right - width - 10
+        y = top + 10
         return width, height, x, y
 
     def _format_geometry(self, width: int, height: int, x: int, y: int) -> str:
-        return f"{width}x{height}+{x}+{y}"
+        x_part = f"+{x}" if x >= 0 else str(x)
+        y_part = f"+{y}" if y >= 0 else str(y)
+        return f"{width}x{height}{x_part}{y_part}"
+
+    def _actual_window_rect(self) -> Optional[tuple[int, int, int, int]]:
+        if os.name != "nt":
+            return None
+
+        class Rect(ctypes.Structure):
+            _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                        ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+        try:
+            user32 = ctypes.windll.user32
+            hwnd = self._native_window_handle()
+            rect = Rect()
+            if hwnd and user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+                return rect.left, rect.top, rect.right, rect.bottom
+        except Exception:
+            pass
+        return None
+
+    def _native_window_handle(self):
+        if os.name != "nt":
+            return None
+        try:
+            get_ancestor = ctypes.windll.user32.GetAncestor
+            get_ancestor.argtypes = [wintypes.HWND, wintypes.UINT]
+            get_ancestor.restype = wintypes.HWND
+            return get_ancestor(self.winfo_id(), 2) or self.winfo_id()
+        except Exception:
+            return None
+
+    def _show_without_activation(self):
+        """Show the overlay above other windows without taking foreground focus."""
+        if os.name != "nt":
+            self.deiconify()
+            return
+
+        hwnd = self._native_window_handle()
+        if not hwnd:
+            self.deiconify()
+            return
+
+        user32 = ctypes.windll.user32
+        get_window_long = user32.GetWindowLongPtrW
+        set_window_long = user32.SetWindowLongPtrW
+        get_window_long.argtypes = [wintypes.HWND, ctypes.c_int]
+        get_window_long.restype = ctypes.c_ssize_t
+        set_window_long.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t]
+        set_window_long.restype = ctypes.c_ssize_t
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.ShowWindow.restype = wintypes.BOOL
+        user32.SetWindowPos.argtypes = [
+            wintypes.HWND,
+            wintypes.HWND,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_int,
+            wintypes.UINT,
+        ]
+        user32.SetWindowPos.restype = wintypes.BOOL
+
+        # Tk's deiconify may activate a window. Temporarily opt out of activation,
+        # then restore normal click/keyboard interaction after it is visible.
+        extended_style = get_window_long(hwnd, GWL_EXSTYLE)
+        set_window_long(hwnd, GWL_EXSTYLE, extended_style | WS_EX_NOACTIVATE)
+        try:
+            self.deiconify()
+            user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+            user32.SetWindowPos(
+                hwnd,
+                HWND_TOPMOST,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+            )
+        finally:
+            # The temporary style must never leak: normal clicks should still
+            # activate the widget so its search and settings remain usable.
+            set_window_long(hwnd, GWL_EXSTYLE, extended_style)
+
+    def _set_active_modal(self, dialog):
+        """Keep one modal above the widget and restore the widget afterwards."""
+        self._active_modal = dialog
+        try:
+            self.attributes("-topmost", dialog is None)
+        except tk.TclError:
+            pass
+        if dialog is not None:
+            self.after_idle(self._raise_active_modal)
+
+    def _raise_active_modal(self):
+        dialog = self._active_modal
+        if dialog is None:
+            return
+        try:
+            if not dialog.winfo_exists() or not dialog.winfo_viewable():
+                return
+            dialog.attributes("-topmost", True)
+            dialog.lift()
+            dialog.focus_force()
+        except tk.TclError:
+            if self._active_modal is dialog:
+                self._active_modal = None
+                self.attributes("-topmost", True)
+
+    def _set_overlay_geometry(self, width: int, height: int, x: int, y: int):
+        """Move the native window using absolute coordinates, including negatives."""
+        if os.name == "nt":
+            try:
+                hwnd = self._native_window_handle()
+                set_window_pos = ctypes.windll.user32.SetWindowPos
+                set_window_pos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int,
+                                           ctypes.c_int, ctypes.c_int, wintypes.UINT]
+                set_window_pos.restype = wintypes.BOOL
+                if hwnd and set_window_pos(hwnd, None, x, y, width, height, 0x0014):
+                    return
+            except Exception:
+                pass
+        self.geometry(self._format_geometry(width, height, x, y))
+
+    def _place_overlay_exact(self, width: int, height: int, x: int, y: int):
+        """Place the visible Windows frame, compensating for Tk's hidden wrapper offset."""
+        for _ in range(3):
+            self._set_overlay_geometry(width, height, x, y)
+            self.update_idletasks()
+            actual = self._actual_window_rect()
+            if actual is None:
+                return
+            delta_x = x - actual[0]
+            delta_y = y - actual[1]
+            if delta_x == 0 and delta_y == 0:
+                return
+            x += delta_x
+            y += delta_y
+
+    def _work_area_for_rect(self, rect: Optional[tuple[int, int, int, int]] = None) -> tuple[int, int, int, int]:
+        """Return the usable bounds of the nearest monitor, excluding its taskbar."""
+        if os.name == "nt":
+            class Rect(ctypes.Structure):
+                _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                            ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+            class MonitorInfo(ctypes.Structure):
+                _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", Rect),
+                            ("rcWork", Rect), ("dwFlags", wintypes.DWORD)]
+
+            try:
+                user32 = ctypes.windll.user32
+                if rect is None:
+                    work = Rect()
+                    if user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0):
+                        return work.left, work.top, work.right, work.bottom
+                else:
+                    x, y, width, height = rect
+                    target = Rect(x, y, x + width, y + height)
+                    monitor_from_rect = user32.MonitorFromRect
+                    monitor_from_rect.argtypes = [ctypes.POINTER(Rect), wintypes.DWORD]
+                    monitor_from_rect.restype = wintypes.HANDLE
+                    monitor = monitor_from_rect(ctypes.byref(target), 2)
+                    info = MonitorInfo(cbSize=ctypes.sizeof(MonitorInfo))
+                    get_monitor_info = user32.GetMonitorInfoW
+                    get_monitor_info.argtypes = [wintypes.HANDLE, ctypes.POINTER(MonitorInfo)]
+                    get_monitor_info.restype = wintypes.BOOL
+                    if monitor and get_monitor_info(monitor, ctypes.byref(info)):
+                        work = info.rcWork
+                        return work.left, work.top, work.right, work.bottom
+            except Exception:
+                pass
+        return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
 
     def _build_timezone_items(self) -> list[TimezoneItem]:
         tz_names = sorted(tz for tz in self.timezone_names if "/" in tz)
@@ -1938,31 +2839,55 @@ class WorldClockWidget(tk.Tk):
             drag_widget.bind("<B1-Motion>", self.on_drag)
             drag_widget.bind("<ButtonRelease-1>", self.finish_geometry_change)
 
-        hero = RoundedPanel(outer, height=150, fill=SURFACE, outline=BORDER, radius=16)
+        hero = tk.Frame(outer, bg=BG, height=150)
         hero.pack(fill="x", pady=(16, 0))
-        hero.content.pack_propagate(False)
-        self.main_time_label = tk.Label(hero.content, text="--:--", fg=TEXT, bg=SURFACE, font=ui_font(60, "bold"))
-        self.main_time_label.place(relx=0.5, y=4, anchor="n")
-        self.top_city_label = tk.Label(hero.content, text="", fg=TEXT, bg=SURFACE, font=ui_font(14, "bold"))
-        self.top_city_label.place(relx=0.5, y=88, anchor="n")
-        self.main_date_label = tk.Label(hero.content, text="", fg=MUTED, bg=SURFACE, font=ui_font(13, "bold"))
-        self.main_date_label.place(relx=0.5, y=112, anchor="n")
+        hero.pack_propagate(False)
+        clock_panel = RoundedPanel(hero, height=150, fill=SURFACE, outline=BORDER, radius=16, padding=12)
+        clock_panel.configure(width=160)
+        clock_panel.pack(side="left", fill="y")
+        clock_column = clock_panel.content
+        alarm_panel = RoundedPanel(hero, height=150, fill=BG, outline=BORDER, radius=16, padding=12)
+        alarm_panel.pack(side="left", fill="both", expand=True, padx=(12, 0))
+        alarm_column = alarm_panel.content
+        self.main_time_label = tk.Label(clock_column, text="--:--", fg=TEXT, bg=SURFACE, font=ui_font(40, "bold"))
+        self.main_time_label.place(x=0, y=22, anchor="nw")
+        self.system_time_source_label = tk.Label(
+            clock_column,
+            text=tr("system_time", language),
+            fg=MUTED,
+            bg=SURFACE,
+            font=ui_font(11),
+        )
+        self.top_city_label = tk.Label(clock_column, text="", fg=TEXT, bg=SURFACE, font=ui_font(11), wraplength=132, justify="left", anchor="w")
+        self.top_city_label.place(x=0, y=76, anchor="nw")
+        self.main_date_label = tk.Label(clock_column, text="", fg=MUTED, bg=SURFACE, font=ui_font(11))
+        self.main_date_label.place(x=0, y=110, anchor="nw")
 
-        self.offset_slider = TimeSlider(outer, self.offset_hours, self.update_times)
+        self.offset_slider = TimeSlider(outer, self.offset_hours, self.update_times, language)
         self.offset_slider.pack(fill="x", pady=(16, 0))
 
+        if self.reminder_ui is not None:
+            self.reminder_ui.dispose()
+        self.reminder_ui = ReminderUI(
+            self, outer, self.reminder_store,
+            {"BG": BG, "SURFACE": SURFACE, "BORDER": BORDER, "ACCENT": ACCENT, "TEXT": TEXT, "MUTED": MUTED, "DANGER": DANGER},
+            ui_font, format_time_until, alarm_column, IconButton, animations_enabled=ToggleSwitch._animations_enabled, dialog_factory=FigmaDialog,
+            button_factory=ReminderButton, meter_factory=RemainingMeter, icon_factory=lambda name, size: ImageTk.PhotoImage(tinted_icon(name, size)), card_factory=ReminderCard,
+        )
+
         city_header = tk.Frame(outer, bg=BG, height=17)
-        city_header.pack(fill="x", pady=(16, 10))
+        city_header.pack(fill="x", pady=(20, 10))
         city_header.pack_propagate(False)
-        tk.Label(city_header, text=tr("cities", language), bg=BG, fg=MUTED, font=ui_font(15, "bold"), anchor="w").pack(fill="both")
+        city_header_label = tk.Label(city_header, text=tr("cities", language), bg=BG, fg=MUTED, font=ui_font(15, "bold"), anchor="w")
+        city_header_label.pack(fill="both")
 
         self.cards_canvas = tk.Canvas(outer, bg=BG, highlightthickness=0, bd=0)
         self.cards_canvas.pack(fill="both", expand=True)
         self.cards_content = tk.Frame(self.cards_canvas, bg=BG)
         self.cards_window = self.cards_canvas.create_window(0, 0, anchor="nw", window=self.cards_content)
-        self.cards_content.bind("<Configure>", lambda _e: self.cards_canvas.configure(scrollregion=self.cards_canvas.bbox("all")))
-        self.cards_canvas.bind("<Configure>", lambda e: self.cards_canvas.itemconfigure(self.cards_window, width=e.width))
-        self.cards_canvas.bind("<MouseWheel>", lambda e: self.cards_canvas.yview_scroll(int(-e.delta / 120), "units"))
+        self.cards_content.bind("<Configure>", self._refresh_city_scrollregion)
+        self.cards_canvas.bind("<Configure>", self._on_city_canvas_configure)
+        self.bind("<MouseWheel>", self._on_city_list_scroll)
         self.cards_frame = tk.Frame(self.cards_content, bg=BG)
         self.cards_frame.pack(fill="x")
 
@@ -1987,29 +2912,93 @@ class WorldClockWidget(tk.Tk):
             lambda active: add_label.configure(fg=ACCENT if active else MUTED),
         )
 
-        tk.Frame(outer, bg=BG, height=18).pack(fill="x")
-        version = tk.Label(outer, text=APP_VERSION, bg=BG, fg=MUTED, font=ui_font(10), anchor="w")
-        version.place(relx=0, rely=1, y=-1, anchor="sw")
+        footer = tk.Frame(outer, bg=BG, height=38)
+        footer.pack(side="bottom", fill="x", before=self.cards_canvas)
+        footer.pack_propagate(False)
+        version = tk.Label(footer, text=APP_VERSION, bg=BG, fg=MUTED, font=ui_font(10), anchor="w")
+        version.pack(side="left", fill="y", padx=(2, 0), pady=(4, 0))
 
-        self.resize_handle = tk.Canvas(outer, width=24, height=24, bg=BG, highlightthickness=0, bd=0, cursor="size_nw_se")
-        self.resize_handle.place(relx=1, rely=1, anchor="se")
+        roadmap_link = tk.Label(
+            footer,
+            text="What should I do next?",
+            bg=BG,
+            fg=ACCENT,
+            activebackground=BG,
+            activeforeground=TEXT,
+            font=ui_font(10, "bold"),
+            cursor="hand2",
+        )
+        roadmap_link.pack(side="left", fill="y", expand=True, pady=(2, 0))
+        roadmap_link.bind("<Button-1>", lambda _event: webbrowser.open(ROADMAP_URL, new=2))
+        roadmap_link.bind("<Enter>", lambda _event: roadmap_link.configure(fg=TEXT))
+        roadmap_link.bind("<Leave>", lambda _event: roadmap_link.configure(fg=ACCENT))
+
+        self.resize_handle = tk.Canvas(footer, width=24, height=24, bg=BG, highlightthickness=0, bd=0, cursor="size_nw_se")
+        self.resize_handle.pack(side="right", anchor="s", pady=(8, 0))
         for offset in (6, 11, 16):
             self.resize_handle.create_line(offset, 21, 21, offset, fill=MUTED, width=1)
         self.resize_handle.bind("<ButtonPress-1>", self.start_resize)
         self.resize_handle.bind("<B1-Motion>", self.on_resize)
         self.resize_handle.bind("<ButtonRelease-1>", self.finish_geometry_change)
 
+        drag_surfaces = (
+            chrome,
+            outer,
+            header,
+            title,
+            hero,
+            clock_panel,
+            clock_column,
+            self.main_time_label,
+            self.system_time_source_label,
+            self.top_city_label,
+            self.main_date_label,
+            city_header,
+            city_header_label,
+            self.cards_canvas,
+            self.cards_content,
+            self.cards_frame,
+            footer,
+            version,
+        )
+        for drag_surface in drag_surfaces:
+            drag_surface.bind("<ButtonPress-1>", self.start_drag)
+            drag_surface.bind("<B1-Motion>", self.on_drag)
+            drag_surface.bind("<ButtonRelease-1>", self.finish_geometry_change)
+
     def _redraw_main_chrome(self, event):
         width = max(400, event.width)
-        height = max(750, event.height)
-        self.main_chrome.delete("main_shape")
+        height = max(MIN_WIDGET_HEIGHT, event.height)
         _rounded_polygon(self.main_chrome, 1, 1, width - 1, height - 1, 20, fill=BG, outline=BORDER, width=1, tags="main_shape")
         self.main_chrome.tag_lower("main_shape")
         self.main_chrome.itemconfigure(self.main_outer_window, width=width - 36, height=height - 36)
+        self.request_repaint()
+
+    def request_repaint(self):
+        """Paint each layout frame as a whole on the color-keyed Windows surface.
+
+        Moving nested native Tk windows can otherwise leave copied pixels from
+        the previous positions, even while the easing coordinates are correct.
+        """
+        if getattr(self, "_paint_after_id", None) is not None:
+            return
+        def paint():
+            try:
+                self.update_idletasks()
+                if os.name == "nt" and self.winfo_viewable():
+                    redraw = ctypes.windll.user32.RedrawWindow
+                    redraw.argtypes = [wintypes.HWND, ctypes.c_void_p, wintypes.HANDLE, wintypes.UINT]
+                    redraw.restype = wintypes.BOOL
+                    # INVALIDATE | ERASE | ALLCHILDREN | UPDATENOW
+                    redraw(self._native_window_handle(), None, None, 0x0185)
+            finally:
+                self._paint_after_id = None
+        self._paint_after_id = self.after_idle(paint)
 
     def _bind_panel_hover(self, panel: RoundedPanel, widgets, on_change=None):
         def set_hover(active: bool):
-            panel.set_outline(ACCENT if active else BORDER)
+            selecting = self.reminder_ui is not None and self.reminder_ui.pending is not None and hasattr(panel, "city_zone")
+            panel.set_outline(ACCENT if active or selecting else BORDER)
             if on_change:
                 on_change(active)
 
@@ -2029,6 +3018,7 @@ class WorldClockWidget(tk.Tk):
             widget.bind("<Leave>", leave_later, add="+")
 
     def start_resize(self, event):
+        self._flush_resize()
         self._resize_start_x = event.x_root
         self._resize_start_y = event.y_root
         self._resize_start_width = self.winfo_width()
@@ -2036,12 +3026,61 @@ class WorldClockWidget(tk.Tk):
 
     def on_resize(self, event):
         width = max(400, self._resize_start_width + event.x_root - self._resize_start_x)
-        height = max(750, self._resize_start_height + event.y_root - self._resize_start_y)
+        height = max(MIN_WIDGET_HEIGHT, self._resize_start_height + event.y_root - self._resize_start_y)
         self.overlay_target.update({"width": width, "height": height})
-        self.geometry(self._format_geometry(width, height, self.winfo_x(), self.winfo_y()))
+        # Coalesce rapid pointer messages to one geometry/layout pass per frame.
+        # Follow the pointer directly, without elastic lag or a queued backlog.
+        if getattr(self, "_resize_after_id", None) is None:
+            self._resize_after_id = self.after(16, self._flush_resize)
+
+    def _flush_resize(self):
+        timer = getattr(self, "_resize_after_id", None)
+        if timer is not None:
+            self.after_cancel(timer)
+            self._resize_after_id = None
+            self._set_overlay_geometry(**self.overlay_target)
+
+    def _on_city_list_scroll(self, event):
+        if not hasattr(self, "cards_canvas") or not self.cards_canvas.winfo_exists():
+            return None
+        pointer_x = self.winfo_pointerx()
+        pointer_y = self.winfo_pointery()
+        left = self.cards_canvas.winfo_rootx()
+        top = self.cards_canvas.winfo_rooty()
+        right = left + self.cards_canvas.winfo_width()
+        bottom = top + self.cards_canvas.winfo_height()
+        if not (left <= pointer_x < right and top <= pointer_y < bottom):
+            return None
+        bbox = self.cards_canvas.bbox("all")
+        if bbox is None or bbox[3] - bbox[1] <= self.cards_canvas.winfo_height():
+            self.cards_canvas.yview_moveto(0)
+            return "break"
+        direction = -1 if event.delta > 0 else 1
+        self.cards_canvas.yview_scroll(direction, "units")
+        return "break"
+
+    def _on_city_canvas_configure(self, event):
+        self.cards_canvas.itemconfigure(self.cards_window, width=event.width)
+        self.after_idle(self._refresh_city_scrollregion)
+        self.request_repaint()
+
+    def _refresh_city_scrollregion(self, _event=None):
+        if not hasattr(self, "cards_canvas") or not self.cards_canvas.winfo_exists():
+            return
+        bbox = self.cards_canvas.bbox("all")
+        if bbox is None:
+            return
+        self.cards_canvas.configure(scrollregion=bbox)
+        if bbox[3] - bbox[1] <= self.cards_canvas.winfo_height():
+            self.cards_canvas.yview_moveto(0)
 
     def finish_geometry_change(self, _event=None):
-        self._capture_window_geometry()
+        self._flush_resize()
+        actual = self._actual_window_rect()
+        if actual is not None:
+            self.overlay_target["x"] = actual[0]
+            self.overlay_target["y"] = actual[1]
+        self._place_overlay_exact(**self.overlay_target)
         self.save_config()
 
     def start_right_slider_drag(self, event):
@@ -2066,6 +3105,7 @@ class WorldClockWidget(tk.Tk):
         self.update_times()
 
     def start_background_services(self):
+        self._start_shutdown_listener()
         self.hotkey_listener = GlobalHotkeyListener(lambda: self.after(0, self.toggle_overlay))
         self.hotkey_listener.start()
 
@@ -2096,6 +3136,39 @@ class WorldClockWidget(tk.Tk):
 
         threading.Thread(target=self.tray_icon.run, daemon=True).start()
 
+    def _start_shutdown_listener(self):
+        if os.name != "nt":
+            return
+        try:
+            create_event = ctypes.windll.kernel32.CreateEventW
+            create_event.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
+            create_event.restype = wintypes.HANDLE
+            self.shutdown_event_handle = create_event(None, True, False, SHUTDOWN_EVENT_NAME)
+            self.show_event_handle = create_event(None, False, False, SHOW_EVENT_NAME)
+            if self.shutdown_event_handle:
+                self.after(250, self._poll_shutdown_event)
+        except Exception:
+            self.shutdown_event_handle = None
+
+    def _poll_shutdown_event(self):
+        if not self.shutdown_event_handle:
+            return
+        try:
+            wait_result = ctypes.windll.kernel32.WaitForSingleObject(self.shutdown_event_handle, 0)
+            if wait_result == 0:
+                self.quit_app()
+                return
+            if self.show_event_handle:
+                show_result = ctypes.windll.kernel32.WaitForSingleObject(self.show_event_handle, 0)
+                if show_result == 0:
+                    if self.overlay_visible:
+                        self._show_without_activation()
+                    else:
+                        self.show_overlay()
+        except Exception:
+            return
+        self.after(250, self._poll_shutdown_event)
+
     def _create_tray_image(self):
         image = Image.new("RGBA", (64, 64), (10, 13, 25, 255))
         draw = ImageDraw.Draw(image)
@@ -2107,113 +3180,94 @@ class WorldClockWidget(tk.Tk):
         return image
 
     def start_drag(self, event):
-        self._drag_x = event.x_root - self.winfo_x()
-        self._drag_y = event.y_root - self.winfo_y()
+        actual = self._actual_window_rect()
+        window_x = actual[0] if actual is not None else self.winfo_x()
+        window_y = actual[1] if actual is not None else self.winfo_y()
+        self._drag_x = event.x_root - window_x
+        self._drag_y = event.y_root - window_y
 
     def on_drag(self, event):
         x = event.x_root - self._drag_x
         y = event.y_root - self._drag_y
         self.overlay_target["x"] = x
         self.overlay_target["y"] = y
-        self.geometry(self._format_geometry(self.overlay_target["width"], self.overlay_target["height"], x, y))
-
-    def _capture_window_geometry(self):
-        self.update_idletasks()
-        self.overlay_target.update(
-            {
-                "width": max(400, self.winfo_width()),
-                "height": max(750, self.winfo_height()),
-                "x": self.winfo_x(),
-                "y": self.winfo_y(),
-            }
-        )
-
-    def _ensure_target_within_screen(self):
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
-        width = self.overlay_target["width"]
-        height = self.overlay_target["height"]
-
-        max_x = max(10, screen_w - width - 10)
-        max_y = max(10, screen_h - height - 10)
-        self.overlay_target["x"] = min(max(10, self.overlay_target["x"]), max_x)
-        self.overlay_target["y"] = min(max(10, self.overlay_target["y"]), max_y)
+        self._set_overlay_geometry(self.overlay_target["width"], self.overlay_target["height"], x, y)
 
     def _animate_overlay_in(self):
-        self._ensure_target_within_screen()
         width = self.overlay_target["width"]
         height = self.overlay_target["height"]
         target_x = self.overlay_target["x"]
         target_y = self.overlay_target["y"]
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
+        left, top, right, bottom = self._work_area_for_rect((target_x, target_y, width, height))
 
         direction = self.settings.get("overlay_direction", DEFAULT_OVERLAY_DIRECTION)
         if direction == "left":
-            start_x, start_y = -width, target_y
+            start_x, start_y = left - width, target_y
         elif direction == "top":
-            start_x, start_y = target_x, -height
+            start_x, start_y = target_x, top - height
         elif direction == "bottom":
-            start_x, start_y = target_x, screen_h
+            start_x, start_y = target_x, bottom
         else:
-            start_x, start_y = screen_w, target_y
+            start_x, start_y = right, target_y
 
-        self.geometry(self._format_geometry(width, height, int(start_x), int(start_y)))
-        steps = 14
-        interval_ms = 12
+        self._set_overlay_geometry(width, height, int(start_x), int(start_y))
+        duration_seconds = 0.167
+        interval_ms = 16
+        started_at = time.perf_counter()
 
         if self._animation_after_id is not None:
             self.after_cancel(self._animation_after_id)
             self._animation_after_id = None
 
-        def step(frame: int):
-            progress = frame / steps
-            x = round(start_x + (target_x - start_x) * progress)
-            y = round(start_y + (target_y - start_y) * progress)
-            self.geometry(self._format_geometry(width, height, x, y))
-            if frame < steps:
-                self._animation_after_id = self.after(interval_ms, lambda: step(frame + 1))
+        def step():
+            progress = min(1.0, (time.perf_counter() - started_at) / duration_seconds) if ToggleSwitch._animations_enabled() else 1.0
+            eased = progress * progress * (3 - 2 * progress)
+            x = round(start_x + (target_x - start_x) * eased)
+            y = round(start_y + (target_y - start_y) * eased)
+            self._set_overlay_geometry(width, height, x, y)
+            if progress < 1.0:
+                self._animation_after_id = self.after(interval_ms, step)
             else:
                 self._animation_after_id = None
-                self.lift()
-                self.focus_force()
+                self._place_overlay_exact(width, height, target_x, target_y)
 
-        step(0)
+        step()
 
     def _animate_overlay_out(self):
         width = self.overlay_target["width"]
         height = self.overlay_target["height"]
-        start_x = self.winfo_x()
-        start_y = self.winfo_y()
-        screen_w = self.winfo_screenwidth()
-        screen_h = self.winfo_screenheight()
+        actual = self._actual_window_rect()
+        start_x = actual[0] if actual is not None else self.winfo_x()
+        start_y = actual[1] if actual is not None else self.winfo_y()
+        left, top, right, bottom = self._work_area_for_rect((self.overlay_target["x"], self.overlay_target["y"], width, height))
 
         direction = self.settings.get("overlay_direction", DEFAULT_OVERLAY_DIRECTION)
         if direction == "left":
-            end_x, end_y = -width, start_y
+            end_x, end_y = left - width, start_y
         elif direction == "top":
-            end_x, end_y = start_x, -height
+            end_x, end_y = start_x, top - height
         elif direction == "bottom":
-            end_x, end_y = start_x, screen_h
+            end_x, end_y = start_x, bottom
         else:
-            end_x, end_y = screen_w, start_y
+            end_x, end_y = right, start_y
 
-        steps = 14
-        interval_ms = 12
+        duration_seconds = 0.167
+        interval_ms = 16
+        started_at = time.perf_counter()
 
-        def step(frame: int):
-            progress = frame / steps
+        def step():
+            progress = min(1.0, (time.perf_counter() - started_at) / duration_seconds) if ToggleSwitch._animations_enabled() else 1.0
             eased = progress * progress * (3 - 2 * progress)
             x = round(start_x + (end_x - start_x) * eased)
             y = round(start_y + (end_y - start_y) * eased)
-            self.geometry(self._format_geometry(width, height, x, y))
-            if frame < steps:
-                self._animation_after_id = self.after(interval_ms, lambda: step(frame + 1))
+            self._set_overlay_geometry(width, height, x, y)
+            if progress < 1.0:
+                self._animation_after_id = self.after(interval_ms, step)
             else:
                 self._animation_after_id = None
                 self.withdraw()
 
-        step(0)
+        step()
 
     def toggle_overlay(self):
         if self.overlay_visible:
@@ -2223,18 +3277,20 @@ class WorldClockWidget(tk.Tk):
 
     def show_overlay(self):
         self.overlay_visible = True
-        self.deiconify()
-        self.overrideredirect(True)
-        self.attributes("-topmost", True)
+        self._show_without_activation()
         self._animate_overlay_in()
 
     def hide_overlay(self, animated: bool = True):
+        if self.reminder_ui is not None:
+            self.reminder_ui.cancel_selection()
+            self.reminder_ui.close_popup()
         if self._animation_after_id is not None:
             self.after_cancel(self._animation_after_id)
             self._animation_after_id = None
 
         if self.overlay_visible:
-            self._capture_window_geometry()
+            # overlay_target is the user's persisted position. Never replace it
+            # with an intermediate coordinate produced by the hide/show animation.
             self.save_config()
         self.overlay_visible = False
         if animated and self.winfo_viewable():
@@ -2243,11 +3299,27 @@ class WorldClockWidget(tk.Tk):
             self.withdraw()
 
     def quit_app(self):
+        if self.reminder_ui is not None:
+            self.reminder_ui.dispose()
         if self.hotkey_listener is not None:
             self.hotkey_listener.stop()
 
         if self.tray_icon is not None:
             self.tray_icon.stop()
+
+        if self.shutdown_event_handle:
+            try:
+                ctypes.windll.kernel32.CloseHandle(self.shutdown_event_handle)
+            except Exception:
+                pass
+            self.shutdown_event_handle = None
+
+        if self.show_event_handle:
+            try:
+                ctypes.windll.kernel32.CloseHandle(self.show_event_handle)
+            except Exception:
+                pass
+            self.show_event_handle = None
 
         self.destroy()
 
@@ -2303,6 +3375,10 @@ class WorldClockWidget(tk.Tk):
             self.render_city_cards()
 
     def open_settings_dialog(self):
+        active = self._active_modal
+        if isinstance(active, FigmaSettingsDialog) and active.winfo_exists():
+            self._raise_active_modal()
+            return
         FigmaSettingsDialog(
             self,
             self.settings.copy(),
@@ -2330,6 +3406,9 @@ class WorldClockWidget(tk.Tk):
         base_timezone = updated.get("base_timezone", self.settings.get("base_timezone", ""))
         theme = updated.get("theme", self.settings.get("theme", "dark"))
         language = updated.get("language", self.settings.get("language", "ru"))
+        reminder_intervals = normalize_reminder_intervals(
+            updated.get("reminder_intervals", self.settings.get("reminder_intervals", DEFAULT_REMINDER_INTERVALS))
+        )
 
         if mode not in {"auto", "manual"}:
             mode = "auto"
@@ -2357,6 +3436,7 @@ class WorldClockWidget(tk.Tk):
                 "base_timezone": base_timezone,
                 "theme": theme,
                 "language": language,
+                "reminder_intervals": reminder_intervals,
             }
         )
         set_theme(theme)
@@ -2422,16 +3502,8 @@ class WorldClockWidget(tk.Tk):
 
         self.overlay_target["height"] = desired_height
 
-        self._ensure_target_within_screen()
         if self.overlay_visible:
-            self.geometry(
-                self._format_geometry(
-                    self.overlay_target["width"],
-                    self.overlay_target["height"],
-                    self.overlay_target["x"],
-                    self.overlay_target["y"],
-                )
-            )
+            self._set_overlay_geometry(**self.overlay_target)
 
     def render_city_cards(self):
         for animation_id in self._card_animation_ids.values():
@@ -2515,7 +3587,7 @@ class WorldClockWidget(tk.Tk):
         self.card_widgets.clear()
 
         city_count = len(self.city_timezones)
-        card_height = 72 if city_count <= 3 else 66
+        card_height = 86 if city_count <= 3 else 82
         card_padding = 12 if city_count <= 3 else 10
         self._card_height = card_height
         self._card_slot = card_height + 10
@@ -2548,27 +3620,40 @@ class WorldClockWidget(tk.Tk):
 
             actions = tk.Frame(panel.content, bg=SURFACE)
             actions.pack(side="right", fill="y")
-            time_label = tk.Label(actions, text="--:--", bg=SURFACE, fg=TEXT, font=ui_font(20, "bold"))
-            time_label.pack(side="left", fill="y")
-            remove = IconButton(actions, "close", lambda zone=tz_name: self.remove_city(zone), size=24, icon_size=16, filled=False)
-            remove.pack(side="left", padx=(8, 0))
+            time_column = tk.Frame(actions, bg=SURFACE)
+            time_column.pack(side="left", fill="y")
+            time_label = tk.Label(time_column, text="--:--", bg=SURFACE, fg=TEXT, font=ui_font(20, "bold"), anchor="e")
+            time_label.pack(anchor="e")
+            panel.time_until_label = tk.Label(time_column, text="", bg=SURFACE, fg=MUTED, font=ui_font(13), anchor="e")
+            panel.time_until_label.pack(anchor="e", pady=(2, 0))
+            divider = tk.Frame(actions, bg=BORDER, width=1)
+            divider.pack(side="left", fill="y", padx=(10, 8), pady=2)
+            remove = IconButton(actions, "trash", lambda zone=tz_name: self.remove_city(zone), size=24, icon_size=16, filled=False)
+            remove.pack(side="left")
 
-            selectable = (panel, panel.content, left, city_row, city_label, region_label, offset_label, actions, time_label)
+            selectable = (panel, panel.content, left, city_row, city_label, region_label, offset_label, actions, time_column, time_label, panel.time_until_label)
+            panel.selectable = selectable
+            panel.city_zone = tz_name
+            panel.city_name = city
             for widget in selectable:
                 widget.bind("<ButtonPress-1>", lambda event, card=panel: self._start_city_drag(event, card))
                 widget.bind("<B1-Motion>", lambda event, card=panel: self._move_city_drag(event, card))
                 widget.bind("<ButtonRelease-1>", lambda event, card=panel: self._finish_city_drag(event, card))
                 widget.configure(cursor="fleur")
-            self._bind_panel_hover(panel, (*selectable, remove))
+            self._bind_panel_hover(panel, (*selectable, divider, remove))
 
             self.card_widgets.append((left, offset_label, time_label, panel))
 
         self.update_times()
+        self.reminder_ui.mark_cities()
 
     def _card_index(self, panel) -> int:
         return next((index for index, record in enumerate(self.card_widgets) if record[3] is panel), -1)
 
     def _start_city_drag(self, event, panel):
+        if self.reminder_ui.pending is not None:
+            self._reminder_pressed_panel = panel
+            return
         animation_id = self._card_animation_ids.pop(panel, None)
         if animation_id:
             self.after_cancel(animation_id)
@@ -2601,6 +3686,13 @@ class WorldClockWidget(tk.Tk):
                 self._animate_card_to(other[3], index * self._card_slot)
 
     def _finish_city_drag(self, _event, panel):
+        if self.reminder_ui.pending is not None:
+            pressed = self._reminder_pressed_panel
+            self._reminder_pressed_panel = None
+            if pressed is panel and (panel.winfo_rootx() <= _event.x_root < panel.winfo_rootx() + panel.winfo_width()
+                                     and panel.winfo_rooty() <= _event.y_root < panel.winfo_rooty() + panel.winfo_height()):
+                self.reminder_ui.choose_city(panel.city_zone, panel.city_name)
+            return
         if self._drag_panel is not panel:
             return
         index = self._card_index(panel)
@@ -2622,17 +3714,18 @@ class WorldClockWidget(tk.Tk):
             except tk.TclError:
                 pass
         start_y = panel.winfo_y()
-        steps = 8
+        started = time.perf_counter()
+        animate = ToggleSwitch._animations_enabled()
 
-        def step(number=1):
+        def step():
             if not panel.winfo_exists() or panel is self._drag_panel:
                 self._card_animation_ids.pop(panel, None)
                 return
-            progress = number / steps
+            progress = min(1.0, (time.perf_counter() - started) / .167) if animate else 1.0
             eased = 1 - (1 - progress) ** 3
             panel.place_configure(y=round(start_y + (target_y - start_y) * eased))
-            if number < steps:
-                self._card_animation_ids[panel] = self.after(15, lambda: step(number + 1))
+            if progress < 1:
+                self._card_animation_ids[panel] = self.after(16, step)
             else:
                 self._card_animation_ids.pop(panel, None)
 
@@ -2644,18 +3737,17 @@ class WorldClockWidget(tk.Tk):
             return datetime.now(zone)
         return datetime.now().astimezone()
 
-    def get_reference_time(self) -> datetime:
-        now_ref = self.get_top_clock_time()
+    def get_reference_time(self, now_ref: Optional[datetime] = None) -> datetime:
+        if now_ref is None:
+            now_ref = self.get_top_clock_time()
         if self.force_hour_rounding or self.offset_hours.get() != 0:
             now_ref = now_ref.replace(minute=0, second=0, microsecond=0)
         adjusted_ref = now_ref + timedelta(hours=self.offset_hours.get())
         return adjusted_ref
 
     def update_times(self):
-        top_time = self.get_top_clock_time()
-        if self.force_hour_rounding or self.offset_hours.get() != 0:
-            top_time = top_time.replace(minute=0, second=0, microsecond=0)
-        top_time = top_time + timedelta(hours=self.offset_hours.get())
+        now = self.get_top_clock_time()
+        top_time = self.get_reference_time(now)
         display_format = "%H:%M"
         def format_clock(value: datetime) -> str:
             return value.strftime(display_format)
@@ -2663,11 +3755,16 @@ class WorldClockWidget(tk.Tk):
         self.main_time_label.config(text=format_clock(top_time))
         language = self.settings.get("language", "ru")
         if self.settings.get("top_clock_mode", "auto") == "manual":
+            self.system_time_source_label.place_forget()
+            self.main_time_label.place_configure(y=22)
             top_city, _region = FigmaAddCityDialog._split_label(
                 display_timezone_label(self.settings.get("manual_top_timezone", "Etc/UTC"), language)
             )
         else:
-            top_city = tr("system_city", language)
+            self.system_time_source_label.configure(text=tr("system_time", language))
+            self.system_time_source_label.place(x=0, y=0, anchor="nw")
+            self.main_time_label.place_configure(y=22)
+            top_city = windows_timezone_cities(language)
         self.top_city_label.config(text=top_city)
         if language == "en":
             weekdays = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -2677,7 +3774,7 @@ class WorldClockWidget(tk.Tk):
             months = ("янв.", "февр.", "мар.", "апр.", "мая", "июн.", "июл.", "авг.", "сент.", "окт.", "нояб.", "дек.")
         self.main_date_label.config(text=f"{weekdays[top_time.weekday()]}, {top_time.day} {months[top_time.month - 1]} {top_time.year}")
 
-        ref_time = self.get_reference_time()
+        ref_time = top_time
         ref_offset = ref_time.utcoffset() or timedelta(0)
 
         for idx, tz_name in enumerate(self.city_timezones):
@@ -2688,12 +3785,17 @@ class WorldClockWidget(tk.Tk):
             delta = (current_offset - ref_offset).total_seconds()
 
             time_label.config(text=format_clock(city_time))
+            _card.time_until_label.config(text=format_time_until(city_time, now, language))
 
             offset_text = format_offset(delta) if language == "ru" else f"{int(delta // 3600):+d} h"
             offset_label.config(text=f"{offset_text} {tr('from_base', language)}")
 
+        if self.reminder_ui is not None:
+            self.reminder_ui.refresh()
+
     def tick(self):
         self.update_times()
+        self.reminder_ui.tick()
         self.after(1000, self.tick)
 
     def load_config(self):
@@ -2711,6 +3813,9 @@ class WorldClockWidget(tk.Tk):
         base_timezone = settings_data.get("base_timezone", "")
         theme = settings_data.get("theme", "dark")
         language = settings_data.get("language", "ru")
+        reminder_intervals = normalize_reminder_intervals(
+            settings_data.get("reminder_intervals", DEFAULT_REMINDER_INTERVALS)
+        )
 
         if top_mode not in {"auto", "manual"}:
             top_mode = "auto"
@@ -2732,6 +3837,7 @@ class WorldClockWidget(tk.Tk):
                 "base_timezone": base_timezone,
                 "theme": theme,
                 "language": language,
+                "reminder_intervals": reminder_intervals,
             }
         )
 
@@ -2770,13 +3876,9 @@ class WorldClockWidget(tk.Tk):
         window_data = data.get("window", {})
         try:
             width = max(400, int(window_data.get("width", self.overlay_target["width"])))
-            height = max(750, int(window_data.get("height", self.overlay_target["height"])))
-            width = min(width, self.winfo_screenwidth())
-            height = min(height, self.winfo_screenheight())
+            height = max(MIN_WIDGET_HEIGHT, int(window_data.get("height", self.overlay_target["height"])))
             x = int(window_data.get("x", self.overlay_target["x"]))
             y = int(window_data.get("y", self.overlay_target["y"]))
-            x = min(max(0, x), max(0, self.winfo_screenwidth() - width))
-            y = min(max(0, y), max(0, self.winfo_screenheight() - height))
             self.overlay_target.update({"width": width, "height": height, "x": x, "y": y})
         except (TypeError, ValueError):
             pass
@@ -2792,7 +3894,13 @@ class WorldClockWidget(tk.Tk):
 
 
 if __name__ == "__main__":
-    register_bundled_font()
-    app = WorldClockWidget()
-    app.mainloop()
+    single_instance_mutex = acquire_single_instance()
+    if single_instance_mutex is not None:
+        try:
+            register_bundled_font()
+            app = WorldClockWidget()
+            app.mainloop()
+        finally:
+            if os.name == "nt" and single_instance_mutex is not True:
+                ctypes.windll.kernel32.CloseHandle(single_instance_mutex)
 
