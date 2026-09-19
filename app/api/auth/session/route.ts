@@ -1,4 +1,4 @@
-import { createSession, publicUser, upsertUser, verifyFirebaseCredential } from '@/lib/auth';
+import { createSession, isAdminEmail, publicUser, upsertUser, verifyFirebaseCredential } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     const profile = await verifyFirebaseCredential(body.credential);
     await upsertUser(profile);
     const session = await createSession(profile.id);
-    const isAdmin = profile.email.toLowerCase() === 'uuuraaaaa@gmail.com';
+    const isAdmin = isAdminEmail(profile.email);
     return Response.json(
       { user: publicUser({ ...profile, isAdmin }) },
       { headers: { 'Set-Cookie': session.cookie, 'Cache-Control': 'no-store' } },

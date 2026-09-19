@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const SESSION_COOKIE = 'wc_session';
 const SESSION_DAYS = 30;
+const ADMIN_EMAIL = 'uuuraaaaa@gmail.com';
 const firebaseJwks = createRemoteJWKSet(new URL(
   'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',
 ));
@@ -39,8 +40,8 @@ export async function ensureAuthTables() {
   ]);
 }
 
-function adminEmail() {
-  return (env.ADMIN_EMAIL || 'uuuraaaaa@gmail.com').toLowerCase();
+export function isAdminEmail(email: string) {
+  return email.trim().toLowerCase() === ADMIN_EMAIL;
 }
 
 function readCookie(request: Request, name: string) {
@@ -123,7 +124,7 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
     .bind(tokenHash, new Date().toISOString())
     .first<{ id: string; email: string; name: string; picture: string }>();
   if (!row) return null;
-  return { ...row, isAdmin: row.email.toLowerCase() === adminEmail() };
+  return { ...row, isAdmin: isAdminEmail(row.email) };
 }
 
 export async function deleteSession(request: Request) {

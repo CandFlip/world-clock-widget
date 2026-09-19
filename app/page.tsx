@@ -18,18 +18,18 @@ const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases
 const macDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.107/WorldClockWidget-macOS-v1.1.107.dmg';
 const strings = {
   ru: {
-    navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', account: 'Кабинет',
+    navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', admin: 'Админка',
     headline: 'Время в разных часовых поясах и таймер поверх любых окон.', intro: 'Скачайте приложение или выберите, что добавить следующим.',
-    download: 'Скачать для Windows', downloadMac: 'Скачать для Mac', source: 'Официальная версия на GitHub', downloadNote: '(Жопу ставлю: вирусов нет, систему приложение не положит. Просто лицензии пока стоят денег.)', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
+    download: 'Скачать для Windows', downloadMac: 'Скачать для Mac', source: 'Официальная версия на GitHub', downloadNote: '(Жопу ставлю: вирусов нет, систему приложение не положит. Лицензии пока не покупались — сейчас на них просто нет денег.)', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
     vote: 'Голосовать', choice: 'Ваш выбор', ideaTitle: 'Предложить функцию', ideaCopy: 'Коротко опишите, что нужно добавить.', suggest: 'Предложить идею',
     community: 'Идеи сообщества', mobileGoal: 'Лицензии iOS и Android', supportTitle: 'Поддержка проекта и автора', support: 'Поддержать', whySupport: 'Почему я собираю?',
     loginTitle: 'Войти', loginCopy: 'Вход нужен для голосования и предложений.', problem: 'Какую проблему это решит?', outcome: 'Как должен выглядеть результат?',
     send: 'Отправить', thanks: 'Спасибо. Запись отправлена.', methods: 'Поддержка автора', noMethods: 'Способы поддержки пока не подключены.', paymentNote: 'Выберите удобный способ.', copy: 'Копировать', copied: 'Скопировано',
   },
   en: {
-    navRoadmap: 'Roadmap', navIdeas: 'Suggest an idea', navSupport: 'Support', signin: 'Sign in', account: 'Account',
+    navRoadmap: 'Roadmap', navIdeas: 'Suggest an idea', navSupport: 'Support', signin: 'Sign in', admin: 'Admin',
     headline: 'Time across time zones and a timer above any window.', intro: 'Download the app or vote for what should be added next.',
-    download: 'Download for Windows', downloadMac: 'Download for Mac', source: 'Official release on GitHub', downloadNote: '(I bet my ass: there are no viruses and the app won’t wreck your system. The licenses simply cost money.)', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
+    download: 'Download for Windows', downloadMac: 'Download for Mac', source: 'Official release on GitHub', downloadNote: '(I bet my ass: there are no viruses and the app won’t wreck your system. The licenses haven’t been purchased yet — there simply isn’t money for them right now.)', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
     vote: 'Vote', choice: 'Your choice', ideaTitle: 'Suggest a feature', ideaCopy: 'Briefly describe what should be added.', suggest: 'Suggest an idea',
     community: 'Community ideas', mobileGoal: 'iOS and Android licenses', supportTitle: 'Support the project and its author', support: 'Support', whySupport: 'Why am I raising funds?',
     loginTitle: 'Sign in', loginCopy: 'Sign in to vote or suggest an idea.', problem: 'What problem would this solve?', outcome: 'What should the result look like?',
@@ -115,7 +115,7 @@ export default function Home() {
       <div className="nav-links"><a href="#roadmap">{t.navRoadmap}</a><button onClick={() => setModal('suggest')}>{t.navIdeas}</button><a href="#support">{t.navSupport}</a></div>
       <div className="account-area">
         <div className="language"><button className={lang === 'ru' ? 'active' : ''} onClick={() => chooseLang('ru')}>RU</button><button className={lang === 'en' ? 'active' : ''} onClick={() => chooseLang('en')}>EN</button></div>
-        {user ? <>{user.isAdmin ? <a className="account-link" href="/admin">{t.account}</a> : <span className="user-chip">{user.name}</span>}<button onClick={logout} aria-label="Sign out"><LogOut size={16} /></button></> : <button className="signin-link" onClick={() => setModal('auth')}><LogIn size={15} />{t.signin}</button>}
+        {user ? <>{user.isAdmin ? <a className="admin-link" href="/admin">{t.admin}</a> : <span className="user-chip">{user.name}</span>}<button onClick={logout} aria-label="Sign out"><LogOut size={16} /></button></> : <button className="signin-link" onClick={() => setModal('auth')}><LogIn size={15} />{t.signin}</button>}
       </div>
     </nav>
 
