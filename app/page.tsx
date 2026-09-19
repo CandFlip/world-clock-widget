@@ -14,12 +14,13 @@ type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<s
 type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [] };
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/windows-v1.1.106/WorldClockWidget-Setup-v1.1.106.exe';
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.107/WorldClockWidget-Setup-v1.1.107.exe';
+const macDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.107/WorldClockWidget-macOS-v1.1.107.dmg';
 const strings = {
   ru: {
     navRoadmap: 'Планы', navIdeas: 'Предложить идею', navSupport: 'Поддержать', signin: 'Войти', account: 'Кабинет',
     headline: 'Время в разных часовых поясах и таймер поверх любых окон.', intro: 'Скачайте приложение или выберите, что добавить следующим.',
-    download: 'Скачать для Windows', source: 'Официальная версия на GitHub', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
+    download: 'Скачать для Windows', downloadMac: 'Скачать для Mac', source: 'Официальная версия на GitHub', downloadNote: '(Жопу ставлю: вирусов нет, систему приложение не положит. Просто лицензии пока стоят денег.)', roadmap: 'Что дальше?', roadmapCopy: 'Выберите одну функцию. Голос можно изменить.',
     vote: 'Голосовать', choice: 'Ваш выбор', ideaTitle: 'Предложить функцию', ideaCopy: 'Коротко опишите, что нужно добавить.', suggest: 'Предложить идею',
     community: 'Идеи сообщества', mobileGoal: 'Лицензии iOS и Android', supportTitle: 'Поддержка проекта и автора', support: 'Поддержать', whySupport: 'Почему я собираю?',
     loginTitle: 'Войти', loginCopy: 'Вход нужен для голосования и предложений.', problem: 'Какую проблему это решит?', outcome: 'Как должен выглядеть результат?',
@@ -28,7 +29,7 @@ const strings = {
   en: {
     navRoadmap: 'Roadmap', navIdeas: 'Suggest an idea', navSupport: 'Support', signin: 'Sign in', account: 'Account',
     headline: 'Time across time zones and a timer above any window.', intro: 'Download the app or vote for what should be added next.',
-    download: 'Download for Windows', source: 'Official release on GitHub', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
+    download: 'Download for Windows', downloadMac: 'Download for Mac', source: 'Official release on GitHub', downloadNote: '(I bet my ass: there are no viruses and the app won’t wreck your system. The licenses simply cost money.)', roadmap: 'What’s next?', roadmapCopy: 'Choose one feature. You can change your vote.',
     vote: 'Vote', choice: 'Your choice', ideaTitle: 'Suggest a feature', ideaCopy: 'Briefly describe what should be added.', suggest: 'Suggest an idea',
     community: 'Community ideas', mobileGoal: 'iOS and Android licenses', supportTitle: 'Support the project and its author', support: 'Support', whySupport: 'Why am I raising funds?',
     loginTitle: 'Sign in', loginCopy: 'Sign in to vote or suggest an idea.', problem: 'What problem would this solve?', outcome: 'What should the result look like?',
@@ -66,7 +67,7 @@ export default function Home() {
     localStorage.setItem('wc-lang', value);
     document.documentElement.lang = value;
   };
-  const version = data.settings.download_version === 'v1.1.106' ? data.settings.download_version : 'v1.1.106';
+  const version = data.settings.download_version === 'v1.1.107' ? data.settings.download_version : 'v1.1.107';
   const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   const mobileRaised = data.funded['mobile-official'] || 0;
 
@@ -120,7 +121,8 @@ export default function Home() {
 
     <section className="hero" id="top">
       <h1>{t.headline}</h1><p className="hero-copy">{t.intro}</p>
-      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
+      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action mac-action" href={macDownload}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.107" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
+      <p className="download-note">{t.downloadNote}</p>
     </section>
 
     <section className="roadmap-section" id="roadmap">
