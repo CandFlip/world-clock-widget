@@ -22,14 +22,14 @@ const content = {
     back: 'Back to the main page',
     kicker: 'A personal story',
     title: 'Why I am raising support',
-    lead: 'In September 2026, I suddenly ended up in hospital. Ordinary life stopped in a single day.',
+    lead: 'In September 2026, I had an ischemic stroke. I was admitted to the hospital, examined, treated and, quite literally, saved.',
     paragraphs: [
-      'It began with a headache and dizziness. At the hospital, I had an MRI. The scan showed a small lesion in the right cerebellar hemisphere.',
-      'After a follow-up examination, the doctors told me there was a 99% probability that it was a cerebral infarction. It was a sudden and difficult event for me.',
-      'I am now continuing my recovery while developing World Clock Widget. Support helps me cover treatment costs and keep working on the project.'
+      'The problem is that all of this turned out to be quite expensive: the hospital stay, examinations, medication, ongoing treatment and recovery. So when I left the hospital, I not only had to recover, but also deal with debts that continue to gradually pile up.',
+      'That is why there is now a way to support me here. The money will go first and foremost toward treatment, recovery and covering the expenses that have already arisen because of all this.',
+      'The doctors have also specifically advised me to avoid stress. As it turns out, debt does not help much with that.'
     ],
     captions: ['In the hospital room', 'During treatment', 'MRI scan', 'MRI report', 'Translation of the doctor\'s conclusion'],
-    note: 'Any contribution supports both me and the project. Thank you to everyone who is with me.',
+    note: 'If World Clock is useful to you and you would like to support its author, I would be very grateful.',
     support: 'Support the project'
   }
 } as const;
