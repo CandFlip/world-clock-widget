@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${APP_VERSION:-1.1.107}"
+VERSION="${APP_VERSION:-1.1.108}"
 BUILD="$ROOT/macos/build"
 APP="$BUILD/World Clock Widget.app"
 CONTENTS="$APP/Contents"
@@ -42,6 +42,7 @@ codesign --force --deep --options runtime --timestamp=none --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 plutil -lint "$CONTENTS/Info.plist"
 lipo -info "$CONTENTS/MacOS/WorldClockWidget"
+WORLD_CLOCK_SELF_TEST=1 "$CONTENTS/MacOS/WorldClockWidget"
 
 STAGING="$BUILD/dmg"
 mkdir -p "$STAGING"

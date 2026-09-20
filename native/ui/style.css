@@ -63,6 +63,7 @@ button{color:inherit}
 .quick{display:flex;gap:8px;min-width:0;overflow-x:auto;scrollbar-width:thin;padding-bottom:3px}
 .quick>.chip{flex:1 0 100px}
 .windows-icon{width:13px;height:13px;vertical-align:-1px;flex:none}
+.system-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:14px;padding:0 3px;border:1px solid currentColor;border-radius:4px;font-size:8px;font-weight:800;line-height:1;vertical-align:1px;flex:none}
 #originLabel{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:inherit}
 .chip,.add{height:40px;border:1px dashed var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:650;transition:border-color 120ms,color 120ms,background 120ms}
 .chip{position:relative;min-width:0;border-style:solid;background:var(--surface);color:var(--text);text-align:left;padding:0 28px 0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -197,6 +198,7 @@ button{color:inherit}
 .saved-base{display:flex;align-items:center;justify-content:flex-end;gap:4px;max-width:58%;min-width:0;margin-top:0;font-size:9px}
 .saved-base>span{flex:none;font-variant-numeric:tabular-nums}
 .saved-base .windows-icon{width:10px;height:10px}
+.saved-base .system-badge{min-width:19px;height:12px;font-size:7px}
 .saved-bottom{gap:7px}
 .saved-bottom .progress{height:17px;min-width:42px}
 .progress .progress-time{line-height:15px;font-size:10px}

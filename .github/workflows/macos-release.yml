@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish the v1.1.107 GitHub release
+        description: Publish the v1.1.108 GitHub release
         type: boolean
         default: false
   push:
@@ -24,26 +24,26 @@ jobs:
 
       - name: Build universal macOS application and DMG
         env:
-          APP_VERSION: 1.1.107
+          APP_VERSION: 1.1.108
         run: bash macos/build.sh
 
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WorldClockWidget-macOS-v1.1.107
-          path: release/WorldClockWidget-macOS-v1.1.107.dmg
+          name: WorldClockWidget-macOS-v1.1.108
+          path: release/WorldClockWidget-macOS-v1.1.108.dmg
           if-no-files-found: error
 
       - name: Publish cross-platform GitHub release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.publish == true
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.107
-          name: World Clock Widget v1.1.107
+          tag_name: v1.1.108
+          name: World Clock Widget v1.1.108
           body: |
             Бесплатный MVP-релиз World Clock Widget для Windows и macOS.
 
             macOS Beta собрана как универсальное приложение для Apple Silicon и Intel (macOS 13+). Пока проект не использует платный Apple Developer ID, при первом запуске откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть». Отключать Gatekeeper или использовать терминал не требуется.
           files: |
-            release/WorldClockWidget-macOS-v1.1.107.dmg
+            release/WorldClockWidget-macOS-v1.1.108.dmg
           make_latest: true

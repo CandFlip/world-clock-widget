@@ -33,8 +33,9 @@ let alertId = null;
 let lastBeep = 0;
 let detailId = null;
 let applyingRemoteSync = false;
-const defaultHotkey = {modifiers: 5, key: 84};
-let activeHotkey = {...defaultHotkey};
+let platform = 'windows';
+const defaultHotkeyForPlatform = () => platform === 'macos' ? {modifiers: 12, key: 84} : {modifiers: 5, key: 84};
+let activeHotkey = {...defaultHotkeyForPlatform()};
 let pendingHotkey = null;
 let capturingHotkey = false;
 let candidateHotkey = null;
@@ -53,7 +54,7 @@ const specialHotkeyKeys = {
 const hotkeyNames = Object.fromEntries(Object.entries(specialHotkeyKeys).map(([name, key]) => [key, name.replace('Arrow', '').replace('Numpad', 'Num ')]));
 
 function hotkeyFromEvent(event) {
-  if (event.metaKey || event.getModifierState?.('AltGraph')) return null;
+  if ((event.metaKey && platform !== 'macos') || event.getModifierState?.('AltGraph')) return null;
   const code = event.code;
   let key = specialHotkeyKeys[code];
   if (/^Key[A-Z]$/.test(code)) key = code.charCodeAt(3);
@@ -61,7 +62,7 @@ function hotkeyFromEvent(event) {
   else if (/^Numpad[0-9]$/.test(code)) key = 96 + Number(code.slice(6));
   else if (/^F([1-9]|10|11)$/.test(code)) key = 111 + Number(code.slice(1));
   if (!key) return null;
-  return {modifiers: (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0), key};
+  return {modifiers: (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0), key};
 }
 
 function hotkeyLabel(hotkey = activeHotkey) {
@@ -69,12 +70,15 @@ function hotkeyLabel(hotkey = activeHotkey) {
   const name = (key >= 48 && key <= 90) ? String.fromCharCode(key) :
     (key >= 96 && key <= 105) ? `Num ${key - 96}` :
     (key >= 112 && key <= 122) ? `F${key - 111}` : hotkeyNames[key] || '?';
-  return [(hotkey.modifiers & 2) && 'Ctrl', (hotkey.modifiers & 1) && 'Alt',
-    (hotkey.modifiers & 4) && 'Shift', name].filter(Boolean).join('+');
+  const modifiers = platform === 'macos'
+    ? [(hotkey.modifiers & 8) && 'Command', (hotkey.modifiers & 4) && 'Shift', (hotkey.modifiers & 1) && 'Option', (hotkey.modifiers & 2) && 'Control']
+    : [(hotkey.modifiers & 2) && 'Ctrl', (hotkey.modifiers & 1) && 'Alt', (hotkey.modifiers & 4) && 'Shift'];
+  return [...modifiers, name].filter(Boolean).join('+');
 }
 function modifierLabel(modifiers) {
-  return [(modifiers & 2) && 'Ctrl', (modifiers & 1) && 'Alt',
-    (modifiers & 4) && 'Shift'].filter(Boolean).join('+');
+  return (platform === 'macos'
+    ? [(modifiers & 8) && 'Command', (modifiers & 4) && 'Shift', (modifiers & 1) && 'Option', (modifiers & 2) && 'Control']
+    : [(modifiers & 2) && 'Ctrl', (modifiers & 1) && 'Alt', (modifiers & 4) && 'Shift']).filter(Boolean).join('+');
 }
 const availabilityGradientCache = new Map();
 const solarZoneAliases = new Map([
@@ -137,7 +141,15 @@ const strings = {
 };
 
 const lang = () => config.settings.language === 'en' ? 'en' : 'ru';
-const t = key => strings[lang()][key] || key;
+const platformStrings = {
+  ru: {macos: {autostart: 'Запускать при входе в macOS', system: 'Время Mac'}},
+  en: {macos: {autostart: 'Open at login on macOS', system: 'Mac time'}},
+};
+const t = key => platformStrings[lang()]?.[platform]?.[key] || strings[lang()][key] || key;
+function systemBadge() {
+  if (platform === 'macos') return `<span class="system-badge" aria-label="${esc(t('system'))}">Mac</span>`;
+  return '<svg class="windows-icon" viewBox="0 0 16 16" aria-label="Windows"><path fill="currentColor" d="M0 2l7-1v6H0zm8-1l8-1v7H8zM0 8h7v6l-7-1zm8 0h8v8l-8-1z"/></svg>';
+}
 const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
@@ -602,13 +614,13 @@ function renderAlarms() {
   root.innerHTML = active.map(entry => {
     const zone = zoneOf(entry.zone || baseZone());
     const source = sourceCaption(entry);
-    const shortSource = entry.source_type === 'base' && entry.base_kind !== 'manual' ? 'Windows' : (entry.city || cityName(entry.city_key || entry.zone));
+    const shortSource = entry.source_type === 'base' && entry.base_kind !== 'manual' ? t('system') : (entry.city || cityName(entry.city_key || entry.zone));
     const title = entry.title ? `${entry.title} · ${source}` : source;
     const caption = entry.title ? `<strong class="alarm-name">${esc(entry.title)}</strong><small class="alarm-source">${esc(shortSource)}</small>` : `<strong class="alarm-name only-source">${esc(shortSource)}</strong>`;
     const alarmTime = timeAt(new Date(entry.alarm * 1000), zone);
     const baseTime = timeAt(new Date(entry.alarm * 1000), baseZone());
     const baseName = config.settings.top_clock_mode === 'auto'
-      ? '<svg class="windows-icon" viewBox="0 0 16 16" aria-label="Windows"><path fill="currentColor" d="M0 2l7-1v6H0zm8-1l8-1v7H8zM0 8h7v6l-7-1zm8 0h8v8l-8-1z"/></svg>'
+      ? systemBadge()
       : `(${esc(cityName(config.settings.manual_top_timezone))})`;
     return `<article class="saved-card" data-alarm="${esc(entry.id)}">
       <div class="saved-content"><div class="saved-top"><b class="saved-labels" title="${esc(title)}">${caption}</b><span>${entry.repeat === 'daily' ? `<span aria-label="${lang() === 'ru' ? 'Ежедневно' : 'Daily'}" title="${lang() === 'ru' ? 'Ежедневно' : 'Daily'}">↻ </span>` : ''}${alarmTime}</span></div>
@@ -1049,12 +1061,12 @@ function openHotkey() {
     <div class="hotkey-preview"><span>${lang() === 'ru' ? 'Новое сочетание' : 'New shortcut'}</span><strong id="hotkeyPreview">—</strong></div>
     <p class="hotkey-feedback" id="hotkeyFeedback" role="status" aria-live="polite"></p>
     <button class="primary" id="hotkeyApply" type="button" disabled>${lang() === 'ru' ? 'Применить' : 'Apply'}</button>
-    <button class="secondary" id="hotkeyReset">${lang() === 'ru' ? 'Вернуть Alt+Shift+T' : 'Restore Alt+Shift+T'}</button>`);
+    <button class="secondary" id="hotkeyReset">${lang() === 'ru' ? `Вернуть ${hotkeyLabel(defaultHotkeyForPlatform())}` : `Restore ${hotkeyLabel(defaultHotkeyForPlatform())}`}</button>`);
   $('#hotkeyCapture').onclick = startHotkeyCapture;
   $('#hotkeyApply').onclick = () => {if (candidateHotkey) requestHotkey(candidateHotkey);};
   $('#hotkeyReset').onclick = () => {
     capturingHotkey = false;
-    candidateHotkey = {...defaultHotkey};
+    candidateHotkey = {...defaultHotkeyForPlatform()};
     updateHotkeyUI(lang() === 'ru' ? 'Нажмите «Применить», чтобы восстановить сочетание.' : 'Press Apply to restore the shortcut.');
   };
   updateHotkeyUI(lang() === 'ru' ? 'Нажмите кнопку записи, затем нужные клавиши.' : 'Start recording, then press the desired keys.');
@@ -1080,7 +1092,9 @@ function startHotkeyCapture() {
   capturingHotkey = true;
   candidateHotkey = null;
   capturedModifiers = 0;
-  updateHotkeyUI(lang() === 'ru' ? 'Нажатые Ctrl, Alt и Shift появляются ниже. Завершите сочетание клавишей.' : 'Ctrl, Alt and Shift appear below as you press them. Finish with a key.');
+  const modifiers = platform === 'macos' ? 'Control, Option, Shift и Command' : 'Ctrl, Alt и Shift';
+  const modifiersEn = platform === 'macos' ? 'Control, Option, Shift and Command' : 'Ctrl, Alt and Shift';
+  updateHotkeyUI(lang() === 'ru' ? `Нажатые ${modifiers} появляются ниже. Завершите сочетание клавишей.` : `${modifiersEn} appear below as you press them. Finish with a key.`);
   $('#hotkeyCapture').focus();
 }
 
@@ -1096,8 +1110,8 @@ document.addEventListener('keydown', event => {
   if (!capturingHotkey || !$('#hotkeyCapture')) return;
   event.preventDefault(); event.stopImmediatePropagation();
   if (event.repeat) return;
-  capturedModifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0);
-  if (['Control','Alt','Shift'].includes(event.key)) {updateHotkeyUI(); return;}
+  capturedModifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0);
+  if (['Control','Alt','Shift','Meta'].includes(event.key)) {updateHotkeyUI(); return;}
   const hotkey = hotkeyFromEvent(event);
   if (!hotkey) {
     updateHotkeyUI(lang() === 'ru' ? 'Эта клавиша или сочетание недоступны. Попробуйте другое.' : 'This key or shortcut is unavailable. Try another.');
@@ -1111,7 +1125,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('keyup', event => {
   if (!capturingHotkey || !$('#hotkeyCapture')) return;
   event.preventDefault(); event.stopImmediatePropagation();
-  capturedModifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0);
+  capturedModifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0);
   updateHotkeyUI();
 }, true);
 
@@ -1365,7 +1379,11 @@ function updateLiveCityTimes() {
   });
 }
 
-window.nativeTick = () => { updateDynamic(); updateLiveCityTimes(); updateAlarmDetail(); checkDue(); };
+window.__nativeTickCount = 0;
+window.nativeTick = () => {
+  window.__nativeTickCount += 1;
+  updateDynamic(); updateLiveCityTimes(); updateAlarmDetail(); checkDue();
+};
 
 $('#resize').onpointerdown = () => send('resize');
 $$('[data-resize]').forEach(edge => edge.onpointerdown = event => {
@@ -1418,6 +1436,8 @@ host?.addEventListener('message', event => {
     return;
   }
   if (event.data?.type !== 'init') return;
+  platform = event.data.platform === 'macos' ? 'macos' : 'windows';
+  window.__worldClockPlatform = platform;
   try { config = JSON.parse(event.data.configText || '{}'); } catch { config = {}; }
   try { reminders = JSON.parse(event.data.remindersText || '{}'); } catch { reminders = {lead: 15, entries: []}; }
   version = event.data.version || version;

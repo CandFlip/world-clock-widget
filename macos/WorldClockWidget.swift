@@ -1,10 +1,11 @@
 import AppKit
 import Carbon
+import Darwin
 import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.107"
+private let appVersion = "v1.1.108"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -18,14 +19,16 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private var statusItem: NSStatusItem!
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
-    private var currentModifiers: UInt32 = 5
+    private var currentModifiers: UInt32 = 12
     private var currentKey: UInt32 = 84
     private var outsideMonitor: Any?
     private var localResizeMonitor: Any?
     private var globalResizeMonitor: Any?
+    private var tickTimer: Timer?
     private var resizeEdge: String?
     private var resizeStartFrame = NSRect.zero
     private var resizeStartPoint = NSPoint.zero
+    private let selfTestMode = ProcessInfo.processInfo.environment["WORLD_CLOCK_SELF_TEST"] == "1"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let bundleID = Bundle.main.bundleIdentifier {
@@ -51,6 +54,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         )
         loadHotKeyFromConfig()
         _ = registerHotKey(modifiers: currentModifiers, key: currentKey)
+        startTickTimer()
+        if selfTestMode {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.runSelfTest() }
+        }
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -61,6 +68,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }
         if let localResizeMonitor { NSEvent.removeMonitor(localResizeMonitor) }
         if let globalResizeMonitor { NSEvent.removeMonitor(globalResizeMonitor) }
+        tickTimer?.invalidate()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "host")
     }
 
@@ -124,6 +132,25 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         menu.addItem(NSMenuItem(title: "Выход", action: #selector(quit), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
+    }
+
+    private func startTickTimer() {
+        let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        tickTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    @objc private func tick() {
+        webView?.evaluateJavaScript("window.nativeTick && window.nativeTick()")
+    }
+
+    private func runSelfTest() {
+        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos'"
+        webView.evaluateJavaScript(script) { result, error in
+            let passed = error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
+            fputs(passed ? "macOS runtime tick test passed\n" : "macOS runtime tick test failed\n", stderr)
+            exit(passed ? 0 : 3)
+        }
     }
 
     private func configureMonitors() {
@@ -226,6 +253,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private func postInitialState() {
         let payload: [String: Any] = [
             "type": "init",
+            "platform": "macos",
             "version": appVersion + " macOS Beta",
             "configText": readDataFile(name: "widget_config.json", fallback: "{}"),
             "remindersText": readDataFile(name: "reminders.json", fallback: "{\"lead\":15,\"entries\":[]}"),
@@ -255,6 +283,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
               let key = hotkey["key"] as? NSNumber else { return }
         currentModifiers = modifiers.uint32Value
         currentKey = key.uint32Value
+        if currentModifiers == 5 && currentKey == 84 { currentModifiers = 12 }
     }
 
     private func registerHotKey(modifiers: UInt32, key: UInt32) -> Bool {
@@ -275,6 +304,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         if modifiers & 1 != 0 { carbonModifiers |= UInt32(optionKey) }
         if modifiers & 2 != 0 { carbonModifiers |= UInt32(controlKey) }
         if modifiers & 4 != 0 { carbonModifiers |= UInt32(shiftKey) }
+        if modifiers & 8 != 0 { carbonModifiers |= UInt32(cmdKey) }
         var reference: EventHotKeyRef?
         let identifier = EventHotKeyID(signature: OSType(0x57434C4B), id: 1)
         let status = RegisterEventHotKey(virtualKey, carbonModifiers, identifier, GetApplicationEventTarget(), 0, &reference)
@@ -302,6 +332,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func setStartupEnabled(_ enabled: Bool) {
+        if selfTestMode { return }
         guard #available(macOS 13.0, *) else { return }
         do {
             if enabled {

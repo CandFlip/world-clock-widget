@@ -1,8 +1,8 @@
 #include <windows.h>
 101 ICON "app-icon.ico"
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,1,107,0
- PRODUCTVERSION 1,1,107,0
+ FILEVERSION 1,1,108,0
+ PRODUCTVERSION 1,1,108,0
  FILEFLAGSMASK 0x3fL
  FILEOS 0x40004L
  FILETYPE 0x1L
@@ -13,11 +13,11 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "CandFlip\0"
    VALUE "FileDescription", "World Clock Widget\0"
-            VALUE "FileVersion", "1.1.107.0\0"
+            VALUE "FileVersion", "1.1.108.0\0"
    VALUE "InternalName", "WorldClockWidget\0"
    VALUE "OriginalFilename", "WorldClockWidget.exe\0"
    VALUE "ProductName", "World Clock Widget\0"
-            VALUE "ProductVersion", "1.1.107.0\0"
+            VALUE "ProductVersion", "1.1.108.0\0"
   END
  END
  BLOCK "VarFileInfo" BEGIN VALUE "Translation", 0x409, 1200 END
