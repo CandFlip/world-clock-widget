@@ -23,7 +23,7 @@ function syncReminderModel(entry) {
 
 function sourceCaption(entry) {
   if (entry.source_type === 'base') {
-    const source = entry.base_kind === 'manual' ? (entry.city || cityName(entry.city_key || entry.zone)) : 'Windows';
+    const source = entry.base_kind === 'manual' ? (entry.city || cityName(entry.city_key || entry.zone)) : (platform === 'macos' ? 'Mac' : 'Windows');
     return lang() === 'ru' ? `Базовое время (${source})` : `Base time (${source})`;
   }
   return entry.city || cityName(entry.city_key || entry.zone);

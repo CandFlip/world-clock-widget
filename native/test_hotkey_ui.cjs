@@ -63,15 +63,15 @@ fireKey(key('F12', 'F12'));
 assert.match(field('hotkeyFeedback').textContent, /недоступны/);
 assert.equal(field('hotkeyApply').disabled, true);
 
-run('capturingHotkey=false; candidateHotkey=null; pendingHotkey=null; platform="macos"; activeHotkey={modifiers:12,key:84}');
-assert.equal(run('hotkeyLabel()'), 'Command+Shift+T');
+run('capturingHotkey=false; candidateHotkey=null; pendingHotkey=null; platform="macos"; activeHotkey={modifiers:5,key:84}');
+assert.equal(run('hotkeyLabel()'), 'Option+Shift+T');
 assert.equal(run("t('system')"), 'Время Mac');
 assert.equal(run("t('autostart')"), 'Запускать при входе в macOS');
 run('startHotkeyCapture()');
 fireKey(key('MetaLeft', 'Meta', {metaKey: true}));
 assert.equal(field('hotkeyPreview').textContent, 'Command+…');
 fireKey(key('KeyK', 'л', {metaKey: true, shiftKey: true}));
-assert.equal(field('hotkeyPreview').textContent, 'Command+Shift+K');
+assert.equal(field('hotkeyPreview').textContent, 'Shift+Command+K');
 run('requestHotkey(candidateHotkey)');
 assert.equal(hostMessages.at(-1), 'setHotkey\n12,75');
 console.log('Hotkey recording feedback, preview, explicit apply and rejection checks passed.');

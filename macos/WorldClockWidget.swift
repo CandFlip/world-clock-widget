@@ -19,7 +19,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private var statusItem: NSStatusItem!
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
-    private var currentModifiers: UInt32 = 12
+    private var currentModifiers: UInt32 = 5
     private var currentKey: UInt32 = 84
     private var outsideMonitor: Any?
     private var localResizeMonitor: Any?
@@ -146,8 +146,9 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
 
     private func runSelfTest() {
         let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos'"
+        let nativeHotKeyMapping = currentModifiers == 5 && virtualKeyCode(for: 84) == UInt32(kVK_ANSI_T)
         webView.evaluateJavaScript(script) { result, error in
-            let passed = error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
+            let passed = nativeHotKeyMapping && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
             fputs(passed ? "macOS runtime tick test passed\n" : "macOS runtime tick test failed\n", stderr)
             exit(passed ? 0 : 3)
         }
@@ -283,7 +284,6 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
               let key = hotkey["key"] as? NSNumber else { return }
         currentModifiers = modifiers.uint32Value
         currentKey = key.uint32Value
-        if currentModifiers == 5 && currentKey == 84 { currentModifiers = 12 }
     }
 
     private func registerHotKey(modifiers: UInt32, key: UInt32) -> Bool {
@@ -316,7 +316,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func virtualKeyCode(for key: UInt32) -> UInt32? {
-        let letters: [UInt32: UInt32] = [
+        let keys: [UInt32: UInt32] = [
             65: UInt32(kVK_ANSI_A), 66: UInt32(kVK_ANSI_B), 67: UInt32(kVK_ANSI_C), 68: UInt32(kVK_ANSI_D),
             69: UInt32(kVK_ANSI_E), 70: UInt32(kVK_ANSI_F), 71: UInt32(kVK_ANSI_G), 72: UInt32(kVK_ANSI_H),
             73: UInt32(kVK_ANSI_I), 74: UInt32(kVK_ANSI_J), 75: UInt32(kVK_ANSI_K), 76: UInt32(kVK_ANSI_L),
@@ -326,9 +326,23 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             89: UInt32(kVK_ANSI_Y), 90: UInt32(kVK_ANSI_Z),
             48: UInt32(kVK_ANSI_0), 49: UInt32(kVK_ANSI_1), 50: UInt32(kVK_ANSI_2), 51: UInt32(kVK_ANSI_3),
             52: UInt32(kVK_ANSI_4), 53: UInt32(kVK_ANSI_5), 54: UInt32(kVK_ANSI_6), 55: UInt32(kVK_ANSI_7),
-            56: UInt32(kVK_ANSI_8), 57: UInt32(kVK_ANSI_9)
+            56: UInt32(kVK_ANSI_8), 57: UInt32(kVK_ANSI_9),
+            8: UInt32(kVK_Delete), 9: UInt32(kVK_Tab), 13: UInt32(kVK_Return), 27: UInt32(kVK_Escape),
+            32: UInt32(kVK_Space), 33: UInt32(kVK_PageUp), 34: UInt32(kVK_PageDown),
+            35: UInt32(kVK_End), 36: UInt32(kVK_Home), 37: UInt32(kVK_LeftArrow),
+            38: UInt32(kVK_UpArrow), 39: UInt32(kVK_RightArrow), 40: UInt32(kVK_DownArrow),
+            46: UInt32(kVK_ForwardDelete),
+            96: UInt32(kVK_ANSI_Keypad0), 97: UInt32(kVK_ANSI_Keypad1), 98: UInt32(kVK_ANSI_Keypad2),
+            99: UInt32(kVK_ANSI_Keypad3), 100: UInt32(kVK_ANSI_Keypad4), 101: UInt32(kVK_ANSI_Keypad5),
+            102: UInt32(kVK_ANSI_Keypad6), 103: UInt32(kVK_ANSI_Keypad7), 104: UInt32(kVK_ANSI_Keypad8),
+            105: UInt32(kVK_ANSI_Keypad9), 106: UInt32(kVK_ANSI_KeypadMultiply),
+            107: UInt32(kVK_ANSI_KeypadPlus), 109: UInt32(kVK_ANSI_KeypadMinus),
+            110: UInt32(kVK_ANSI_KeypadDecimal), 111: UInt32(kVK_ANSI_KeypadDivide),
+            112: UInt32(kVK_F1), 113: UInt32(kVK_F2), 114: UInt32(kVK_F3), 115: UInt32(kVK_F4),
+            116: UInt32(kVK_F5), 117: UInt32(kVK_F6), 118: UInt32(kVK_F7), 119: UInt32(kVK_F8),
+            120: UInt32(kVK_F9), 121: UInt32(kVK_F10), 122: UInt32(kVK_F11)
         ]
-        return letters[key]
+        return keys[key]
     }
 
     private func setStartupEnabled(_ enabled: Bool) {

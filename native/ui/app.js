@@ -34,7 +34,7 @@ let lastBeep = 0;
 let detailId = null;
 let applyingRemoteSync = false;
 let platform = 'windows';
-const defaultHotkeyForPlatform = () => platform === 'macos' ? {modifiers: 12, key: 84} : {modifiers: 5, key: 84};
+const defaultHotkeyForPlatform = () => ({modifiers: 5, key: 84});
 let activeHotkey = {...defaultHotkeyForPlatform()};
 let pendingHotkey = null;
 let capturingHotkey = false;
@@ -52,10 +52,18 @@ const specialHotkeyKeys = {
   BracketRight: 221, Quote: 222,
 };
 const hotkeyNames = Object.fromEntries(Object.entries(specialHotkeyKeys).map(([name, key]) => [key, name.replace('Arrow', '').replace('Numpad', 'Num ')]));
+const macHotkeyNames = {
+  8: 'Delete', 9: 'Tab', 13: 'Return', 27: 'Escape', 32: 'Space',
+  33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
+  37: 'Left Arrow', 38: 'Up Arrow', 39: 'Right Arrow', 40: 'Down Arrow',
+  46: 'Forward Delete', 106: 'Keypad Multiply', 107: 'Keypad Plus',
+  109: 'Keypad Minus', 110: 'Keypad Decimal', 111: 'Keypad Divide',
+};
 
 function hotkeyFromEvent(event) {
   if ((event.metaKey && platform !== 'macos') || event.getModifierState?.('AltGraph')) return null;
   const code = event.code;
+  if (platform === 'macos' && code === 'Insert') return null;
   let key = specialHotkeyKeys[code];
   if (/^Key[A-Z]$/.test(code)) key = code.charCodeAt(3);
   else if (/^Digit[0-9]$/.test(code)) key = code.charCodeAt(5);
@@ -68,16 +76,16 @@ function hotkeyFromEvent(event) {
 function hotkeyLabel(hotkey = activeHotkey) {
   const key = hotkey.key;
   const name = (key >= 48 && key <= 90) ? String.fromCharCode(key) :
-    (key >= 96 && key <= 105) ? `Num ${key - 96}` :
-    (key >= 112 && key <= 122) ? `F${key - 111}` : hotkeyNames[key] || '?';
+    (key >= 96 && key <= 105) ? `${platform === 'macos' ? 'Keypad' : 'Num'} ${key - 96}` :
+    (key >= 112 && key <= 122) ? `F${key - 111}` : (platform === 'macos' ? macHotkeyNames[key] : hotkeyNames[key]) || '?';
   const modifiers = platform === 'macos'
-    ? [(hotkey.modifiers & 8) && 'Command', (hotkey.modifiers & 4) && 'Shift', (hotkey.modifiers & 1) && 'Option', (hotkey.modifiers & 2) && 'Control']
+    ? [(hotkey.modifiers & 2) && 'Control', (hotkey.modifiers & 1) && 'Option', (hotkey.modifiers & 4) && 'Shift', (hotkey.modifiers & 8) && 'Command']
     : [(hotkey.modifiers & 2) && 'Ctrl', (hotkey.modifiers & 1) && 'Alt', (hotkey.modifiers & 4) && 'Shift'];
   return [...modifiers, name].filter(Boolean).join('+');
 }
 function modifierLabel(modifiers) {
   return (platform === 'macos'
-    ? [(modifiers & 8) && 'Command', (modifiers & 4) && 'Shift', (modifiers & 1) && 'Option', (modifiers & 2) && 'Control']
+    ? [(modifiers & 2) && 'Control', (modifiers & 1) && 'Option', (modifiers & 4) && 'Shift', (modifiers & 8) && 'Command']
     : [(modifiers & 2) && 'Ctrl', (modifiers & 1) && 'Alt', (modifiers & 4) && 'Shift']).filter(Boolean).join('+');
 }
 const availabilityGradientCache = new Map();
@@ -1045,7 +1053,10 @@ function directionOptions() {
 
 function openDirection() {
   const title = lang() === 'ru' ? 'Появление и скрытие' : 'Show and hide';
-  modal(title, `<p class="settings-help">${lang() === 'ru' ? `Виджет уезжает к выбранному краю экрана и возвращается с той же стороны. Открыть снова: ${hotkeyLabel()} или значок в трее.` : `The widget hides toward this screen edge and returns from the same side. Reopen with ${hotkeyLabel()} or the tray icon.`}</p><div class="direction-picker">${directionOptions().map(([value,name]) => `<button class="direction-choice ${config.settings.overlay_direction === value ? 'selected' : ''}" data-direction="${value}" aria-pressed="${config.settings.overlay_direction === value}">${name}</button>`).join('')}</div>`);
+  const statusIcon = platform === 'macos'
+    ? (lang() === 'ru' ? 'значок в строке меню' : 'the menu bar icon')
+    : (lang() === 'ru' ? 'значок в трее' : 'the tray icon');
+  modal(title, `<p class="settings-help">${lang() === 'ru' ? `Виджет уезжает к выбранному краю экрана и возвращается с той же стороны. Открыть снова: ${hotkeyLabel()} или ${statusIcon}.` : `The widget hides toward this screen edge and returns from the same side. Reopen with ${hotkeyLabel()} or ${statusIcon}.`}</p><div class="direction-picker">${directionOptions().map(([value,name]) => `<button class="direction-choice ${config.settings.overlay_direction === value ? 'selected' : ''}" data-direction="${value}" aria-pressed="${config.settings.overlay_direction === value}">${name}</button>`).join('')}</div>`);
   $$('[data-direction]').forEach(button => button.onclick = () => {
     config.settings.overlay_direction = button.dataset.direction;
     saveConfig(); openDirection();
