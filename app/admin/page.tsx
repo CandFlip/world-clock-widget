@@ -21,22 +21,24 @@ export default function AdminPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [copy, setCopy] = useState<{ ru: Record<string, string>; en: Record<string, string> }>({ ru: {}, en: {} });
-  const load = useCallback(async () => {
+  const load = useCallback(async (syncForms = true) => {
     const response = await fetch('/api/admin/overview');
     const body = await response.json() as Data & { error?: string };
     if (!response.ok) throw new Error(body.error || 'Не удалось загрузить данные');
     setData(body);
-    setSettings({
-      ...body.settings,
-      story_title_ru: body.settings?.story_title_ru ?? storyDefaults.ru.title,
-      story_title_en: body.settings?.story_title_en ?? storyDefaults.en.title,
-      author_story_ru: body.settings?.author_story_ru ?? [storyDefaults.ru.lead, ...storyDefaults.ru.paragraphs].join('\n\n'),
-      author_story_en: body.settings?.author_story_en ?? [storyDefaults.en.lead, ...storyDefaults.en.paragraphs].join('\n\n'),
-      story_note_ru: body.settings?.story_note_ru ?? storyDefaults.ru.note,
-      story_note_en: body.settings?.story_note_en ?? storyDefaults.en.note,
-    });
-    setIdeas(parseIdeas(body.settings?.roadmap_ideas));
-    setCopy({ ru: siteCopy('ru', body.settings?.ui_copy_ru), en: siteCopy('en', body.settings?.ui_copy_en) });
+    if (syncForms) {
+      setSettings({
+        ...body.settings,
+        story_title_ru: body.settings?.story_title_ru ?? storyDefaults.ru.title,
+        story_title_en: body.settings?.story_title_en ?? storyDefaults.en.title,
+        author_story_ru: body.settings?.author_story_ru ?? [storyDefaults.ru.lead, ...storyDefaults.ru.paragraphs].join('\n\n'),
+        author_story_en: body.settings?.author_story_en ?? [storyDefaults.en.lead, ...storyDefaults.en.paragraphs].join('\n\n'),
+        story_note_ru: body.settings?.story_note_ru ?? storyDefaults.ru.note,
+        story_note_en: body.settings?.story_note_en ?? storyDefaults.en.note,
+      });
+      setIdeas(parseIdeas(body.settings?.roadmap_ideas));
+      setCopy({ ru: siteCopy('ru', body.settings?.ui_copy_ru), en: siteCopy('en', body.settings?.ui_copy_en) });
+    }
     setError('');
   }, []);
   useEffect(() => { void load().catch((e) => setError(e.message)); }, [load]);
@@ -46,7 +48,7 @@ export default function AdminPage() {
       const response = await fetch('/api/admin/manage', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error || 'Не удалось сохранить');
-      await load();
+      await load(false);
       setNotice('Сохранено');
       return true;
     } catch (e) { setNotice(e instanceof Error ? e.message : 'Ошибка сохранения'); return false; }
