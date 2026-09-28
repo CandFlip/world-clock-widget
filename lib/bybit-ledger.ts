@@ -46,8 +46,12 @@ function usdCents(row: BybitRow) {
 
 export async function syncBybitLedger(force = false) {
   if (!env.BYBIT_API_KEY || !env.BYBIT_API_SECRET) return { enabled: false, imported: 0 };
-  const syncState = await env.DB.prepare("SELECT value FROM site_settings WHERE key='bybit_sync_at'").first<{ value: string }>();
-  if (!force && syncState && Date.now() - Number(syncState.value) < 60_000) return { enabled: true, imported: 0 };
+  if (!force) {
+    const startedAt = Date.now();
+    const lease = await env.DB.prepare("INSERT INTO site_settings(key,value,updated_at) VALUES('bybit_sync_at',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at WHERE CAST(site_settings.value AS INTEGER) < ?")
+      .bind(String(startedAt), new Date(startedAt).toISOString(), String(startedAt - 60_000)).run();
+    if (!lease.meta.changes) return { enabled: true, imported: 0 };
+  }
   const [onchain, internal] = await Promise.all([
     readPages('/v5/asset/deposit/query-record'),
     readPages('/v5/asset/deposit/query-internal-record'),

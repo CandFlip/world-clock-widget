@@ -1,11 +1,11 @@
-import { env } from 'cloudflare:workers';
+import { env, waitUntil } from 'cloudflare:workers';
 import { getSessionUser } from '@/lib/auth';
 import { parseIdeas } from '@/lib/roadmap';
 import { syncBybitLedger } from '@/lib/bybit-ledger';
 import { mergeSupportMethods, type SupportMethod } from '@/lib/support-methods';
 
 export async function GET(request: Request) {
-  await syncBybitLedger().catch((error) => console.error('Bybit ledger sync failed', error));
+  waitUntil(syncBybitLedger().catch((error) => console.error('Bybit ledger sync failed', error)));
   const user = await getSessionUser(request);
   const [votes, funding, settings, methods, suggestions] = await Promise.all([
     env.DB.prepare('SELECT option_id, COUNT(*) count FROM votes GROUP BY option_id').all<{ option_id: string; count: number }>(),

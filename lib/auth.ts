@@ -99,7 +99,6 @@ export async function upsertUser(profile: { id: string; email: string; name: str
 }
 
 export async function createSession(userId: string) {
-  await ensureAuthTables();
   const token = randomToken();
   const tokenHash = await hashToken(token);
   const now = new Date();
@@ -116,7 +115,6 @@ export async function createSession(userId: string) {
 export async function getSessionUser(request: Request): Promise<SessionUser | null> {
   const token = readCookie(request, SESSION_COOKIE);
   if (!token) return null;
-  await ensureAuthTables();
   const tokenHash = await hashToken(token);
   const row = await env.DB.prepare(`SELECT users.id, users.email, users.name, users.picture
     FROM sessions JOIN users ON users.id = sessions.user_id
@@ -130,7 +128,6 @@ export async function getSessionUser(request: Request): Promise<SessionUser | nu
 export async function deleteSession(request: Request) {
   const token = readCookie(request, SESSION_COOKIE);
   if (token) {
-    await ensureAuthTables();
     await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await hashToken(token)).run();
   }
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;

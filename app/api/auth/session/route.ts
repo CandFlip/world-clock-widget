@@ -1,12 +1,12 @@
 import { createSession, isAdminEmail, publicUser, upsertUser, verifyFirebaseCredential } from '@/lib/auth';
+import { sessionInputError } from '@/lib/auth-input';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json() as { credential?: string };
-    if (!body.credential || body.credential.length > 5000) {
-      return Response.json({ error: 'Missing Google credential.' }, { status: 400 });
-    }
-    const profile = await verifyFirebaseCredential(body.credential);
+    const inputError = sessionInputError(request, body);
+    if (inputError) return Response.json({ error: inputError }, { status: 400 });
+    const profile = await verifyFirebaseCredential(body.credential!);
     await upsertUser(profile);
     const session = await createSession(profile.id);
     const isAdmin = isAdminEmail(profile.email);

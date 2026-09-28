@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
 import Image from 'next/image';
 import { parseIdeas, type Idea } from '@/lib/roadmap';
 import { content as storyDefaults } from '@/lib/story';
@@ -61,10 +60,10 @@ export default function AdminPage() {
     reader.onload = () => setMethod((current) => ({ ...current, image: typeof reader.result === 'string' ? reader.result : '' }));
     reader.readAsDataURL(file);
   }
-  if (error) return <main className="admin-shell"><div className="admin-error">{error}<br /><Link href="/">Вернуться и войти</Link></div></main>;
+  if (error) return <main className="admin-shell"><div className="admin-error">{error}<br /><a href="/">Вернуться и войти</a></div></main>;
   if (!data) return <main className="admin-shell"><div className="admin-loading">Загрузка…</div></main>;
   return <main className="admin-shell">
-    <header className="admin-header"><Link href="/">← На сайт</Link><strong>World Clock · Админка</strong></header>
+    <header className="admin-header"><a href="/">← На сайт</a><strong>World Clock · Админка</strong></header>
     <section className="admin-intro"><p className="section-kicker">Закрытый раздел</p><h1>Управление сайтом</h1><p>Настройки публикации, способы поддержки и предложения пользователей.</p></section>
     <section className="metric-grid"><article><strong>{data.metrics.registered}</strong><p>зарегистрировано</p></article><article><strong>{data.metrics.voters}</strong><p>проголосовало</p></article><article><strong>{data.metrics.suggestions}</strong><p>идей</p></article><article><strong>{data.metrics.pendingContributions}</strong><p>платежей обрабатывается</p></article></section>
     <output className="admin-status">{notice}</output>
