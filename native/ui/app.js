@@ -31,6 +31,106 @@ let expandedBase = false;
 let suppressCityClick = false;
 let alertId = null;
 let lastBeep = 0;
+let alarmAudio = null;
+let alarmSoundGeneration = 0;
+let soundLibrary = [];
+let soundLibraryReady = Promise.resolve();
+const soundUrls = new Map();
+const alarmSoundDatabase = 'WorldClockWidgetAlarmSound';
+
+function soundDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(alarmSoundDatabase, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('sounds');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function soundStorage(action, key, value) {
+  const db = await soundDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = db.transaction('sounds', ['get','getAll'].includes(action) ? 'readonly' : 'readwrite');
+      const store = transaction.objectStore('sounds');
+      const request = action === 'put' ? store.put(value, key) : action === 'getAll' ? store.getAll() : store[action](key);
+      let result;
+      request.onsuccess = () => { result = request.result; };
+      transaction.oncomplete = () => resolve(result);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error || new Error('aborted'));
+    });
+  } finally { db.close(); }
+}
+
+async function loadSoundLibrary() {
+  try {
+    const legacy = await soundStorage('get', 'alarm');
+    if (legacy && !legacy.id) {
+      const migrated = {id:'imported-legacy', name:config.settings.alarm_sound_name || 'Audio', favorite:true, blob:legacy};
+      await soundStorage('put', migrated.id, migrated);
+      config.settings.alarm_sound_id ||= migrated.id;
+      delete config.settings.alarm_sound_name;
+      saveConfig();
+      await soundStorage('delete', 'alarm');
+    }
+    soundLibrary = (await soundStorage('getAll')).filter(sound => sound?.id && sound.blob);
+  } catch { console.warn('Alarm sound library could not be loaded'); }
+}
+
+function defaultSoundId() {
+  const id = config.settings.alarm_sound_id;
+  return soundLibrary.some(sound => sound.id === id) ? id : 'system';
+}
+function resolvedSoundId(entry) {
+  const id = entry?.sound_id && entry.sound_id !== 'default' ? entry.sound_id : defaultSoundId();
+  return id === 'system' || soundLibrary.some(sound => sound.id === id) ? id : 'system';
+}
+function soundName(id) {
+  if (id === 'default') return lang() === 'ru' ? 'Общий звук' : 'Default sound';
+  if (id === 'system') return lang() === 'ru' ? 'Звук системы' : 'System sound';
+  return soundLibrary.find(sound => sound.id === id)?.name || soundName('system');
+}
+function stopAlarmSound() {
+  alarmSoundGeneration++;
+  if (alarmAudio) { alarmAudio.pause(); alarmAudio.currentTime = 0; alarmAudio = null; }
+  send('stopBeep');
+}
+async function playAlarmSound(entry) {
+  stopAlarmSound();
+  const generation = alarmSoundGeneration;
+  await soundLibraryReady;
+  if (generation !== alarmSoundGeneration) return;
+  const id = resolvedSoundId(entry);
+  if (id === 'system') { send('systemBeep'); return; }
+  const sound = soundLibrary.find(sound => sound.id === id);
+  if (!sound) { send('systemBeep'); return; }
+  try {
+    if (!soundUrls.has(id)) soundUrls.set(id, URL.createObjectURL(sound.blob));
+    const audio = new Audio(soundUrls.get(id));
+    alarmAudio = audio;
+    audio.volume = 1;
+    audio.onerror = () => { if (generation === alarmSoundGeneration) { alarmAudio = null; send('systemBeep'); } };
+    await audio.play();
+  } catch {
+    if (generation === alarmSoundGeneration) { alarmAudio = null; send('systemBeep'); }
+  }
+}
+function soundChoicesHtml(selected = 'default') {
+  if (selected === 'builtin') selected = 'system';
+  const options = ['default','system', ...soundLibrary.filter(sound => sound.favorite || sound.id === selected).map(sound => sound.id)];
+  return options.map(id => `<button type="button" class="sound-choice ${id === selected ? 'selected' : ''}" data-sound-choice="${esc(id)}" aria-pressed="${id === selected}">${esc(soundName(id))}</button>`).join('');
+}
+function bindSoundChoices(root, selected = 'default') {
+  root.dataset.soundId = selected === 'builtin' ? 'system' : selected;
+  root.querySelectorAll('[data-sound-choice]').forEach(button => button.onclick = () => {
+    root.dataset.soundId = button.dataset.soundChoice;
+    root.querySelectorAll('[data-sound-choice]').forEach(tab => {
+      const active = tab === button;
+      tab.classList.toggle('selected', active); tab.setAttribute('aria-pressed', String(active));
+    });
+  });
+}
 let detailId = null;
 let applyingRemoteSync = false;
 let platform = 'windows';
@@ -305,6 +405,18 @@ function originCaption() {
   return timeAt(new Date(), baseZone());
 }
 
+function timelineHour(hoursAhead, now = new Date(), zone = baseZone()) {
+  const hour = +zonedParts(new Date(now.getTime() + hoursAhead * 3600000), zone).hour;
+  return resolvedTimeFormat() === '24'
+    ? String(hour).padStart(2, '0')
+    : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+function timelineCaption(hoursAhead, now = new Date(), zone = baseZone()) {
+  const value = timeAt(new Date(now.getTime() + hoursAhead * 3600000), zone);
+  return value.replace(/:(\d{2})/, '<small class="timeline-minutes">:$1</small>');
+}
+
 function baseSolarKey() {
   const key = config.settings.top_clock_mode === 'manual' ? config.settings.manual_top_timezone : baseZone();
   return solarZoneAliases.get(zoneOf(key)) || key;
@@ -504,7 +616,7 @@ function render() {
       <div class="slider-rail" aria-hidden="true"><div class="slider-fill"></div></div>
       <div class="slider-thumb" aria-hidden="true"></div>
       <input id="timeSlider" type="range" min="0" max="24" step="1" value="${offset}" aria-label="${t('moveFuture')}" aria-valuetext="${shift}">
-      <div class="marks"><span id="originLabel">${originCaption()}</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+      <div class="marks"><span id="originLabel">${timelineCaption(0)}</span>${[6,12,18,24].map(hours => `<span data-timeline-hour="${hours}">${timelineCaption(hours)}</span>`).join('')}</div>
     </section>
     <section class="${quickClass}" id="quickSection">
       <div class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</div>
@@ -806,7 +918,11 @@ function updateDynamic() {
   }
   const shift = shiftCaption(offset);
   $('#timeSlider').value = liveOffset ?? offset;
-  $('#originLabel').innerHTML = originCaption();
+  const timelineNow = new Date();
+  $('#originLabel').innerHTML = timelineCaption(0, timelineNow, zone);
+  $$('[data-timeline-hour]').forEach(mark => {
+    mark.innerHTML = timelineCaption(+mark.dataset.timelineHour, timelineNow, zone);
+  });
   $('#shiftLabel').textContent = shift;
   updateSliderVisual(liveOffset ?? offset);
   const baseOffset = offsetHours(zone, selected);
@@ -1149,7 +1265,8 @@ function openSettings() {
     <div class="row" id="base"><span>${t('base')}</span><span class="row-value">${config.settings.top_clock_mode === 'auto' ? t('system') : esc(cityName(config.settings.manual_top_timezone))} ›</span></div></div>
     <div class="group"><button class="row settings-button" id="typicalSchedule"><span>${t('typicalSchedule')}</span><span class="row-value">›</span></button>
     <button class="row settings-button" id="citySettings"><span>${t('citySettings')}</span><span class="row-value">${config.timezones.length} ›</span></button></div>
-    <div class="group"><div class="row" id="intervals"><span>${t('intervals')}</span><span class="row-value">${config.settings.reminder_intervals.join(' · ')} ›</span></div></div>
+    <div class="group"><div class="row" id="intervals"><span>${t('intervals')}</span><span class="row-value">${config.settings.reminder_intervals.join(' · ')} ›</span></div>
+    <button class="row settings-button" id="alarmSound"><span>${lang() === 'ru' ? 'Звук будильника' : 'Alarm sound'}</span><span class="row-value">${esc(soundName(defaultSoundId()))} ›</span></button></div>
     <div class="group"><button class="row settings-button" id="quickTitles"><span>${lang() === 'ru' ? 'Быстрые названия' : 'Quick titles'}</span><span class="row-value">›</span></button></div>
     <div class="group"><button class="row settings-button" id="phone"><span>${lang() === 'ru' ? 'Телефон' : 'Phone'}</span><span class="row-value">${window.syncSettingsLabel?.() || (lang() === 'ru' ? 'Подключить Android' : 'Connect Android')} ›</span></button></div>
     <div class="group"><button class="row settings-button" id="direction"><span>${lang() === 'ru' ? 'Появление и скрытие' : 'Show and hide'}</span><span class="row-value">${directionOptions().find(([value]) => value === config.settings.overlay_direction)?.[1] || directionOptions()[1][1]} ›</span></button>
@@ -1168,6 +1285,7 @@ function openSettings() {
   $('#typicalSchedule').onclick = () => openScheduleEditor(null);
   $('#citySettings').onclick = openCitySettingsList;
   $('#intervals').onclick = openIntervals;
+  $('#alarmSound').onclick = openAlarmSound;
   $('#direction').onclick = openDirection;
   $('#hotkey').onclick = openHotkey;
   $('#quickTitles').onclick = openQuickTitles;
@@ -1178,6 +1296,83 @@ function openSettings() {
     send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
     openSettings();
   };
+}
+
+async function openAlarmSound() {
+  await soundLibraryReady;
+  const ru = lang() === 'ru', selected = defaultSoundId();
+  modal(ru ? 'Звуки будильника' : 'Alarm sounds',
+    `<div class="group"><div class="row toggle-row"><span>${ru ? 'Звук системы' : 'System sound'}</span><button class="switch ${selected === 'system' ? 'on' : ''}" id="systemSoundSwitch" role="switch" aria-checked="${selected === 'system'}" aria-label="${ru ? 'Звук системы' : 'System sound'}"></button></div></div>
+    <p class="settings-help">${ru ? 'Общий звук для будильников. Добавляйте файлы, отмечайте избранное звёздочкой и выбирайте отдельный звук в редакторе будильника.' : 'Default alarm sound. Add files, mark favorites with a star and choose an individual sound in the alarm editor.'}</p>
+    <label class="sound-drop" id="soundDrop" for="soundFile"><strong>${ru ? 'Перетащите звуки сюда' : 'Drop sounds here'}</strong><span>${ru ? 'или нажмите, чтобы выбрать файлы' : 'or click to choose files'}</span></label>
+    <input id="soundFile" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.wma,.ogg,.flac,.opus" multiple hidden>
+    <p class="sound-feedback" id="soundFeedback" role="status"></p>
+    <div class="sound-library">${soundLibrary.map(sound => sound.id).map(id => {
+      const sound = soundLibrary.find(item => item.id === id);
+      return `<div class="sound-row"><button class="sound-select ${selected === id ? 'selected' : ''}" data-select-sound="${esc(id)}" aria-pressed="${selected === id}" title="${esc(soundName(id))}">${selected === id ? '✓ ' : ''}${esc(soundName(id))}</button><button class="sound-action" data-preview-sound="${esc(id)}" aria-label="${ru ? 'Прослушать' : 'Preview'}">▶</button>${sound ? `<button class="sound-action ${sound.favorite ? 'favorite' : ''}" data-favorite-sound="${esc(id)}" aria-pressed="${sound.favorite}" aria-label="${ru ? 'Избранное' : 'Favorite'}">${sound.favorite ? '★' : '☆'}</button><button class="sound-action" data-delete-sound="${esc(id)}" aria-label="${ru ? 'Удалить звук' : 'Delete sound'}">${trashIcon}</button>` : '<span></span><span></span>'}</div>`;
+    }).join('')}</div><button class="secondary" id="soundPreview">${ru ? '▶ Проверить выбранный звук' : '▶ Test selected sound'}</button>`);
+  $('#systemSoundSwitch').onclick = () => {
+    config.settings.alarm_sound_id = selected === 'system' ? (soundLibrary.some(sound => sound.id === config.settings.manual_alarm_sound_id) ? config.settings.manual_alarm_sound_id : soundLibrary[0]?.id || 'system') : 'system';
+    saveConfig(); stopAlarmSound(); openAlarmSound();
+  };
+  $$('[data-select-sound]').forEach(button => button.onclick = () => {
+    config.settings.alarm_sound_id = button.dataset.selectSound;
+    config.settings.manual_alarm_sound_id = button.dataset.selectSound;
+    saveConfig(); stopAlarmSound(); openAlarmSound();
+  });
+  $$('[data-preview-sound]').forEach(button => button.onclick = () => playAlarmSound({sound_id:button.dataset.previewSound}));
+  $$('[data-favorite-sound]').forEach(button => button.onclick = async () => {
+    const sound = soundLibrary.find(item => item.id === button.dataset.favoriteSound);
+    try {
+      const next = {...sound, favorite:!sound.favorite};
+      await soundStorage('put', sound.id, next);
+      Object.assign(sound, next); openAlarmSound();
+    } catch { $('#soundFeedback').textContent = ru ? 'Не удалось сохранить избранное.' : 'Could not save favorites.'; }
+  });
+  $$('[data-delete-sound]').forEach(button => button.onclick = () => removeAlarmSound(button.dataset.deleteSound));
+  const drop = $('#soundDrop');
+  $('#soundFile').onchange = event => importAlarmSounds(event.target.files);
+  drop.ondragover = event => { if (event.dataTransfer?.types.includes('Files')) { event.preventDefault(); drop.classList.add('drop-target'); } };
+  drop.ondragleave = () => drop.classList.remove('drop-target');
+  drop.ondrop = event => { event.preventDefault(); drop.classList.remove('drop-target'); importAlarmSounds(event.dataTransfer?.files); };
+  $('#soundPreview').onclick = () => playAlarmSound();
+  $('#back').onclick = () => { stopAlarmSound(); openSettings(); };
+}
+async function removeAlarmSound(id) {
+  try {
+    await soundStorage('delete', id);
+    stopAlarmSound();
+    if (soundUrls.has(id)) { URL.revokeObjectURL(soundUrls.get(id)); soundUrls.delete(id); }
+    soundLibrary = soundLibrary.filter(sound => sound.id !== id);
+    if (defaultSoundId() === id) config.settings.alarm_sound_id = 'system';
+    if (config.settings.manual_alarm_sound_id === id) delete config.settings.manual_alarm_sound_id;
+    let changed = false;
+    reminders.entries.forEach(entry => { if (entry.sound_id === id) { delete entry.sound_id; changed = true; } });
+    saveConfig(); if (changed) saveReminders(); openAlarmSound();
+  } catch { $('#soundFeedback').textContent = lang() === 'ru' ? 'Не удалось удалить звук.' : 'Could not delete sound.'; }
+}
+async function importAlarmSounds(files) {
+  const errors = [];
+  for (const file of [...(files || [])]) {
+    const candidate = URL.createObjectURL(file);
+    try {
+      if (!file.size || file.size > 30 * 1024 * 1024) throw new Error('size');
+      await new Promise((resolve, reject) => {
+        const audio = new Audio(candidate);
+        const timer = setTimeout(() => finish(new Error('timeout')), 15000);
+        const finish = error => { clearTimeout(timer); audio.oncanplay = audio.onerror = null; audio.removeAttribute('src'); audio.load(); error ? reject(error) : resolve(); };
+        audio.oncanplay = () => finish(); audio.onerror = () => finish(new Error('decode')); audio.load();
+      });
+      const sound = {id:crypto.randomUUID(), name:file.name.slice(0,120), favorite:true, blob:file};
+      await soundStorage('put', sound.id, sound);
+      soundLibrary.push(sound);
+      config.settings.alarm_sound_id = config.settings.manual_alarm_sound_id = sound.id;
+      saveConfig();
+    } catch { errors.push(file.name); }
+    finally { URL.revokeObjectURL(candidate); }
+  }
+  stopAlarmSound(); await openAlarmSound();
+  if (errors.length) $('#soundFeedback').textContent = (lang() === 'ru' ? 'Не удалось добавить (нужен аудиофайл до 30 МБ): ' : 'Could not add (audio file under 30 MB required): ') + errors.join(', ');
 }
 
 function scheduleEditorBody(schedule, inherited = false) {
@@ -1351,15 +1546,19 @@ function checkDue() {
   if (!entry) return;
   if (entry.state !== 'ringing') { entry.state = 'ringing'; saveReminders(); }
   if (alertId === entry.id) {
-    if (Date.now() - lastBeep > 10000) { send('beep'); lastBeep = Date.now(); }
+    if (Date.now() - lastBeep > 10000) {
+      if (!alarmAudio || alarmAudio.ended || alarmAudio.paused) playAlarmSound(entry);
+      lastBeep = Date.now();
+    }
     return;
   }
   alertId = entry.id;
   lastBeep = Date.now();
   send('show');
-  send('beep');
+  playAlarmSound(entry);
   modal(t('alarm'), `<div class="alert-city">${esc(entry.title || t('alarm'))}</div><div class="alarm-context">${esc(sourceCaption(entry))}</div><div class="alert-time">${timeAt(new Date(entry.alarm * 1000), zoneOf(entry.zone || baseZone()))}</div><button class="primary" id="ack">${t('got')}</button><button class="secondary" id="snooze">${t('snooze')}</button>`);
   $('#ack').onclick = () => {
+    stopAlarmSound();
     if (entry.repeat === 'daily') {
       entry.alarm = nextDailyAlarm(entry);
       entry.target = entry.alarm;
@@ -1369,6 +1568,7 @@ function checkDue() {
     alertId = null; saveReminders(); closeModal(); renderAlarms();
   };
   $('#snooze').onclick = () => {
+    stopAlarmSound();
     entry.alarm = Date.now() / 1000 + 300;
     entry.started_at = Date.now() / 1000;
     entry.state = 'pending';
@@ -1455,6 +1655,7 @@ host?.addEventListener('message', event => {
   const previousTitleVersion = config.settings?.title_library_version;
   const previousReminders = JSON.stringify(reminders);
   normalize();
+  soundLibraryReady = loadSoundLibrary();
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
   if (previousTitleVersion !== 1) saveConfig();
   send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);

@@ -3,13 +3,7 @@ name: Build and publish macOS beta
 on:
   workflow_dispatch:
     inputs:
-      publish:
-        description: Publish the v1.1.108 GitHub release
-        type: boolean
-        default: false
   push:
-    branches:
-      - 'codex/macos-beta'
     tags:
       - 'v*'
 
@@ -22,28 +16,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check tag matches application version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(sed -n 's/.*<key>CFBundleShortVersionString<\/key><string>\([^<]*\)<\/string>.*/\1/p' macos/Info.plist)
+          test "v$version" = "$GITHUB_REF_NAME"
+
       - name: Build universal macOS application and DMG
-        env:
-          APP_VERSION: 1.1.108
         run: bash macos/build.sh
 
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WorldClockWidget-macOS-v1.1.108
-          path: release/WorldClockWidget-macOS-v1.1.108.dmg
+          name: WorldClockWidget-macOS-${{ github.ref_name }}
+          path: release/WorldClockWidget-macOS-*.dmg
           if-no-files-found: error
 
       - name: Publish cross-platform GitHub release
-        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish == true
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.1.108
-          name: World Clock Widget v1.1.108
+          tag_name: ${{ github.ref_name }}
+          name: World Clock Widget ${{ github.ref_name }}
           body: |
             Бесплатный MVP-релиз World Clock Widget для Windows и macOS.
 
             macOS Beta собрана как универсальное приложение для Apple Silicon и Intel (macOS 13+). Пока проект не использует платный Apple Developer ID, при первом запуске откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть». Отключать Gatekeeper или использовать терминал не требуется.
           files: |
-            release/WorldClockWidget-macOS-v1.1.108.dmg
+            release/WorldClockWidget-macOS-*.dmg
           make_latest: true

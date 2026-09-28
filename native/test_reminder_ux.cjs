@@ -192,3 +192,25 @@ run("reminders.entries[0].repeat='none'; reminders.entries[0].alarm=Date.parse('
 get('#ack').onclick();
 assert.equal(run('reminders.entries.length'),0);
 console.log('Daily alarms survive snooze and acknowledgment at the same local time; one-time alarms are removed.');
+
+run(`soundLibrary = [{id:'favorite-one',name:'First.mp3',favorite:true,blob:{}},{id:'other-two',name:'Second.wav',favorite:false,blob:{}}]; config.settings.alarm_sound_id = 'system';`);
+assert.equal(run("resolvedSoundId({})"),'system');
+assert.equal(run("resolvedSoundId({sound_id:'favorite-one'})"),'favorite-one');
+assert.equal(run("resolvedSoundId({sound_id:'missing'})"),'system');
+assert.ok(run("soundChoicesHtml('default')").includes('First.mp3'));
+assert.ok(!run("soundChoicesHtml('default')").includes('Second.wav'));
+assert.ok(run("soundChoicesHtml('other-two')").includes('Second.wav'));
+run(`reminders.entries = [{id:'sound-edit',zone:'Asia/Tokyo',alarm:Date.now()/1000+86400,state:'pending',sound_id:'favorite-one'}]; editAlarm('sound-edit');`);
+assert.equal(get('#editorSoundChoices').dataset.soundId,'favorite-one');
+get('#editorSoundChoices').dataset.soundId='system';
+get('#cancelAlarm').onclick();
+assert.equal(run("reminders.entries[0].sound_id"),'favorite-one');
+run("editAlarm('sound-edit')");
+get('#editorSoundChoices').dataset.soundId='system';
+get('#saveAlarm').onclick();
+assert.equal(run("reminders.entries[0].sound_id"),'system');
+run("editAlarm('sound-edit')");
+get('#editorSoundChoices').dataset.soundId='default';
+get('#saveAlarm').onclick();
+assert.equal(run("reminders.entries[0].sound_id"),undefined);
+console.log('Alarm sound buttons: favorites, individual override, missing file fallback, save and cancel passed.');

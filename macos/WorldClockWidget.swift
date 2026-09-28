@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.108"
+private let appVersion = "v1.1.114"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -94,6 +94,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         controller.add(self, name: "host")
         controller.addUserScript(WKUserScript(source: bridgeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let configuration = WKWebViewConfiguration()
+        configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.userContentController = controller
         configuration.websiteDataStore = .default()
         webView = WKWebView(frame: panel.contentView!.bounds, configuration: configuration)
@@ -145,7 +146,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func runSelfTest() {
-        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos'"
+        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function'"
         let nativeHotKeyMapping = currentModifiers == 5 && virtualKeyCode(for: 84) == UInt32(kVK_ANSI_T)
         webView.evaluateJavaScript(script) { result, error in
             let passed = nativeHotKeyMapping && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
@@ -227,7 +228,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             if let url = URL(string: value), url.scheme == "https" { NSWorkspace.shared.open(url) }
         } else if message.hasPrefix("setStartup\n") {
             setStartupEnabled(payload(message, prefix: "setStartup\n") == "1")
-        } else if message == "beep" {
+        } else if message == "systemBeep" || message == "beep" {
             NSSound.beep()
         }
     }

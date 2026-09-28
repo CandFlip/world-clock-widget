@@ -120,7 +120,7 @@ function openQuickTitles() {
 
 function deleteAlarm(id) {
   reminders.entries = reminders.entries.filter(entry => entry.id !== id);
-  if (alertId === id) alertId = null;
+  if (alertId === id) { alertId = null; stopAlarmSound(); }
   saveReminders(); closeModal(); renderAlarms();
 }
 
@@ -184,8 +184,9 @@ function openAlarmEditor(entry, isNew) {
   const id = entry.id;
   const zone = zoneOf(entry.zone), originalLocal = inputAt(entry.alarm*1000, zone);
   const [date,time] = originalLocal.split('T'), [hour,minute] = time.split(':');
-  modal(isNew ? t('newReminder') : t('edit'), `<div class="schedule-editor"><div class="alarm-context">${esc(sourceCaption(entry))}</div><div class="schedule-labels"><span>${lang() === 'ru' ? 'День' : 'Day'}</span><span>${lang() === 'ru' ? 'Часы' : 'Hours'}</span><span>${lang() === 'ru' ? 'Минуты' : 'Minutes'}</span></div><div class="schedule-wheels"><div id="alarmDate"></div><div id="alarmHour"></div><div id="alarmMinute"></div></div><div class="row toggle-row alarm-repeat-row"><span>${lang() === 'ru' ? 'Ежедневно' : 'Daily'}</span><button class="switch ${entry.repeat === 'daily' ? 'on' : ''}" id="dailySwitch" role="switch" aria-checked="${entry.repeat === 'daily' ? 'true' : 'false'}" aria-label="${lang() === 'ru' ? 'Повторять ежедневно' : 'Repeat daily'}"></button></div><div id="scheduleError" class="schedule-error" role="status"></div><button class="primary schedule-save" id="saveAlarm">${t(isNew ? 'create' : 'save')}</button><label class="section edit-label" for="editTitle">${lang() === 'ru' ? 'Название (необязательно)' : 'Title (optional)'}</label><input class="search" id="editTitle" value="${esc(entry.title || '')}"><div class="editor-title-choices" id="editorTitleChoices">${editorTitleChoices(entry.title || '')}</div><button class="secondary" id="cancelAlarm">${t('cancel')}</button>${isNew ? '' : `<button class="quiet-delete" id="removeAlarm">${t('delete')}</button>`}</div>`);
+  modal(isNew ? t('newReminder') : t('edit'), `<div class="schedule-editor"><div class="alarm-context">${esc(sourceCaption(entry))}</div><div class="schedule-labels"><span>${lang() === 'ru' ? 'День' : 'Day'}</span><span>${lang() === 'ru' ? 'Часы' : 'Hours'}</span><span>${lang() === 'ru' ? 'Минуты' : 'Minutes'}</span></div><div class="schedule-wheels"><div id="alarmDate"></div><div id="alarmHour"></div><div id="alarmMinute"></div></div><div class="row toggle-row alarm-repeat-row"><span>${lang() === 'ru' ? 'Ежедневно' : 'Daily'}</span><button class="switch ${entry.repeat === 'daily' ? 'on' : ''}" id="dailySwitch" role="switch" aria-checked="${entry.repeat === 'daily' ? 'true' : 'false'}" aria-label="${lang() === 'ru' ? 'Повторять ежедневно' : 'Repeat daily'}"></button></div><label class="section">${lang() === 'ru' ? 'Звук будильника' : 'Alarm sound'}</label><div class="editor-sound-choices" id="editorSoundChoices">${soundChoicesHtml(entry.sound_id || 'default')}</div><div id="scheduleError" class="schedule-error" role="status"></div><button class="primary schedule-save" id="saveAlarm">${t(isNew ? 'create' : 'save')}</button><label class="section edit-label" for="editTitle">${lang() === 'ru' ? 'Название (необязательно)' : 'Title (optional)'}</label><input class="search" id="editTitle" value="${esc(entry.title || '')}"><div class="editor-title-choices" id="editorTitleChoices">${editorTitleChoices(entry.title || '')}</div><button class="secondary" id="cancelAlarm">${t('cancel')}</button>${isNew ? '' : `<button class="quiet-delete" id="removeAlarm">${t('delete')}</button>`}</div>`);
   bindEditorTitles();
+  bindSoundChoices($('#editorSoundChoices'), entry.sound_id || 'default');
   const currentDate = inputAt(Date.now(),zone).split('T')[0];
   const dayNumber = value => Math.round(Date.parse(value + 'T00:00:00Z') / 86400000);
   const dateString = value => new Date(value * 86400000).toISOString().slice(0,10);
@@ -228,6 +229,8 @@ function openAlarmEditor(entry, isNew) {
     if (!Number.isFinite(timestamp) || inputAt(timestamp,zone) !== local) {toast(lang() === 'ru' ? 'Это местное время недоступно. Выберите другое.' : 'This local time is unavailable. Choose another.'); return;}
     if (timestamp <= Date.now()) {toast(invalidAlarmMessage()); return;}
     entry.title = $('#editTitle').value.trim();
+    const soundId = $('#editorSoundChoices').dataset.soundId;
+    if (soundId && soundId !== 'default') entry.sound_id = soundId; else delete entry.sound_id;
     entry.repeat = $('#dailySwitch').getAttribute('aria-checked') === 'true' ? 'daily' : 'none';
     if (entry.repeat === 'daily') entry.repeat_time = local.split('T')[1];
     else delete entry.repeat_time;
@@ -235,7 +238,7 @@ function openAlarmEditor(entry, isNew) {
     entry.started_at = Date.now()/1000; entry.state = 'pending';
     syncReminderModel(entry);
     if (isNew) reminders.entries.push(entry);
-    if (alertId === id) alertId = null;
+    if (alertId === id) { alertId = null; stopAlarmSound(); }
     saveReminders(); renderAlarms(); closeModal();
   };
   $('#cancelAlarm').onclick = closeModal;

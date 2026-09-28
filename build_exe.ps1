@@ -84,12 +84,7 @@ Invoke-Python -ArgsList @(
     "-m", "PyInstaller",
     "--noconfirm",
     "--clean",
-    "--onefile",
-    "--windowed",
-    "--name", "WorldClockWidget",
-    "--collect-data", "tzdata",
-    "--add-data", "assets;assets",
-    "world_clock_widget.py"
+    "WorldClockWidget.spec"
 )
 
-Write-Host "[3/3] Done. EXE: $PSScriptRoot\\dist\\WorldClockWidget.exe"
+Write-Host "[3/3] Done. EXE: $PSScriptRoot\\dist\\WorldClockWidget\\WorldClockWidget.exe"

@@ -30,7 +30,7 @@ constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.108";
+constexpr wchar_t kVersion[] = L"v1.1.114";
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
 
@@ -60,6 +60,7 @@ void initializeWebView();
 
 template<class Interface> const IID& interfaceId();
 template<> const IID& interfaceId<ICoreWebView2WebMessageReceivedEventHandler>() { return IID_ICoreWebView2WebMessageReceivedEventHandler; }
+template<> const IID& interfaceId<ICoreWebView2PermissionRequestedEventHandler>() { return IID_ICoreWebView2PermissionRequestedEventHandler; }
 template<> const IID& interfaceId<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>() { return IID_ICoreWebView2CreateCoreWebView2ControllerCompletedHandler; }
 template<> const IID& interfaceId<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>() { return IID_ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler; }
 template<class Interface> class ComHandlerBase : public Interface {
@@ -85,6 +86,15 @@ public: explicit ControllerHandler(decltype(fn_) fn):fn_(std::move(fn)){} HRESUL
 class MessageHandler final : public ComHandlerBase<ICoreWebView2WebMessageReceivedEventHandler> {
     std::function<HRESULT(ICoreWebView2*,ICoreWebView2WebMessageReceivedEventArgs*)> fn_;
 public: explicit MessageHandler(decltype(fn_) fn):fn_(std::move(fn)){} HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2* w,ICoreWebView2WebMessageReceivedEventArgs* a) override{return fn_(w,a);}
+};
+class AudioPermissionHandler final : public ComHandlerBase<ICoreWebView2PermissionRequestedEventHandler> {
+public:
+    HRESULT STDMETHODCALLTYPE Invoke(ICoreWebView2*, ICoreWebView2PermissionRequestedEventArgs* args) override {
+        COREWEBVIEW2_PERMISSION_KIND kind{};
+        if (SUCCEEDED(args->get_PermissionKind(&kind)) && kind == COREWEBVIEW2_PERMISSION_KIND_AUTOPLAY)
+            return args->put_State(COREWEBVIEW2_PERMISSION_STATE_ALLOW);
+        return S_OK;
+    }
 };
 
 std::filesystem::path exeDir() {
@@ -472,7 +482,7 @@ void handleMessage(const std::wstring& message) {
         if (url.rfind(L"https://", 0) == 0) ShellExecuteW(g_window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
     else if (message.rfind(L"setStartup\n", 0) == 0 && !setStartupEnabled(payload(L"setStartup\n") == L"1")) logStartup(L"Failed to update Windows startup setting");
-    else if (message == L"beep") MessageBeep(MB_ICONEXCLAMATION);
+    else if (message == L"systemBeep" || message == L"beep") MessageBeep(MB_ICONEXCLAMATION);
 }
 
 void initializeWebView() {
@@ -500,6 +510,10 @@ void initializeWebView() {
                             return S_OK;
                         });
                     EventRegistrationToken token{}; g_webview->add_WebMessageReceived(messageHandler, &token); messageHandler->Release();
+                    auto* audioPermissionHandler = new AudioPermissionHandler();
+                    EventRegistrationToken audioToken{};
+                    g_webview->add_PermissionRequested(audioPermissionHandler, &audioToken);
+                    audioPermissionHandler->Release();
                     auto page = (exeDir()/L"ui"/L"index.html").wstring();
                     std::wstring uri = L"file:///";
                     for (wchar_t ch : page) uri += ch == L'\\' ? L'/' : ch;

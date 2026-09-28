@@ -86,7 +86,7 @@ async function syncInitialize(credential) {
 async function syncBeginPairing() {
   if(!syncBackend()){toast(syncText('Сервис синхронизации не настроен','Sync service is not configured'));return}
   const button=$('#connectPhone');if(button)button.disabled=true;
-  try{const result=await syncRequest('/api/device/pair/start',{method:'POST',body:JSON.stringify({language:lang(),device_name:'Windows'})});syncCredential=result.device_credential;send(`saveSyncCredential\n${syncCredential}`);Object.assign(syncMeta(),{enabled:true,status:'pairing',revision:0,queue:[],qr_url:result.qr_url,expires_at:result.expires_at,device_name:''});syncPersist();syncLocalChanged();openPhoneSettings();syncReadEvents()}
+  try{const result=await syncRequest('/api/device/pair/start',{method:'POST',body:JSON.stringify({language:lang(),device_name:platform === 'macos' ? 'Mac' : 'Windows'})});syncCredential=result.device_credential;send(`saveSyncCredential\n${syncCredential}`);Object.assign(syncMeta(),{enabled:true,status:'pairing',revision:0,queue:[],qr_url:result.qr_url,expires_at:result.expires_at,device_name:''});syncPersist();syncLocalChanged();openPhoneSettings();syncReadEvents()}
   catch{toast(syncText('Не удалось связаться с сервисом','Could not reach the sync service'));if(button)button.disabled=false}
 }
 

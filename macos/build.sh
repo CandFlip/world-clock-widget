@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${APP_VERSION:-1.1.108}"
+VERSION="${APP_VERSION:-$(sed -n 's/.*<key>CFBundleShortVersionString<\/key><string>\([^<]*\)<\/string>.*/\1/p' "$ROOT/macos/Info.plist")}"
+test -n "$VERSION"
 BUILD="$ROOT/macos/build"
 APP="$BUILD/World Clock Widget.app"
 CONTENTS="$APP/Contents"

@@ -64,7 +64,9 @@ button{color:inherit}
 .quick>.chip{flex:1 0 100px}
 .windows-icon{width:13px;height:13px;vertical-align:-1px;flex:none}
 .system-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:14px;padding:0 3px;border:1px solid currentColor;border-radius:4px;font-size:8px;font-weight:800;line-height:1;vertical-align:1px;flex:none}
-#originLabel{display:flex;align-items:center;gap:5px;white-space:nowrap;font-size:inherit}
+#originLabel{white-space:nowrap;font-size:inherit}
+.marks>span{white-space:nowrap}
+.marks .timeline-minutes{font-size:50%;line-height:1;vertical-align:baseline}
 .chip,.add{height:40px;border:1px dashed var(--border);border-radius:7px;background:transparent;color:var(--muted);cursor:pointer;font-weight:650;transition:border-color 120ms,color 120ms,background 120ms}
 .chip{position:relative;min-width:0;border-style:solid;background:var(--surface);color:var(--text);text-align:left;padding:0 28px 0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip:hover{border-color:var(--accent);color:var(--accent)}
@@ -213,6 +215,23 @@ button{color:inherit}
 
 .settings-button{width:100%;border:0;background:transparent;text-align:left}
 .settings-help{color:var(--muted);line-height:1.5;margin:0 0 20px}
+.sound-drop{display:flex;min-height:112px;flex-direction:column;align-items:center;justify-content:center;gap:7px;border:2px dashed var(--border);border-radius:10px;background:var(--surface);cursor:pointer;text-align:center;padding:15px}
+.sound-drop:hover,.sound-drop:focus-within{border-color:var(--accent)}
+.sound-drop span,.sound-current{color:var(--muted);font-size:12px}
+.sound-current{overflow-wrap:anywhere;margin:15px 0 4px}
+.sound-feedback{min-height:18px;color:var(--danger);font-size:12px}
+.sound-library{border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.sound-row{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,32px);align-items:center;padding:5px;gap:3px;background:var(--surface)}
+.sound-row+.sound-row{border-top:1px solid var(--border)}
+.sound-select,.sound-action{border:0;background:transparent;color:var(--text);cursor:pointer;min-height:36px;border-radius:6px}
+.sound-select{text-align:left;padding:7px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.sound-select.selected,.sound-action:hover{background:var(--badge)}
+.sound-select.selected,.sound-action.favorite{color:var(--accent)}
+.sound-action[data-delete-sound]:hover{color:var(--danger)}
+.editor-sound-choices{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.sound-choice{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:16px;padding:7px 11px;line-height:1.4;cursor:pointer;max-width:100%;overflow-wrap:anywhere}
+.sound-choice.selected{border-color:var(--accent);background:var(--badge);color:var(--accent)}
+.sound-choice:focus-visible,.sound-select:focus-visible,.sound-action:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .hotkey-active,.hotkey-preview{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .hotkey-active span,.hotkey-preview span{color:var(--muted);font-size:12px}
 .hotkey-active strong,.hotkey-preview strong{font-size:15px;text-align:right;overflow-wrap:anywhere}
