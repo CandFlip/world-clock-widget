@@ -1,7 +1,12 @@
 import { env } from 'cloudflare:workers';
 import { getSessionUser } from '@/lib/auth';
 
-import { IDEA_IDS as validOptions } from '@/lib/roadmap';
+import { parseIdeas } from '@/lib/roadmap';
+
+async function validOptions() {
+  const row = await env.DB.prepare("SELECT value FROM site_settings WHERE key='roadmap_ideas'").first<{ value: string }>();
+  return new Set(parseIdeas(row?.value).map((idea) => idea.id));
+}
 
 async function ensureTables() {
   const db = env.DB;
@@ -18,12 +23,13 @@ async function ensureTables() {
 
 async function totals(selected: string | null = null) {
   await ensureTables();
+  const options = await validOptions();
   const rows = await env.DB.prepare(
     'SELECT option_id, COUNT(*) AS count FROM votes GROUP BY option_id',
   ).all<{ option_id: string; count: number }>();
   const counts: Record<string, number> = {};
   for (const row of rows.results) {
-    if (validOptions.has(row.option_id)) counts[row.option_id] = Number(row.count);
+    if (options.has(row.option_id)) counts[row.option_id] = Number(row.count);
   }
   return Response.json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0), selected });
 }
@@ -43,7 +49,7 @@ export async function POST(request: Request) {
   const user = await getSessionUser(request);
   if (!user) return Response.json({ error: 'Sign in with Google to vote.' }, { status: 401 });
   const body = await request.json() as { optionId?: string };
-  if (!body.optionId || !validOptions.has(body.optionId)) {
+  if (!body.optionId || !(await validOptions()).has(body.optionId)) {
     return Response.json({ error: 'Invalid vote.' }, { status: 400 });
   }
   const now = new Date().toISOString();

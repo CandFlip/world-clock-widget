@@ -2,7 +2,7 @@ export const IDEAS = [
   {
     id: 'mobile-official',
     status: 'funding',
-    goalCents: 15000,
+    goalCents: 12400,
     title: { ru: 'Приложения для iOS и Android', en: 'iOS and Android apps' },
     description: {
       ru: 'Синхронизация будильников с телефоном.',
@@ -24,4 +24,17 @@ export const IDEAS = [
   },
 ] as const;
 
-export const IDEA_IDS = new Set<string>(IDEAS.map((idea) => idea.id));
+export type Idea = { id: string; status: string; goalCents: number; title: { ru: string; en: string }; description: { ru: string; en: string }; cost: { ru: string; en: string } };
+
+export function parseIdeas(value?: string): Idea[] {
+  if (!value) return IDEAS.map((idea) => ({ ...idea, title: { ...idea.title }, description: { ...idea.description }, cost: { ...idea.cost } }));
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed)) return parseIdeas();
+    return parsed.filter((item): item is Idea => typeof item === 'object' && item !== null &&
+      typeof item.id === 'string' && typeof item.title?.ru === 'string' && typeof item.title?.en === 'string' &&
+      typeof item.description?.ru === 'string' && typeof item.description?.en === 'string' &&
+      typeof item.cost?.ru === 'string' && typeof item.cost?.en === 'string' && typeof item.status === 'string' &&
+      typeof item.goalCents === 'number');
+  } catch { return parseIdeas(); }
+}
