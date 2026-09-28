@@ -5,9 +5,9 @@ const assert = require('node:assert/strict');
 const listeners = {};
 const hostMessages = [];
 const elements = new Map();
-for (const id of ['hotkeyCapture', 'hotkeyCurrent', 'hotkeyPreview', 'hotkeyApply', 'hotkeyFeedback']) {
+for (const id of ['modal', 'back', 'hotkeyCapture', 'hotkeyCurrent', 'hotkeyPreview', 'hotkeyApply', 'hotkeyCustom', 'hotkeyModeSwitch', 'hotkeyModeFeedback']) {
   elements.set(`#${id}`, {
-    textContent: '', disabled: false, focus() {},
+    textContent: '', disabled: false, focus() {}, setAttribute(name, value) {this[name] = value;},
     classList: {toggle() {}},
   });
 }
@@ -35,7 +35,7 @@ const key = (code, keyName, modifiers = {}) => ({
 });
 const fireKey = event => {for (const listener of listeners.keydown) {listener(event); if (event.stopped) break;}};
 
-run('startHotkeyCapture()');
+run("hotkeySelection='custom'; startHotkeyCapture()");
 assert.match(field('hotkeyCapture').textContent, /Запись идёт/);
 assert.equal(field('hotkeyApply').disabled, true);
 fireKey(key('ControlLeft', 'Control', {ctrlKey: true}));
@@ -52,7 +52,7 @@ assert.equal(field('hotkeyApply').disabled, true);
 run('saveConfig=()=>{}; render=()=>{}');
 listeners['host:message']({data: {type:'hotkeyResult',success:true,modifiers:6,key:75}});
 assert.equal(field('hotkeyCurrent').textContent, 'Ctrl+Shift+K');
-assert.match(field('hotkeyFeedback').textContent, /Сохранено/);
+assert.match(field('hotkeyModeFeedback').textContent, /Сохранено/);
 
 run('startHotkeyCapture()');
 fireKey(key('Escape', 'Escape'));
@@ -60,7 +60,7 @@ assert.equal(field('hotkeyPreview').textContent, 'Escape');
 assert.equal(field('hotkeyApply').disabled, false);
 run('startHotkeyCapture()');
 fireKey(key('F12', 'F12'));
-assert.match(field('hotkeyFeedback').textContent, /недоступны/);
+assert.match(field('hotkeyModeFeedback').textContent, /недоступны/);
 assert.equal(field('hotkeyApply').disabled, true);
 
 run('capturingHotkey=false; candidateHotkey=null; pendingHotkey=null; platform="macos"; activeHotkey={modifiers:5,key:84}');
@@ -74,4 +74,24 @@ fireKey(key('KeyK', 'л', {metaKey: true, shiftKey: true}));
 assert.equal(field('hotkeyPreview').textContent, 'Shift+Command+K');
 run('requestHotkey(candidateHotkey)');
 assert.equal(hostMessages.at(-1), 'setHotkey\n12,75');
+run('pendingHotkey=null; pendingHotkeyMode=null; closeNamePopover=()=>{}; loadSoundLibrary=()=>Promise.resolve()');
+listeners['host:message']({data: {type:'init', platform:'windows', version:'v1.1.115',
+  configText: JSON.stringify({settings:{hotkey:{modifiers:6,key:75}}}), remindersText:'{}',
+  hotkeyModifiers:6, hotkeyKey:75}});
+assert.equal(run('hotkeyLabel()'), 'Ctrl+Shift+K');
+assert.equal(run('config.settings.manual_hotkey.key'), 75);
+run('openHotkey()');
+assert.equal(field('hotkeyCurrent').textContent, 'Ctrl+Shift+K');
+assert.equal(field('hotkeyModeSwitch')['aria-checked'], 'false');
+assert.match(field('modal').innerHTML, /Сочетание по умолчанию/);
+field('hotkeyModeSwitch').onclick();
+assert.equal(hostMessages.at(-1), 'setHotkey\n5,84');
+listeners['host:message']({data:{type:'hotkeyResult',success:true,modifiers:5,key:84}});
+assert.equal(field('hotkeyCurrent').textContent, 'Alt+Shift+T');
+assert.equal(field('hotkeyModeSwitch')['aria-checked'], 'true');
+assert.equal(run('config.settings.manual_hotkey.key'), 75);
+field('hotkeyModeSwitch').onclick();
+assert.equal(hostMessages.at(-1), 'setHotkey\n6,75');
+listeners['host:message']({data:{type:'hotkeyResult',success:true,modifiers:6,key:75}});
+assert.equal(field('hotkeyCurrent').textContent, 'Ctrl+Shift+K');
 console.log('Hotkey recording feedback, preview, explicit apply and rejection checks passed.');

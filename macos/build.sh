@@ -50,6 +50,10 @@ mkdir -p "$STAGING"
 cp -R "$APP" "$STAGING/"
 ln -s /Applications "$STAGING/Applications"
 DMG="$RELEASE/WorldClockWidget-macOS-v${VERSION}.dmg"
-rm -f "$DMG"
-hdiutil create -volname "World Clock Widget" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+for attempt in 1 2 3; do
+  rm -f "$DMG"
+  if hdiutil create -volname "World Clock Widget" -srcfolder "$STAGING" -ov -format UDZO "$DMG"; then break; fi
+  if [ "$attempt" -eq 3 ]; then exit 1; fi
+  sleep 2
+done
 shasum -a 256 "$DMG"

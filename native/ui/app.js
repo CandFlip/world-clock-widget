@@ -137,6 +137,8 @@ let platform = 'windows';
 const defaultHotkeyForPlatform = () => ({modifiers: 5, key: 84});
 let activeHotkey = {...defaultHotkeyForPlatform()};
 let pendingHotkey = null;
+let pendingHotkeyMode = null;
+let hotkeySelection = 'default';
 let capturingHotkey = false;
 let candidateHotkey = null;
 let capturedModifiers = 0;
@@ -411,6 +413,8 @@ function timelineHour(hoursAhead, now = new Date(), zone = baseZone()) {
     ? String(hour).padStart(2, '0')
     : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
 }
+const sameHotkey = (a, b) => a?.modifiers === b?.modifiers && a?.key === b?.key;
+const currentHotkeyMode = () => sameHotkey(activeHotkey, defaultHotkeyForPlatform()) ? 'default' : 'custom';
 
 function timelineCaption(hoursAhead, now = new Date(), zone = baseZone()) {
   const value = timeAt(new Date(now.getTime() + hoursAhead * 3600000), zone);
@@ -1182,26 +1186,41 @@ function openDirection() {
 function openHotkey() {
   candidateHotkey = null;
   capturedModifiers = 0;
+  hotkeySelection = currentHotkeyMode();
   modal(lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut',
     `<div class="hotkey-active"><span>${lang() === 'ru' ? 'Сейчас назначено' : 'Current shortcut'}</span><strong id="hotkeyCurrent">${esc(hotkeyLabel())}</strong></div>
+    <div class="group"><div class="row toggle-row"><span>${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}</span><button class="switch" id="hotkeyModeSwitch" type="button" role="switch" aria-label="${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}"></button></div></div>
+    <div id="hotkeyCustom">
     <button class="hotkey-recorder" id="hotkeyCapture" type="button"></button>
     <div class="hotkey-preview"><span>${lang() === 'ru' ? 'Новое сочетание' : 'New shortcut'}</span><strong id="hotkeyPreview">—</strong></div>
-    <p class="hotkey-feedback" id="hotkeyFeedback" role="status" aria-live="polite"></p>
-    <button class="primary" id="hotkeyApply" type="button" disabled>${lang() === 'ru' ? 'Применить' : 'Apply'}</button>
-    <button class="secondary" id="hotkeyReset">${lang() === 'ru' ? `Вернуть ${hotkeyLabel(defaultHotkeyForPlatform())}` : `Restore ${hotkeyLabel(defaultHotkeyForPlatform())}`}</button>`);
+    <button class="primary" id="hotkeyApply" type="button" disabled>${lang() === 'ru' ? 'Применить' : 'Apply'}</button></div>
+    <p class="hotkey-feedback" id="hotkeyModeFeedback" role="status" aria-live="polite"></p>`);
   $('#hotkeyCapture').onclick = startHotkeyCapture;
-  $('#hotkeyApply').onclick = () => {if (candidateHotkey) requestHotkey(candidateHotkey);};
-  $('#hotkeyReset').onclick = () => {
+  $('#hotkeyApply').onclick = () => {if (candidateHotkey) requestHotkey(candidateHotkey, 'custom');};
+  $('#hotkeyModeSwitch').onclick = () => {
+    if (pendingHotkey) return;
     capturingHotkey = false;
-    candidateHotkey = {...defaultHotkeyForPlatform()};
-    updateHotkeyUI(lang() === 'ru' ? 'Нажмите «Применить», чтобы восстановить сочетание.' : 'Press Apply to restore the shortcut.');
+    candidateHotkey = null;
+    if (hotkeySelection === 'custom') {
+      hotkeySelection = 'default';
+      requestHotkey(defaultHotkeyForPlatform(), 'default');
+    } else {
+      hotkeySelection = 'custom';
+      const saved = config.settings.manual_hotkey;
+      if (saved && !sameHotkey(saved, defaultHotkeyForPlatform())) requestHotkey(saved, 'custom');
+      else updateHotkeyUI(lang() === 'ru' ? 'Запишите своё сочетание и нажмите «Применить».' : 'Record a shortcut and press Apply.');
+    }
   };
-  updateHotkeyUI(lang() === 'ru' ? 'Нажмите кнопку записи, затем нужные клавиши.' : 'Start recording, then press the desired keys.');
+  updateHotkeyUI(hotkeySelection === 'custom' ? (lang() === 'ru' ? 'Нажмите кнопку записи, затем нужные клавиши.' : 'Start recording, then press the desired keys.') : '');
 }
 
 function updateHotkeyUI(message) {
   const button = $('#hotkeyCapture');
   if (!button) return;
+  $('#hotkeyCustom').hidden = hotkeySelection !== 'custom';
+  const modeSwitch = $('#hotkeyModeSwitch');
+  modeSwitch.classList.toggle('on', hotkeySelection === 'default');
+  modeSwitch.setAttribute('aria-checked', String(hotkeySelection === 'default'));
   button.classList.toggle('recording', capturingHotkey);
   button.textContent = capturingHotkey
     ? (lang() === 'ru' ? '● Запись идёт — нажмите клавиши' : '● Recording — press keys')
@@ -1211,7 +1230,7 @@ function updateHotkeyUI(message) {
     : capturingHotkey ? `${modifierLabel(capturedModifiers)}${capturedModifiers ? '+' : ''}…` : '—';
   $('#hotkeyPreview').classList.toggle('ready', Boolean(candidateHotkey));
   $('#hotkeyApply').disabled = !candidateHotkey || Boolean(pendingHotkey);
-  if (message !== undefined) $('#hotkeyFeedback').textContent = message;
+  if (message !== undefined) $('#hotkeyModeFeedback').textContent = message;
 }
 
 function startHotkeyCapture() {
@@ -1225,10 +1244,11 @@ function startHotkeyCapture() {
   $('#hotkeyCapture').focus();
 }
 
-function requestHotkey(hotkey) {
+function requestHotkey(hotkey, mode = 'custom') {
   if (pendingHotkey) return;
   capturingHotkey = false;
   pendingHotkey = hotkey;
+  pendingHotkeyMode = mode;
   updateHotkeyUI(lang() === 'ru' ? `Проверяем ${hotkeyLabel(hotkey)}…` : `Checking ${hotkeyLabel(hotkey)}…`);
   send(`setHotkey\n${hotkey.modifiers},${hotkey.key}`);
 }
@@ -1270,7 +1290,7 @@ function openSettings() {
     <div class="group"><button class="row settings-button" id="quickTitles"><span>${lang() === 'ru' ? 'Быстрые названия' : 'Quick titles'}</span><span class="row-value">›</span></button></div>
     <div class="group"><button class="row settings-button" id="phone"><span>${lang() === 'ru' ? 'Телефон' : 'Phone'}</span><span class="row-value">${window.syncSettingsLabel?.() || (lang() === 'ru' ? 'Подключить Android' : 'Connect Android')} ›</span></button></div>
     <div class="group"><button class="row settings-button" id="direction"><span>${lang() === 'ru' ? 'Появление и скрытие' : 'Show and hide'}</span><span class="row-value">${directionOptions().find(([value]) => value === config.settings.overlay_direction)?.[1] || directionOptions()[1][1]} ›</span></button>
-    <button class="row settings-button" id="hotkey"><span>${lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut'}</span><span class="row-value">${esc(hotkeyLabel())} ›</span></button></div>
+    <button class="row settings-button" id="hotkey"><span>${lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut'}</span><span class="row-value">${esc(hotkeyLabel())}</span></button></div>
     <div class="group"><div class="row toggle-row"><span>${t('autostart')}</span><button class="switch ${config.settings.autostart ? 'on' : ''}" id="autostartSwitch" role="switch" aria-checked="${config.settings.autostart ? 'true' : 'false'}" aria-label="${t('autostart')}"></button></div></div>`);
   $('#theme').onclick = () => choice(t('theme'), [['system', t('systemTheme')], ['dark', t('dark')], ['light', t('light')]], config.settings.theme, value => {
     config.settings.theme = value; saveConfig(); render(); openSettings();
@@ -1636,10 +1656,13 @@ host?.addEventListener('message', event => {
     activeHotkey = {modifiers: event.data.modifiers, key: event.data.key};
     if (event.data.success && pendingHotkey) {
       config.settings.hotkey = {...activeHotkey};
+      if (pendingHotkeyMode === 'custom') config.settings.manual_hotkey = {...activeHotkey};
       saveConfig();
       render();
     }
     pendingHotkey = null;
+    pendingHotkeyMode = null;
+    hotkeySelection = currentHotkeyMode();
     candidateHotkey = event.data.success ? null : candidateHotkey;
     updateHotkeyUI(event.data.success
       ? (lang() === 'ru' ? `Сохранено: ${hotkeyLabel()}. Теперь панель вызывается этим сочетанием.` : `Saved: ${hotkeyLabel()}. Use it to open the panel.`)
@@ -1655,6 +1678,11 @@ host?.addEventListener('message', event => {
   const previousTitleVersion = config.settings?.title_library_version;
   const previousReminders = JSON.stringify(reminders);
   normalize();
+  activeHotkey = Number.isInteger(event.data.hotkeyModifiers) && Number.isInteger(event.data.hotkeyKey)
+    ? {modifiers: event.data.hotkeyModifiers, key: event.data.hotkeyKey}
+    : {...(config.settings.hotkey || defaultHotkeyForPlatform())};
+  if (!config.settings.manual_hotkey && config.settings.hotkey && !sameHotkey(config.settings.hotkey, defaultHotkeyForPlatform()))
+    config.settings.manual_hotkey = {...config.settings.hotkey};
   soundLibraryReady = loadSoundLibrary();
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
   if (previousTitleVersion !== 1) saveConfig();

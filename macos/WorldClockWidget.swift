@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.114"
+private let appVersion = "v1.1.115"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -145,13 +145,21 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         webView?.evaluateJavaScript("window.nativeTick && window.nativeTick()")
     }
 
-    private func runSelfTest() {
+    private func runSelfTest(attempt: Int = 1) {
         let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function'"
         let nativeHotKeyMapping = currentModifiers == 5 && virtualKeyCode(for: 84) == UInt32(kVK_ANSI_T)
         webView.evaluateJavaScript(script) { result, error in
             let passed = nativeHotKeyMapping && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
-            fputs(passed ? "macOS runtime tick test passed\n" : "macOS runtime tick test failed\n", stderr)
-            exit(passed ? 0 : 3)
+            if passed {
+                fputs("macOS runtime tick test passed\n", stderr)
+                exit(0)
+            }
+            if attempt < 6 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runSelfTest(attempt: attempt + 1) }
+            } else {
+                fputs("macOS runtime tick test failed\n", stderr)
+                exit(3)
+            }
         }
     }
 

@@ -26,6 +26,9 @@ jobs:
       - name: Build universal macOS application and DMG
         run: bash macos/build.sh
 
+      - name: Check shared shortcut behavior
+        run: node native/test_hotkey_ui.cjs
+
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v4
         with:
