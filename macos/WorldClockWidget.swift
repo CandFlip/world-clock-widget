@@ -230,14 +230,24 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         let customKeyboard = registerHotKey(modifiers: 2, key: 191)
             && currentModifiers == 2 && currentKey == 191
             && openMenuItem.keyEquivalent == "/" && openMenuItem.keyEquivalentModifierMask.contains(.control)
-        let sideButton = registerHotKey(modifiers: 0, key: 1001)
+        let singleKeyboard = registerHotKey(modifiers: 0, key: 75)
+            && currentModifiers == 0 && currentKey == 75
+            && openMenuItem.keyEquivalent == "k" && openMenuItem.keyEquivalentModifierMask.isEmpty
+        let rejectedNavigation = !registerHotKey(modifiers: 0, key: 27)
+            && !registerHotKey(modifiers: 0, key: 123)
+            && currentModifiers == 0 && currentKey == 75
+        let mouseFour = registerHotKey(modifiers: 0, key: 1001)
             && currentKey == 1001 && openMenuItem.keyEquivalent.isEmpty
             && openMenuItem.title.contains("Mouse 4")
+        let mouseFive = registerHotKey(modifiers: 0, key: 1002)
+            && currentKey == 1002 && openMenuItem.keyEquivalent.isEmpty
+            && openMenuItem.title.contains("Mouse 5")
         let restoredDefault = registerHotKey(modifiers: 1, key: 32)
             && currentModifiers == 1 && currentKey == 32
             && openMenuItem.keyEquivalent == " " && openMenuItem.keyEquivalentModifierMask.contains(.option)
         webView.evaluateJavaScript(script) { result, error in
-            let passed = defaultMapping && customKeyboard && sideButton && restoredDefault
+            let passed = defaultMapping && customKeyboard && singleKeyboard && rejectedNavigation
+                && mouseFour && mouseFive && restoredDefault
                 && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
             if passed {
                 guard let marker = ProcessInfo.processInfo.environment["WORLD_CLOCK_REOPEN_MARKER"] else {
@@ -261,7 +271,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             if attempt < 6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runSelfTest(attempt: attempt + 1) }
             } else {
-                fputs("macOS shortcut/menu test failed: default=\(defaultMapping) keyboard=\(customKeyboard) mouse=\(sideButton) restored=\(restoredDefault) web=\(String(describing: result)) error=\(String(describing: error))\n", stderr)
+                fputs("macOS shortcut/menu test failed: default=\(defaultMapping) keyboard=\(customKeyboard) single=\(singleKeyboard) rejected=\(rejectedNavigation) mouse4=\(mouseFour) mouse5=\(mouseFive) restored=\(restoredDefault) web=\(String(describing: result)) error=\(String(describing: error))\n", stderr)
                 exit(3)
             }
         }
