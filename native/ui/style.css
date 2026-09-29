@@ -234,6 +234,7 @@ button{color:inherit}
 .sound-choice:focus-visible,.sound-select:focus-visible,.sound-action:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .hotkey-active,.hotkey-preview{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .hotkey-active strong{max-width:68%}
+.toggle-row small{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-top:3px}
 #hotkey{gap:12px;padding-top:10px;padding-bottom:10px}
 #hotkey .row-value{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;text-align:right;max-width:62%}
 #hotkeyCustom[hidden]{display:none}

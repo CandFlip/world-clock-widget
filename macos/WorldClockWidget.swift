@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.115"
+private let appVersion = "v1.1.117"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -17,10 +17,14 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private var panel: WidgetPanel!
     private var webView: WKWebView!
     private var statusItem: NSStatusItem!
+    private var openMenuItem: NSMenuItem!
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
-    private var currentModifiers: UInt32 = 5
-    private var currentKey: UInt32 = 84
+    private var currentModifiers: UInt32 = 1
+    private var currentKey: UInt32 = 32
+    private var capturingHotKey = false
+    private var globalShortcutMouseMonitor: Any?
+    private var localShortcutMouseMonitor: Any?
     private var outsideMonitor: Any?
     private var localResizeMonitor: Any?
     private var globalResizeMonitor: Any?
@@ -29,6 +33,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private var resizeStartFrame = NSRect.zero
     private var resizeStartPoint = NSPoint.zero
     private let selfTestMode = ProcessInfo.processInfo.environment["WORLD_CLOCK_SELF_TEST"] == "1"
+    private var awaitingReopenSelfTest = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let bundleID = Bundle.main.bundleIdentifier {
@@ -62,12 +67,20 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWidget()
+        finishReopenSelfTest()
+        return false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
         if let outsideMonitor { NSEvent.removeMonitor(outsideMonitor) }
         if let localResizeMonitor { NSEvent.removeMonitor(localResizeMonitor) }
         if let globalResizeMonitor { NSEvent.removeMonitor(globalResizeMonitor) }
+        if let globalShortcutMouseMonitor { NSEvent.removeMonitor(globalShortcutMouseMonitor) }
+        if let localShortcutMouseMonitor { NSEvent.removeMonitor(localShortcutMouseMonitor) }
         tickTimer?.invalidate()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "host")
     }
@@ -128,11 +141,72 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         statusItem.button?.image = NSImage(systemSymbolName: "clock.badge", accessibilityDescription: "World Clock Widget")
         statusItem.button?.image?.isTemplate = true
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Открыть", action: #selector(toggleWidget), keyEquivalent: ""))
+        openMenuItem = NSMenuItem(title: "Открыть", action: #selector(toggleWidget), keyEquivalent: "")
+        menu.addItem(openMenuItem)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Выход", action: #selector(quit), keyEquivalent: "q"))
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
+        refreshOpenMenuShortcut()
+    }
+
+    private func menuKeyEquivalent(for key: UInt32) -> String? {
+        if key >= 65 && key <= 90 { return String(UnicodeScalar(Int(key))!).lowercased() }
+        if key >= 48 && key <= 57 { return String(UnicodeScalar(Int(key))!) }
+        if key >= 112 && key <= 131 && key != 123 {
+            return String(UnicodeScalar(0xF704 + Int(key) - 112)!)
+        }
+        let keys: [UInt32: String] = [
+            8: "\u{0008}", 9: "\t", 13: "\r", 27: "\u{001B}", 32: " ",
+            37: "\u{F702}", 38: "\u{F700}", 39: "\u{F703}", 40: "\u{F701}",
+            46: "\u{007F}", 186: ";", 187: "=", 188: ",", 189: "-",
+            190: ".", 191: "/", 192: "`", 219: "[", 220: "\\",
+            221: "]", 222: "'"
+        ]
+        return keys[key]
+    }
+
+    private func menuShortcutLabel() -> String {
+        var label = ""
+        if currentModifiers & 2 != 0 { label += "⌃" }
+        if currentModifiers & 1 != 0 { label += "⌥" }
+        if currentModifiers & 4 != 0 { label += "⇧" }
+        if currentModifiers & 8 != 0 { label += "⌘" }
+        let key = currentKey
+        if key == 1001 { return label + "Mouse 4" }
+        if key == 1002 { return label + "Mouse 5" }
+        if key >= 65 && key <= 90 { return label + String(UnicodeScalar(Int(key))!) }
+        if key >= 48 && key <= 57 { return label + String(UnicodeScalar(Int(key))!) }
+        if key >= 112 && key <= 131 { return label + "F\(key - 111)" }
+        if key >= 96 && key <= 105 { return label + "Keypad \(key - 96)" }
+        let names: [UInt32: String] = [
+            8: "Delete", 9: "Tab", 13: "Return", 27: "Escape", 32: "Space",
+            33: "Page Up", 34: "Page Down", 35: "End", 36: "Home",
+            37: "←", 38: "↑", 39: "→", 40: "↓", 46: "Forward Delete",
+            106: "Keypad *", 107: "Keypad +", 108: "Keypad Enter",
+            109: "Keypad −", 110: "Keypad .", 111: "Keypad /",
+            186: ";", 187: "=", 188: ",", 189: "−", 190: ".",
+            191: "/", 192: "`", 219: "[", 220: "\\", 221: "]", 222: "'"
+        ]
+        return label + (names[key] ?? "Key \(key)")
+    }
+
+    private func refreshOpenMenuShortcut() {
+        guard let openMenuItem else { return }
+        if let equivalent = menuKeyEquivalent(for: currentKey) {
+            var modifiers: NSEvent.ModifierFlags = []
+            if currentModifiers & 1 != 0 { modifiers.insert(.option) }
+            if currentModifiers & 2 != 0 { modifiers.insert(.control) }
+            if currentModifiers & 4 != 0 { modifiers.insert(.shift) }
+            if currentModifiers & 8 != 0 { modifiers.insert(.command) }
+            openMenuItem.title = "Открыть"
+            openMenuItem.keyEquivalentModifierMask = modifiers
+            openMenuItem.keyEquivalent = equivalent
+        } else {
+            openMenuItem.keyEquivalent = ""
+            openMenuItem.keyEquivalentModifierMask = []
+            openMenuItem.title = "Открыть    \(menuShortcutLabel())"
+        }
     }
 
     private func startTickTimer() {
@@ -146,24 +220,61 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func runSelfTest(attempt: Int = 1) {
-        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function'"
-        let nativeHotKeyMapping = currentModifiers == 5 && virtualKeyCode(for: 84) == UInt32(kVK_ANSI_T)
+        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function' && hotkeyLabel({modifiers:1,key:32}) === '⌥+Space' && hotkeyLabel({modifiers:2,key:191}) === '⌃+/' && hotkeyLabel({modifiers:0,key:1001}) === 'Mouse 4'"
+        panel.orderOut(nil)
+        _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+        let defaultMapping = currentModifiers == 1 && virtualKeyCode(for: 32) == UInt32(kVK_Space)
+            && hotKeyRef != nil
+            && openMenuItem.keyEquivalent == " " && openMenuItem.keyEquivalentModifierMask.contains(.option)
+            && panel.isVisible
+        let customKeyboard = registerHotKey(modifiers: 2, key: 191)
+            && currentModifiers == 2 && currentKey == 191
+            && openMenuItem.keyEquivalent == "/" && openMenuItem.keyEquivalentModifierMask.contains(.control)
+        let sideButton = registerHotKey(modifiers: 0, key: 1001)
+            && currentKey == 1001 && openMenuItem.keyEquivalent.isEmpty
+            && openMenuItem.title.contains("Mouse 4")
+        let restoredDefault = registerHotKey(modifiers: 1, key: 32)
+            && currentModifiers == 1 && currentKey == 32
+            && openMenuItem.keyEquivalent == " " && openMenuItem.keyEquivalentModifierMask.contains(.option)
         webView.evaluateJavaScript(script) { result, error in
-            let passed = nativeHotKeyMapping && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
+            let passed = defaultMapping && customKeyboard && sideButton && restoredDefault
+                && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
             if passed {
-                fputs("macOS runtime tick test passed\n", stderr)
-                exit(0)
+                guard let marker = ProcessInfo.processInfo.environment["WORLD_CLOCK_REOPEN_MARKER"] else {
+                    fputs("macOS shortcut and menu tests passed\n", stderr)
+                    exit(0)
+                }
+                self.awaitingReopenSelfTest = true
+                self.panel.orderOut(nil)
+                guard FileManager.default.createFile(atPath: marker, contents: Data()) else {
+                    fputs("macOS reopen test could not signal readiness\n", stderr)
+                    exit(3)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                    if self.awaitingReopenSelfTest {
+                        fputs("macOS Launch Services reopen test failed\n", stderr)
+                        exit(3)
+                    }
+                }
+                return
             }
             if attempt < 6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runSelfTest(attempt: attempt + 1) }
             } else {
-                fputs("macOS runtime tick test failed\n", stderr)
+                fputs("macOS shortcut/menu test failed: default=\(defaultMapping) keyboard=\(customKeyboard) mouse=\(sideButton) restored=\(restoredDefault) web=\(String(describing: result)) error=\(String(describing: error))\n", stderr)
                 exit(3)
             }
         }
     }
 
     private func configureMonitors() {
+        globalShortcutMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+            DispatchQueue.main.async { self?.handleShortcutMouse(event) }
+        }
+        localShortcutMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+            self?.handleShortcutMouse(event)
+            return event
+        }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, self.panel.isVisible else { return }
             if !self.panel.frame.contains(NSEvent.mouseLocation) { self.panel.orderOut(nil) }
@@ -177,7 +288,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         }
     }
 
-    @objc private func showFromNotification() { showWidget() }
+    @objc private func showFromNotification() {
+        showWidget()
+        finishReopenSelfTest()
+    }
 
     @objc private func toggleWidget() {
         panel.isVisible ? panel.orderOut(nil) : showWidget()
@@ -186,6 +300,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     @objc private func quit() { NSApp.terminate(nil) }
 
     private func showWidget() {
+        if NSApp.isHidden { NSApp.unhide(nil) }
         panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -217,6 +332,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             showWidget()
         } else if message == "quit" {
             NSApp.terminate(nil)
+        } else if message == "beginHotkeyCapture" {
+            capturingHotKey = true
+        } else if message == "endHotkeyCapture" {
+            capturingHotKey = false
         } else if message.hasPrefix("setHotkey\n") {
             let values = payload(message, prefix: "setHotkey\n").split(separator: ",")
             let modifiers = values.count == 2 ? UInt32(values[0]) : nil
@@ -291,12 +410,50 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
               let hotkey = settings["hotkey"] as? [String: Any],
               let modifiers = hotkey["modifiers"] as? NSNumber,
               let key = hotkey["key"] as? NSNumber else { return }
+        if modifiers.uint32Value == 5 && key.uint32Value == 84 { return }
         currentModifiers = modifiers.uint32Value
         currentKey = key.uint32Value
     }
 
+    private func handleShortcutMouse(_ event: NSEvent) {
+        guard event.buttonNumber == 3 || event.buttonNumber == 4 else { return }
+        let key: UInt32 = event.buttonNumber == 3 ? 1001 : 1002
+        let flags = event.modifierFlags
+        let modifiers: UInt32 = (flags.contains(.option) ? 1 : 0) |
+            (flags.contains(.control) ? 2 : 0) | (flags.contains(.shift) ? 4 : 0) |
+            (flags.contains(.command) ? 8 : 0)
+        if capturingHotKey {
+            postToWeb(["type": "hotkeyCaptured", "modifiers": modifiers, "key": key])
+        } else if currentKey == key && currentModifiers == modifiers {
+            toggleWidget()
+        }
+    }
+
+    private func finishReopenSelfTest() {
+        guard awaitingReopenSelfTest else { return }
+        guard panel.isVisible else {
+            fputs("macOS reopen left the panel hidden\n", stderr)
+            exit(3)
+        }
+        awaitingReopenSelfTest = false
+        fputs("macOS shortcut, menu and Launch Services reopen tests passed\n", stderr)
+        exit(0)
+    }
+
     private func registerHotKey(modifiers: UInt32, key: UInt32) -> Bool {
+        guard modifiers & ~UInt32(15) == 0 else { return false }
+        if key == 1001 || key == 1002 {
+            if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
+            hotKeyRef = nil
+            currentModifiers = modifiers
+            currentKey = key
+            refreshOpenMenuShortcut()
+            return true
+        }
         guard let virtualKey = virtualKeyCode(for: key) else { return false }
+        if modifiers == 0 && [8,9,13,27,32,33,34,35,36,37,38,39,40,46].contains(key) { return false }
+        let previousModifiers = currentModifiers
+        let previousKey = currentKey
         if let hotKeyRef { UnregisterEventHotKey(hotKeyRef) }
         hotKeyRef = nil
         if hotKeyHandler == nil {
@@ -317,10 +474,16 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         var reference: EventHotKeyRef?
         let identifier = EventHotKeyID(signature: OSType(0x57434C4B), id: 1)
         let status = RegisterEventHotKey(virtualKey, carbonModifiers, identifier, GetApplicationEventTarget(), 0, &reference)
-        guard status == noErr else { return false }
+        guard status == noErr else {
+            if previousKey != key || previousModifiers != modifiers {
+                _ = registerHotKey(modifiers: previousModifiers, key: previousKey)
+            }
+            return false
+        }
         hotKeyRef = reference
         currentModifiers = modifiers
         currentKey = key
+        refreshOpenMenuShortcut()
         return true
     }
 
@@ -345,11 +508,20 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             99: UInt32(kVK_ANSI_Keypad3), 100: UInt32(kVK_ANSI_Keypad4), 101: UInt32(kVK_ANSI_Keypad5),
             102: UInt32(kVK_ANSI_Keypad6), 103: UInt32(kVK_ANSI_Keypad7), 104: UInt32(kVK_ANSI_Keypad8),
             105: UInt32(kVK_ANSI_Keypad9), 106: UInt32(kVK_ANSI_KeypadMultiply),
-            107: UInt32(kVK_ANSI_KeypadPlus), 109: UInt32(kVK_ANSI_KeypadMinus),
+            107: UInt32(kVK_ANSI_KeypadPlus), 108: UInt32(kVK_ANSI_KeypadEnter), 109: UInt32(kVK_ANSI_KeypadMinus),
             110: UInt32(kVK_ANSI_KeypadDecimal), 111: UInt32(kVK_ANSI_KeypadDivide),
             112: UInt32(kVK_F1), 113: UInt32(kVK_F2), 114: UInt32(kVK_F3), 115: UInt32(kVK_F4),
             116: UInt32(kVK_F5), 117: UInt32(kVK_F6), 118: UInt32(kVK_F7), 119: UInt32(kVK_F8),
-            120: UInt32(kVK_F9), 121: UInt32(kVK_F10), 122: UInt32(kVK_F11)
+            120: UInt32(kVK_F9), 121: UInt32(kVK_F10), 122: UInt32(kVK_F11),
+            124: UInt32(kVK_F13), 125: UInt32(kVK_F14), 126: UInt32(kVK_F15),
+            127: UInt32(kVK_F16), 128: UInt32(kVK_F17), 129: UInt32(kVK_F18),
+            130: UInt32(kVK_F19), 131: UInt32(kVK_F20),
+            186: UInt32(kVK_ANSI_Semicolon), 187: UInt32(kVK_ANSI_Equal),
+            188: UInt32(kVK_ANSI_Comma), 189: UInt32(kVK_ANSI_Minus),
+            190: UInt32(kVK_ANSI_Period), 191: UInt32(kVK_ANSI_Slash),
+            192: UInt32(kVK_ANSI_Grave), 219: UInt32(kVK_ANSI_LeftBracket),
+            220: UInt32(kVK_ANSI_Backslash), 221: UInt32(kVK_ANSI_RightBracket),
+            222: UInt32(kVK_ANSI_Quote)
         ]
         return keys[key]
     }

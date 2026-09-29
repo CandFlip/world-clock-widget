@@ -43,7 +43,22 @@ codesign --force --deep --options runtime --timestamp=none --sign - "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 plutil -lint "$CONTENTS/Info.plist"
 lipo -info "$CONTENTS/MacOS/WorldClockWidget"
-WORLD_CLOCK_SELF_TEST=1 "$CONTENTS/MacOS/WorldClockWidget"
+REOPEN_READY="$BUILD/reopen-ready"
+WORLD_CLOCK_SELF_TEST=1 WORLD_CLOCK_REOPEN_MARKER="$REOPEN_READY" "$CONTENTS/MacOS/WorldClockWidget" &
+TEST_PID=$!
+trap 'kill "$TEST_PID" 2>/dev/null || true' EXIT
+for attempt in {1..40}; do
+  if [ -f "$REOPEN_READY" ]; then break; fi
+  if ! kill -0 "$TEST_PID" 2>/dev/null; then
+    wait "$TEST_PID"
+    exit 1
+  fi
+  sleep 0.5
+done
+test -f "$REOPEN_READY"
+open "$APP"
+wait "$TEST_PID"
+trap - EXIT
 
 STAGING="$BUILD/dmg"
 mkdir -p "$STAGING"

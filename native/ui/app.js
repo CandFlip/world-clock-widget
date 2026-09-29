@@ -134,7 +134,7 @@ function bindSoundChoices(root, selected = 'default') {
 let detailId = null;
 let applyingRemoteSync = false;
 let platform = 'windows';
-const defaultHotkeyForPlatform = () => ({modifiers: 5, key: 84});
+const defaultHotkeyForPlatform = () => ({modifiers: 1, key: 32});
 let activeHotkey = {...defaultHotkeyForPlatform()};
 let pendingHotkey = null;
 let pendingHotkeyMode = null;
@@ -148,18 +148,20 @@ const specialHotkeyKeys = {
   ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
   Insert: 45, Delete: 46,
   NumpadMultiply: 106, NumpadAdd: 107, NumpadSubtract: 109,
-  NumpadDecimal: 110, NumpadDivide: 111,
+  NumpadDecimal: 110, NumpadDivide: 111, NumpadEnter: 108,
   Semicolon: 186, Equal: 187, Comma: 188, Minus: 189, Period: 190,
   Slash: 191, Backquote: 192, BracketLeft: 219, Backslash: 220,
   BracketRight: 221, Quote: 222,
 };
 const hotkeyNames = Object.fromEntries(Object.entries(specialHotkeyKeys).map(([name, key]) => [key, name.replace('Arrow', '').replace('Numpad', 'Num ')]));
+Object.assign(hotkeyNames, {32:'Space', 186:';', 187:'=', 188:',', 189:'−', 190:'.', 191:'/', 192:'`', 219:'[', 220:'\\', 221:']', 222:"'", 1001:'Mouse 4', 1002:'Mouse 5'});
 const macHotkeyNames = {
   8: 'Delete', 9: 'Tab', 13: 'Return', 27: 'Escape', 32: 'Space',
   33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
   37: 'Left Arrow', 38: 'Up Arrow', 39: 'Right Arrow', 40: 'Down Arrow',
   46: 'Forward Delete', 106: 'Keypad Multiply', 107: 'Keypad Plus',
-  109: 'Keypad Minus', 110: 'Keypad Decimal', 111: 'Keypad Divide',
+  108: 'Keypad Enter', 109: 'Keypad Minus', 110: 'Keypad Decimal', 111: 'Keypad Divide',
+  186:';', 187:'=', 188:',', 189:'−', 190:'.', 191:'/', 192:'`', 219:'[', 220:'\\', 221:']', 222:"'", 1001:'Mouse 4', 1002:'Mouse 5',
 };
 
 function hotkeyFromEvent(event) {
@@ -170,24 +172,26 @@ function hotkeyFromEvent(event) {
   if (/^Key[A-Z]$/.test(code)) key = code.charCodeAt(3);
   else if (/^Digit[0-9]$/.test(code)) key = code.charCodeAt(5);
   else if (/^Numpad[0-9]$/.test(code)) key = 96 + Number(code.slice(6));
-  else if (/^F([1-9]|10|11)$/.test(code)) key = 111 + Number(code.slice(1));
+  else if (/^F([1-9]|1[01]|1[3-9]|20)$/.test(code)) key = 111 + Number(code.slice(1));
   if (!key) return null;
-  return {modifiers: (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0), key};
+  const modifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0);
+  if (!modifiers && [8,9,13,27,32,33,34,35,36,37,38,39,40,45,46].includes(key)) return null;
+  return {modifiers, key};
 }
 
 function hotkeyLabel(hotkey = activeHotkey) {
   const key = hotkey.key;
   const name = (key >= 48 && key <= 90) ? String.fromCharCode(key) :
     (key >= 96 && key <= 105) ? `${platform === 'macos' ? 'Keypad' : 'Num'} ${key - 96}` :
-    (key >= 112 && key <= 122) ? `F${key - 111}` : (platform === 'macos' ? macHotkeyNames[key] : hotkeyNames[key]) || '?';
+    (key >= 112 && key <= 131) ? `F${key - 111}` : (platform === 'macos' ? macHotkeyNames[key] : hotkeyNames[key]) || '?';
   const modifiers = platform === 'macos'
-    ? [(hotkey.modifiers & 2) && 'Control', (hotkey.modifiers & 1) && 'Option', (hotkey.modifiers & 4) && 'Shift', (hotkey.modifiers & 8) && 'Command']
+    ? [(hotkey.modifiers & 2) && '⌃', (hotkey.modifiers & 1) && '⌥', (hotkey.modifiers & 4) && '⇧', (hotkey.modifiers & 8) && '⌘']
     : [(hotkey.modifiers & 2) && 'Ctrl', (hotkey.modifiers & 1) && 'Alt', (hotkey.modifiers & 4) && 'Shift'];
   return [...modifiers, name].filter(Boolean).join('+');
 }
 function modifierLabel(modifiers) {
   return (platform === 'macos'
-    ? [(modifiers & 2) && 'Control', (modifiers & 1) && 'Option', (modifiers & 4) && 'Shift', (modifiers & 8) && 'Command']
+    ? [(modifiers & 2) && '⌃', (modifiers & 1) && '⌥', (modifiers & 4) && '⇧', (modifiers & 8) && '⌘']
     : [(modifiers & 2) && 'Ctrl', (modifiers & 1) && 'Alt', (modifiers & 4) && 'Shift']).filter(Boolean).join('+');
 }
 const availabilityGradientCache = new Map();
@@ -1158,12 +1162,13 @@ function createReminder(zone, lead, city, options = {}) {
 }
 
 function modal(title, body) {
+  if (capturingHotkey) send('endHotkeyCapture');
   detailId = null; capturingHotkey = false; closeNamePopover();
   $('#modal').innerHTML = `<section class="modal-root"><div class="modal-head"><button class="icon" id="back">‹</button><h2>${esc(title)}</h2></div><div class="modal-body">${body}</div></section>`;
   $('#back').onclick = closeModal;
 }
 
-function closeModal() { detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
+function closeModal() { if (capturingHotkey) send('endHotkeyCapture'); detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
 
 function directionOptions() {
   return lang() === 'ru'
@@ -1188,8 +1193,8 @@ function openHotkey() {
   capturedModifiers = 0;
   hotkeySelection = currentHotkeyMode();
   modal(lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut',
-    `<div class="hotkey-active"><span>${lang() === 'ru' ? 'Сейчас назначено' : 'Current shortcut'}</span><strong id="hotkeyCurrent">${esc(hotkeyLabel())}</strong></div>
-    <div class="group"><div class="row toggle-row"><span>${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}</span><button class="switch" id="hotkeyModeSwitch" type="button" role="switch" aria-label="${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}"></button></div></div>
+    `<div class="group"><div class="row toggle-row"><span>${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'} <small>${esc(hotkeyLabel(defaultHotkeyForPlatform()))}</small></span><button class="switch" id="hotkeyModeSwitch" type="button" role="switch" aria-label="${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}"></button></div></div>
+    <div class="hotkey-active"><span>${lang() === 'ru' ? 'Сейчас назначено' : 'Current shortcut'}</span><strong id="hotkeyCurrent">${esc(hotkeyLabel())}</strong></div>
     <div id="hotkeyCustom">
     <button class="hotkey-recorder" id="hotkeyCapture" type="button"></button>
     <div class="hotkey-preview"><span>${lang() === 'ru' ? 'Новое сочетание' : 'New shortcut'}</span><strong id="hotkeyPreview">—</strong></div>
@@ -1199,6 +1204,7 @@ function openHotkey() {
   $('#hotkeyApply').onclick = () => {if (candidateHotkey) requestHotkey(candidateHotkey, 'custom');};
   $('#hotkeyModeSwitch').onclick = () => {
     if (pendingHotkey) return;
+    if (capturingHotkey) send('endHotkeyCapture');
     capturingHotkey = false;
     candidateHotkey = null;
     if (hotkeySelection === 'custom') {
@@ -1237,16 +1243,18 @@ function startHotkeyCapture() {
   if (pendingHotkey) return;
   capturingHotkey = true;
   candidateHotkey = null;
+  send('beginHotkeyCapture');
   capturedModifiers = 0;
   const modifiers = platform === 'macos' ? 'Control, Option, Shift и Command' : 'Ctrl, Alt и Shift';
   const modifiersEn = platform === 'macos' ? 'Control, Option, Shift and Command' : 'Ctrl, Alt and Shift';
-  updateHotkeyUI(lang() === 'ru' ? `Нажатые ${modifiers} появляются ниже. Завершите сочетание клавишей.` : `${modifiersEn} appear below as you press them. Finish with a key.`);
+  updateHotkeyUI(lang() === 'ru' ? `Нажатые ${modifiers} появляются ниже. Нажмите клавишу или Mouse 4/5.` : `${modifiersEn} appear below. Press a key or Mouse 4/5.`);
   $('#hotkeyCapture').focus();
 }
 
 function requestHotkey(hotkey, mode = 'custom') {
   if (pendingHotkey) return;
   capturingHotkey = false;
+  send('endHotkeyCapture');
   pendingHotkey = hotkey;
   pendingHotkeyMode = mode;
   updateHotkeyUI(lang() === 'ru' ? `Проверяем ${hotkeyLabel(hotkey)}…` : `Checking ${hotkeyLabel(hotkey)}…`);
@@ -1266,6 +1274,7 @@ document.addEventListener('keydown', event => {
   }
   candidateHotkey = hotkey;
   capturingHotkey = false;
+  send('endHotkeyCapture');
   updateHotkeyUI(lang() === 'ru' ? 'Сочетание записано. Нажмите «Применить», чтобы проверить и сохранить.' : 'Shortcut recorded. Press Apply to check and save it.');
 }, true);
 
@@ -1652,6 +1661,13 @@ document.addEventListener('click', event => {
 }, true);
 
 host?.addEventListener('message', event => {
+  if (event.data?.type === 'hotkeyCaptured' && capturingHotkey) {
+    candidateHotkey = {modifiers: event.data.modifiers, key: event.data.key};
+    capturingHotkey = false;
+    send('endHotkeyCapture');
+    updateHotkeyUI(lang() === 'ru' ? 'Кнопка записана. Нажмите «Применить».' : 'Button recorded. Press Apply.');
+    return;
+  }
   if (event.data?.type === 'hotkeyResult') {
     activeHotkey = {modifiers: event.data.modifiers, key: event.data.key};
     if (event.data.success && pendingHotkey) {
@@ -1681,7 +1697,7 @@ host?.addEventListener('message', event => {
   activeHotkey = Number.isInteger(event.data.hotkeyModifiers) && Number.isInteger(event.data.hotkeyKey)
     ? {modifiers: event.data.hotkeyModifiers, key: event.data.hotkeyKey}
     : {...(config.settings.hotkey || defaultHotkeyForPlatform())};
-  if (!config.settings.manual_hotkey && config.settings.hotkey && !sameHotkey(config.settings.hotkey, defaultHotkeyForPlatform()))
+  if (!config.settings.manual_hotkey && config.settings.hotkey && !sameHotkey(config.settings.hotkey, {modifiers:5,key:84}) && !sameHotkey(config.settings.hotkey, defaultHotkeyForPlatform()))
     config.settings.manual_hotkey = {...config.settings.hotkey};
   soundLibraryReady = loadSoundLibrary();
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
