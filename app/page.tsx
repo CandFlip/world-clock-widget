@@ -18,8 +18,8 @@ type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<s
 type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [] };
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.115/WorldClockWidget-Setup-v1.1.115.exe';
-const macDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.115/WorldClockWidget-macOS-v1.1.115.dmg';
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.117/WorldClockWidget-Setup-v1.1.117.exe';
+const macDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.117/WorldClockWidget-macOS-v1.1.117.dmg';
 export default function Home() {
   const [lang, setLang] = useState<'ru' | 'en'>('ru');
   const [data, setData] = useState<Roadmap>(defaults);
@@ -57,7 +57,7 @@ export default function Home() {
     localStorage.setItem('wc-lang', value);
     document.documentElement.lang = value;
   };
-  const version = data.settings.download_version || 'v1.1.115';
+  const version = data.settings.download_version || 'v1.1.117';
   const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   const mobileRaised = data.funded['mobile-official'] || 0;
 
@@ -112,7 +112,7 @@ export default function Home() {
 
     <section className="hero" id="top">
       <h1>{t.headline}</h1><p className="hero-copy">{t.intro}</p>
-      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action" href={macDownload}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.115" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
+      <div className="hero-actions"><a className="primary-action" href={download}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action" href={macDownload}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.117" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
       <p className="download-note">{t.downloadNote}</p>
     </section>
 
