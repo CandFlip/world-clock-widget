@@ -15,10 +15,10 @@ export async function GET(request: Request) {
     env.DB.prepare("SELECT id,title,problem,outcome,created_at FROM suggestions WHERE status='published' ORDER BY created_at DESC LIMIT 20").all(),
   ]);
   const config = Object.fromEntries(settings.results.filter((row) => !row.key.startsWith('support_method_image:')).map((row) => [row.key, row.value]));
-  if (!config.download_version || ['v1.1.106', 'v1.1.108', 'v1.1.114', 'v1.1.115'].includes(config.download_version)) {
+  if (!config.download_version || ['v1.1.106', 'v1.1.108', 'v1.1.114', 'v1.1.115', 'v1.1.117'].includes(config.download_version)) {
     const now = new Date().toISOString();
-    config.download_version = 'v1.1.117';
-    config.download_url = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.117/WorldClockWidget-Setup-v1.1.117.exe';
+    config.download_version = 'v1.1.118';
+    config.download_url = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.118/WorldClockWidget-Setup-v1.1.118.exe';
     await env.DB.batch(Object.entries({ download_version: config.download_version, download_url: config.download_url }).map(([key, value]) => env.DB.prepare('INSERT INTO site_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at').bind(key,value,now)));
   }
   const ideas = parseIdeas(config.roadmap_ideas);
