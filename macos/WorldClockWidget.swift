@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.117"
+private let appVersion = "v1.1.118"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -220,7 +220,24 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func runSelfTest(attempt: Int = 1) {
-        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function' && hotkeyLabel({modifiers:1,key:32}) === '⌥+Space' && hotkeyLabel({modifiers:2,key:191}) === '⌃+/' && hotkeyLabel({modifiers:0,key:1001}) === 'Mouse 4'"
+        let settingsScript = """
+        (() => {
+          openSettings();
+          const titles = document.querySelector('#quickTitles');
+          const intervals = document.querySelector('#intervals');
+          const sound = document.querySelector('#alarmSound');
+          const group = titles?.parentElement;
+          const valid = !!group && intervals?.parentElement === group && sound?.parentElement === group
+            && [...group.children].indexOf(titles) === 0
+            && titles.querySelector('.row-value')?.textContent.trim() === String(config.settings.quick_titles.length) + ' ›'
+            && !document.querySelector('#phone')
+            && titles.textContent.includes('Быстрые названия напоминаний')
+            && sound.textContent.includes('Звук напоминания');
+          closeModal();
+          return valid;
+        })()
+        """
+        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function' && hotkeyLabel({modifiers:1,key:32}) === '⌥+Space' && hotkeyLabel({modifiers:2,key:191}) === '⌃+/' && hotkeyLabel({modifiers:0,key:1001}) === 'Mouse 4' && " + settingsScript
         panel.orderOut(nil)
         _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         let defaultMapping = currentModifiers == 1 && virtualKeyCode(for: 32) == UInt32(kVK_Space)

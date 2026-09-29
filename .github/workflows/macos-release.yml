@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - 'codex/mac-validation-v117'
+      - 'codex/mac-validation-v118'
     tags:
       - 'v*'
 

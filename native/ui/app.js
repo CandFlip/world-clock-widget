@@ -75,7 +75,7 @@ async function loadSoundLibrary() {
       await soundStorage('delete', 'alarm');
     }
     soundLibrary = (await soundStorage('getAll')).filter(sound => sound?.id && sound.blob);
-  } catch { console.warn('Alarm sound library could not be loaded'); }
+  } catch { console.warn('Reminder sound library could not be loaded'); }
 }
 
 function defaultSoundId() {
@@ -229,7 +229,7 @@ const strings = {
     typicalSchedule: 'Типичный график', citySettings: 'График в городах', defaultSchedule: 'График по умолчанию',
     working: 'Рабочее время', okay: 'Можно связаться', dnd: 'Не беспокоить', daylight: 'Светло', twilight: 'Сумерки', night: 'Темно',
     rename: 'Переименовать', schedule: 'График', makeBase: 'Сделать базовым', remove: 'Удалить', useDefault: 'Использовать общий график', displayLabel: 'Имя человека или клиента',
-    alarmAction: 'Будильник', changeCity: 'Сменить город', contactHours: 'Часы связи',
+    alarmAction: 'Напоминание', changeCity: 'Сменить город', contactHours: 'Часы связи',
     intervals: 'Интервалы напоминания', autostart: 'Запускать вместе с Windows', favorites: 'ИЗБРАННЫЕ ГОРОДА',
     results: 'РЕЗУЛЬТАТЫ ПОИСКА', search: 'Поиск города...', system: 'Время Windows', from: 'от базы', now: 'Сейчас',
     save: 'Сохранить', choose: 'Выберите город', got: 'Понятно', snooze: 'Повторить через 5 минут', alarm: 'Напоминание',
@@ -244,7 +244,7 @@ const strings = {
     typicalSchedule: 'Typical schedule', citySettings: 'Schedules by city', defaultSchedule: 'Default schedule',
     working: 'Working', okay: 'Okay to contact', dnd: 'Do not disturb', daylight: 'Daylight', twilight: 'Twilight', night: 'Night',
     rename: 'Rename', schedule: 'Schedule', makeBase: 'Make base', remove: 'Remove', useDefault: 'Use default schedule', displayLabel: 'Person or client name',
-    alarmAction: 'Alarm', changeCity: 'Change city', contactHours: 'Contact hours',
+    alarmAction: 'Reminder', changeCity: 'Change city', contactHours: 'Contact hours',
     intervals: 'Reminder intervals', autostart: 'Start with Windows', favorites: 'FAVORITE CITIES',
     results: 'SEARCH RESULTS', search: 'Search city...', system: 'Windows time', from: 'from base', now: 'Now',
     save: 'Save', choose: 'Choose a city', got: 'Got it', snooze: 'Remind again in 5 minutes', alarm: 'Reminder',
@@ -1294,10 +1294,9 @@ function openSettings() {
     <div class="row" id="base"><span>${t('base')}</span><span class="row-value">${config.settings.top_clock_mode === 'auto' ? t('system') : esc(cityName(config.settings.manual_top_timezone))} ›</span></div></div>
     <div class="group"><button class="row settings-button" id="typicalSchedule"><span>${t('typicalSchedule')}</span><span class="row-value">›</span></button>
     <button class="row settings-button" id="citySettings"><span>${t('citySettings')}</span><span class="row-value">${config.timezones.length} ›</span></button></div>
-    <div class="group"><div class="row" id="intervals"><span>${t('intervals')}</span><span class="row-value">${config.settings.reminder_intervals.join(' · ')} ›</span></div>
-    <button class="row settings-button" id="alarmSound"><span>${lang() === 'ru' ? 'Звук будильника' : 'Alarm sound'}</span><span class="row-value">${esc(soundName(defaultSoundId()))} ›</span></button></div>
-    <div class="group"><button class="row settings-button" id="quickTitles"><span>${lang() === 'ru' ? 'Быстрые названия' : 'Quick titles'}</span><span class="row-value">›</span></button></div>
-    <div class="group"><button class="row settings-button" id="phone"><span>${lang() === 'ru' ? 'Телефон' : 'Phone'}</span><span class="row-value">${window.syncSettingsLabel?.() || (lang() === 'ru' ? 'Подключить Android' : 'Connect Android')} ›</span></button></div>
+    <div class="group"><button class="row settings-button" id="quickTitles"><span>${lang() === 'ru' ? 'Быстрые названия напоминаний' : 'Quick reminder titles'}</span><span class="row-value">${config.settings.quick_titles.length} ›</span></button>
+    <div class="row" id="intervals"><span>${t('intervals')}</span><span class="row-value">${config.settings.reminder_intervals.join(' · ')} ›</span></div>
+    <button class="row settings-button" id="alarmSound"><span>${lang() === 'ru' ? 'Звук напоминания' : 'Reminder sound'}</span><span class="row-value">${esc(soundName(defaultSoundId()))} ›</span></button></div>
     <div class="group"><button class="row settings-button" id="direction"><span>${lang() === 'ru' ? 'Появление и скрытие' : 'Show and hide'}</span><span class="row-value">${directionOptions().find(([value]) => value === config.settings.overlay_direction)?.[1] || directionOptions()[1][1]} ›</span></button>
     <button class="row settings-button" id="hotkey"><span>${lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut'}</span><span class="row-value">${esc(hotkeyLabel())}</span></button></div>
     <div class="group"><div class="row toggle-row"><span>${t('autostart')}</span><button class="switch ${config.settings.autostart ? 'on' : ''}" id="autostartSwitch" role="switch" aria-checked="${config.settings.autostart ? 'true' : 'false'}" aria-label="${t('autostart')}"></button></div></div>`);
@@ -1318,7 +1317,6 @@ function openSettings() {
   $('#direction').onclick = openDirection;
   $('#hotkey').onclick = openHotkey;
   $('#quickTitles').onclick = openQuickTitles;
-  $('#phone').onclick = () => window.openPhoneSettings?.();
   $('#autostartSwitch').onclick = () => {
     config.settings.autostart = !config.settings.autostart;
     saveConfig();
@@ -1330,9 +1328,9 @@ function openSettings() {
 async function openAlarmSound() {
   await soundLibraryReady;
   const ru = lang() === 'ru', selected = defaultSoundId();
-  modal(ru ? 'Звуки будильника' : 'Alarm sounds',
+  modal(ru ? 'Звуки напоминаний' : 'Reminder sounds',
     `<div class="group"><div class="row toggle-row"><span>${ru ? 'Звук системы' : 'System sound'}</span><button class="switch ${selected === 'system' ? 'on' : ''}" id="systemSoundSwitch" role="switch" aria-checked="${selected === 'system'}" aria-label="${ru ? 'Звук системы' : 'System sound'}"></button></div></div>
-    <p class="settings-help">${ru ? 'Общий звук для будильников. Добавляйте файлы, отмечайте избранное звёздочкой и выбирайте отдельный звук в редакторе будильника.' : 'Default alarm sound. Add files, mark favorites with a star and choose an individual sound in the alarm editor.'}</p>
+    <p class="settings-help">${ru ? 'Общий звук для напоминаний. Добавляйте файлы, отмечайте избранное звёздочкой и выбирайте отдельный звук при редактировании напоминания.' : 'Default reminder sound. Add files, mark favorites with a star and choose an individual sound when editing a reminder.'}</p>
     <label class="sound-drop" id="soundDrop" for="soundFile"><strong>${ru ? 'Перетащите звуки сюда' : 'Drop sounds here'}</strong><span>${ru ? 'или нажмите, чтобы выбрать файлы' : 'or click to choose files'}</span></label>
     <input id="soundFile" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.wma,.ogg,.flac,.opus" multiple hidden>
     <p class="sound-feedback" id="soundFeedback" role="status"></p>
