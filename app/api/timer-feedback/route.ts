@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { getSessionUser } from '@/lib/auth';
+import { sameOriginRequest } from '@/lib/auth-input';
 
 const limits = { context: 80, placement: 80, alertStyle: 80, typicalDuration: 80, notes: 600 } as const;
 
@@ -17,6 +18,7 @@ async function ensureTable() {
 }
 
 export async function POST(request: Request) {
+  if (!sameOriginRequest(request)) return Response.json({ error: 'Invalid origin.' }, { status: 403 });
   await ensureTable();
   const user = await getSessionUser(request);
   if (!user) return Response.json({ error: 'Sign in with Google to send feedback.' }, { status: 401 });

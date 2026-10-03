@@ -14,8 +14,7 @@ export async function POST(request: Request) {
       { user: publicUser({ ...profile, isAdmin }) },
       { headers: { 'Set-Cookie': session.cookie, 'Cache-Control': 'no-store' } },
     );
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Google sign-in failed.';
-    return Response.json({ error: message }, { status: 401 });
+  } catch {
+    return Response.json({ error: 'Google sign-in failed.' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   }
 }

@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { getSessionUser } from '@/lib/auth';
+import { sameOriginRequest } from '@/lib/auth-input';
 import { defaultSupportMethods } from '@/lib/support-methods';
 import { parseIdeas } from '@/lib/roadmap';
 import { strings } from '@/lib/site-strings';
@@ -7,13 +8,15 @@ import { strings } from '@/lib/site-strings';
 export async function POST(request: Request) {
   const user = await getSessionUser(request);
   if (!user?.isAdmin) return Response.json({ error: 'Administrator access required.' }, { status: 403 });
-  const origin = request.headers.get('Origin');
-  if (origin && origin !== new URL(request.url).origin) return Response.json({ error: 'Invalid origin.' }, { status: 403 });
-  const body = await request.json() as Record<string, unknown>, now = new Date().toISOString();
+  if (!sameOriginRequest(request)) return Response.json({ error: 'Invalid origin.' }, { status: 403 });
+  let body: Record<string,unknown>;
+  try { body = await request.json(); } catch { return Response.json({ error: 'Invalid input.' }, { status: 400 }); }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'Invalid input.' }, { status: 400 });
+  const now = new Date().toISOString();
   if (body.kind === 'suggestion' && typeof body.id === 'string' && ['pending','published','declined'].includes(String(body.status))) {
     await env.DB.prepare('UPDATE suggestions SET status=?,updated_at=? WHERE id=?').bind(body.status, now, body.id).run();
   } else if (body.kind === 'suggestion-delete' && typeof body.id === 'string') {
-    await env.DB.prepare('DELETE FROM suggestions WHERE id=?').bind(body.id).run();
+    await env.DB.prepare("UPDATE suggestions SET status='declined',updated_at=? WHERE id=?").bind(now,body.id).run();
   } else if (body.kind === 'settings') {
     const allowed = ['author_goal_cents','author_story_ru','author_story_en','story_title_ru','story_title_en','story_note_ru','story_note_en','download_url','download_version','roadmap_ideas','ui_copy_ru','ui_copy_en'];
     const values = body.values && typeof body.values === 'object' ? body.values as Record<string,unknown> : {};
@@ -37,7 +40,7 @@ export async function POST(request: Request) {
       let parsed: unknown;
       try { parsed = JSON.parse(rawIdeas); } catch { return Response.json({ error: 'Неверный формат планов.' }, { status: 400 }); }
       const ideas = parseIdeas(rawIdeas);
-      if (!Array.isArray(parsed) || ideas.length !== parsed.length || ideas.length > 30 || new Set(ideas.map((item) => item.id)).size !== ideas.length || ideas.some((item) => !/^[a-z0-9-]{3,64}$/.test(item.id) || !item.title.ru.trim() || !item.title.en.trim() || !Number.isSafeInteger(item.goalCents) || item.goalCents < 0 || item.goalCents > 100000000)) return Response.json({ error: 'Проверьте карточки планов.' }, { status: 400 });
+      if (!Array.isArray(parsed) || ideas.length !== parsed.length || ideas.length > 30 || new Set(ideas.map((item) => item.id)).size !== ideas.length || ideas.some((item) => !/^[a-z0-9-]{3,64}$/.test(item.id) || (!item.title.ru.trim() && !item.title.en.trim()) || !['idea','funding','planned','building','done','hidden'].includes(item.status) || [item.title.ru,item.title.en].some((text) => text.length > 100) || [item.description.ru,item.description.en].some((text) => text.length > 1600) || !Number.isSafeInteger(item.goalCents) || item.goalCents < 0 || item.goalCents > 100000000)) return Response.json({ error: 'Проверьте карточки планов.' }, { status: 400 });
     }
     if (entries.length) await env.DB.batch(entries.map(([key,value]) => env.DB.prepare('INSERT INTO site_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at').bind(key,(value as string).slice(0,key === 'roadmap_ideas' ? 30000 : key.startsWith('ui_copy_') ? 12000 : 3000),now)));
   } else if (body.kind === 'method') {
@@ -72,7 +75,9 @@ export async function POST(request: Request) {
     ]);
   } else if (body.kind === 'manual-contribution') {
     const amount = Number(String(body.amount).replace(',', '.'));
-    const target = body.target === 'author' ? 'author' : 'mobile-official';
+    const ideasRow = await env.DB.prepare("SELECT value FROM site_settings WHERE key='roadmap_ideas'").first<{value:string}>();
+    const target = typeof body.target === 'string' ? body.target : 'author';
+    if (target !== 'author' && !parseIdeas(ideasRow?.value).some((idea) => idea.id === target && idea.goalCents > 0)) return Response.json({ error: 'Invalid target.' }, { status: 400 });
     if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) return Response.json({ error: 'Invalid amount.' }, { status: 400 });
     const id = crypto.randomUUID();
     await env.DB.prepare("INSERT INTO contributions(id,visitor_id,target_id,amount_cents,currency,reference,status,provider,provider_event_id,verified_at,created_at,updated_at) VALUES(?,NULL,?,?,?,?,'confirmed','admin-manual',?,?,?,?,?)")

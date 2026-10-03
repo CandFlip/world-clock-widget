@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { getApps, initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, inMemoryPersistence, setPersistence, signInWithPopup, signOut } from 'firebase/auth';
 
 export type GoogleUser = { id: string; email: string; name: string; picture: string; isAdmin: boolean };
 const appName = 'world-clock-site';
@@ -43,10 +43,13 @@ export function GoogleSignIn({ onSignedIn, lang='ru' }: { onSignedIn: (user: Goo
   async function signIn() {
     if (!configRef.current || busy) return;
     setBusy(true);
+    let auth: ReturnType<typeof getAuth> | null = null;
     try {
       setError('');
       const app = getApps().find((item) => item.name === appName) || initializeApp(configRef.current, appName);
-      const result = await signInWithPopup(getAuth(app), new GoogleAuthProvider());
+      auth = getAuth(app);
+      await setPersistence(auth, inMemoryPersistence);
+      const result = await signInWithPopup(auth, new GoogleAuthProvider());
       const credential = await result.user.getIdToken();
       const response = await fetch('/api/auth/session', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential }),
@@ -57,6 +60,7 @@ export function GoogleSignIn({ onSignedIn, lang='ru' }: { onSignedIn: (user: Goo
     } catch (reason) {
       setError(signInError(reason, lang));
     } finally {
+      if (auth) await signOut(auth).catch(() => {});
       setBusy(false);
     }
   }

@@ -1,4 +1,4 @@
-import { index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, index, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const users = sqliteTable('users', {
   id: text('id').primaryKey(),
@@ -62,3 +62,8 @@ export const supportMethods = sqliteTable('support_methods', {
   id: text('id').primaryKey(), label: text('label').notNull(), url: text('url').notNull(), instructions: text('instructions').notNull(),
   active: text('active').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
 });
+
+export const downloadDaily = sqliteTable('download_daily', {
+  day: text('day').notNull(), platform: text('platform').notNull(), country: text('country').notNull(),
+  region: text('region').notNull(), clicks: integer('clicks').notNull().default(0),
+}, (table) => [primaryKey({ columns: [table.day, table.platform, table.country, table.region] })]);

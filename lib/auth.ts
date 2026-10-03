@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const SESSION_COOKIE = 'wc_session';
-const SESSION_DAYS = 30;
+const SESSION_DAYS = 7;
 const ADMIN_EMAIL = 'uuuraaaaa@gmail.com';
 const firebaseJwks = createRemoteJWKSet(new URL(
   'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com',
@@ -70,9 +70,17 @@ export async function verifyFirebaseCredential(credential: string) {
   const { payload } = await jwtVerify(credential, firebaseJwks, {
     audience: projectId,
     issuer: `https://securetoken.google.com/${projectId}`,
+    algorithms: ['RS256'],
   });
   if (!payload.sub || typeof payload.email !== 'string' || payload.email_verified !== true) {
     throw new Error('Google account email is not verified.');
+  }
+  const firebase = payload.firebase;
+  if (!firebase || typeof firebase !== 'object' || (firebase as Record<string, unknown>).sign_in_provider !== 'google.com') {
+    throw new Error('Sign in with Google is required.');
+  }
+  if (typeof payload.auth_time !== 'number' || payload.auth_time > Date.now() / 1000 || Date.now() / 1000 - payload.auth_time > 5 * 60) {
+    throw new Error('Recent Google sign-in is required.');
   }
   const name = typeof payload.name === 'string' ? payload.name : payload.email;
   const picture = typeof payload.picture === 'string' ? payload.picture : '';

@@ -1,0 +1,51 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+const base=process.env.WC_QA_URL;
+if (base && !['localhost','127.0.0.1'].includes(new URL(base).hostname)) throw new Error('QA must use local data only');
+const admin='wc_session=local-review-admin', user='wc_session=local-review-user';
+async function call(path,method='GET',body,cookie=user,origin=base) {
+ const response=await fetch(`${base}${path}`,{method,headers:{...(cookie?{Cookie:cookie}:{}),...(method==='GET'?{}:{Origin:origin,'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)})});
+ const text=await response.text();let parsed;try {parsed=JSON.parse(text);} catch {parsed={error:text.slice(0,200)};}
+ return {status:response.status,body:parsed};
+}
+test('local API workflow: permissions, cancellation, moderation, translation and click aggregation',{skip:!base},async () => {
+ assert.equal((await call('/api/admin/overview','GET',undefined,null)).status,401);
+ assert.equal((await call('/api/admin/overview')).status,403);
+ assert.equal((await call('/api/admin/downloads')).status,403);
+ assert.equal((await call('/api/votes','POST',{optionId:'mobile-official'},user,'https://example.invalid')).status,403);
+ assert.equal((await call('/api/votes','POST',{optionId:'mobile-official'},null)).status,401);
+ assert.equal((await call('/api/votes','POST',{optionId:'does-not-exist'})).status,400);
+ assert.equal((await call('/api/votes','POST',{optionId:'mobile-official'})).body.selected,'mobile-official');
+ assert.equal((await call('/api/votes','POST',{optionId:'voice-control'})).body.selected,'voice-control');
+ assert.equal((await call('/api/votes','DELETE')).body.selected,null);
+ assert.equal((await call('/api/votes','DELETE')).body.selected,null);
+ assert.equal((await call('/api/votes')).body.total,0);
+ const title=`QA moderated idea ${Date.now()}`;
+ assert.equal((await call('/api/suggestions','POST',{title,problem:'Test a useful new workflow',outcome:'Consistent feedback list'})).status,200);
+ let overview=(await call('/api/admin/overview','GET',undefined,admin)).body;
+ const suggestion=overview.suggestions.find((row)=>row.title===title);assert.equal(suggestion.status,'pending');
+ let roadmap=(await call('/api/roadmap')).body;
+ assert(!roadmap.ideas.some((idea)=>idea.id===`suggestion-${suggestion.id}`));assert(roadmap.ownSuggestions.some((idea)=>idea.id===suggestion.id));
+ assert.equal((await call('/api/admin/manage','POST',{kind:'suggestion',id:suggestion.id,status:'published'},user)).status,403);
+ assert.equal((await call('/api/admin/manage','POST',{kind:'suggestion',id:suggestion.id,status:'published'},admin)).status,200);
+ roadmap=(await call('/api/roadmap')).body;assert(roadmap.ideas.some((idea)=>idea.id===`suggestion-${suggestion.id}`));
+ assert.equal((await call('/api/votes','POST',{optionId:`suggestion-${suggestion.id}`})).body.selected,`suggestion-${suggestion.id}`);
+ await call('/api/admin/manage','POST',{kind:'suggestion',id:suggestion.id,status:'declined'},admin);
+ assert.equal((await call('/api/votes','POST',{optionId:`suggestion-${suggestion.id}`})).status,400);
+ assert.equal((await call('/api/votes')).body.selected,null);
+ await call('/api/admin/manage','POST',{kind:'suggestion',id:suggestion.id,status:'published'},admin);
+ assert.equal((await call('/api/votes')).body.counts[`suggestion-${suggestion.id}`],1);
+ await call('/api/votes','DELETE');
+ const before=(await call('/api/admin/overview','GET',undefined,admin)).body.settings.ui_copy_en;
+ await call('/api/admin/manage','POST',{kind:'settings',values:{ui_copy_ru:JSON.stringify({headline:'Тестовый заголовок'})}},admin);
+ assert.equal((await call('/api/admin/overview','GET',undefined,admin)).body.settings.ui_copy_en,before);
+ assert.equal((await call('/api/downloads','POST',{platform:'linux'},null)).status,400);
+ assert.equal((await call('/api/downloads','POST',{platform:['windows']},null)).status,400);
+ assert.equal((await call('/api/downloads','POST',{platform:'windows'},null,'https://example.invalid')).status,403);
+ const initial=(await call('/api/admin/downloads','GET',undefined,admin)).body.totals.reduce((n,r)=>n+Number(r.clicks),0);
+ assert.equal((await call('/api/downloads','POST',{platform:'windows'},null)).status,200);
+ assert.equal((await call('/api/downloads','POST',{platform:'windows'},null)).status,200);
+ assert.equal((await call('/api/downloads','POST',{platform:'mac'},null)).status,200);
+ const stats=(await call('/api/admin/downloads','GET',undefined,admin)).body;
+ assert.equal(stats.totals.reduce((n,r)=>n+Number(r.clicks),0),initial+3);assert(stats.started);assert(stats.regions.length>0);
+});

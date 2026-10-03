@@ -38,3 +38,14 @@ export function parseIdeas(value?: string): Idea[] {
       typeof item.goalCents === 'number');
   } catch { return parseIdeas(); }
 }
+
+
+export type Suggestion = { id: string; title: string; problem: string; outcome: string; status?: string };
+export function publicIdeas(raw: string | undefined, suggestions: Suggestion[]): Idea[] {
+  return [...parseIdeas(raw).filter((idea) => idea.status !== 'hidden').map((idea) => ({ ...idea, title: { ru: idea.title.ru || idea.title.en, en: idea.title.en || idea.title.ru }, description: { ru: idea.description.ru || idea.description.en, en: idea.description.en || idea.description.ru } })), ...suggestions.map((item) => ({
+    id: `suggestion-${item.id}`, status: 'community', goalCents: 0,
+    title: { ru: item.title, en: item.title },
+    description: { ru: [item.problem, item.outcome].filter(Boolean).join('\n\n'), en: [item.problem, item.outcome].filter(Boolean).join('\n\n') },
+    cost: { ru: '', en: '' },
+  }))];
+}
