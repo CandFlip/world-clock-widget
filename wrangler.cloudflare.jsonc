@@ -1,0 +1,28 @@
+{
+  "name": "world-clock-next",
+  "account_id": "06ffc845ed2c71cf4e95f6c311ee99a1",
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "world-clock-next-db",
+      "database_id": "948bcf52-34d5-429d-af74-2c88f5f0cef6"
+    }
+  ],
+  "vars": {
+    "BYBIT_UID": "101671853",
+    "BYBIT_USDT_TRC20_ADDRESS": "TPtg2P4jLsk4YQBHAQGocVfMhxKWVqbE46",
+    "FIREBASE_APP_ID": "1:270013543401:web:4e845ce44fc1ea51645178",
+    "FIREBASE_AUTH_DOMAIN": "world-clock-roadmap.firebaseapp.com",
+    "FIREBASE_PROJECT_ID": "world-clock-roadmap",
+    "PUBLIC_SITE_URL": "https://world-clock-next.uuuraaaaa.workers.dev"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

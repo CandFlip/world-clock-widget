@@ -5,7 +5,7 @@ import './globals.css';
 const manrope = Manrope({ variable: '--font-body', subsets: ['latin', 'cyrillic'] });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://world-clock-next.decent-rat-2368.chatgpt.site'),
+  metadataBase: new URL(process.env.PUBLIC_SITE_URL || 'https://world-clock-next.decent-rat-2368.chatgpt.site'),
   title: 'Что дальше? — World Clock Widget',
   description: 'Бесплатный World Clock Widget для звонков, встреч и напоминаний между часовыми поясами.',
   icons: { icon: '/favicon.svg', shortcut: '/favicon.svg' },
