@@ -2,6 +2,8 @@ const trashIcon = `<svg class="trash-icon" viewBox="0 0 24 24" fill="none" strok
 const quickAlarmIcon = `<svg class="quick-alarm-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M5.5 3.5 2.5 6.5M18.5 3.5l3 3M7 20l-1.5 2M17 20l1.5 2"/></svg>`;
 const quickChevronIcon = `<svg class="quick-chevron-glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 6 5 5 5-5"/></svg>`;
 const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg>`;
+const checkUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9A7 7 0 0 1 18 6.8L20 12M4 12l2 5.2A7 7 0 0 0 18.2 15"/></svg>`;
+const downloadUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/></svg>`;
 const meetingOutlineSvg = `<svg class="meeting-outline" aria-hidden="true" focusable="false"><rect x="1" y="1" width="100%" height="100%" rx="8" ry="8"/></svg>`;
 const host = window.chrome?.webview;
 const send = message => host?.postMessage(message);
@@ -27,6 +29,10 @@ const defaults = {
 let config = structuredClone(defaults);
 let reminders = {lead: 15, entries: []};
 let version = 'native';
+const updateState = {checking:false, release:null};
+const updateCheckKey = 'worldClockLastUpdateCheck';
+const updateReleaseKey = 'worldClockLatestRelease';
+const updateCheckPeriod = 24 * 60 * 60 * 1000;
 let offset = 0;
 let quickAtNowOpen = false;
 let meetingMode = false;
@@ -773,7 +779,7 @@ function render() {
     <div class="cities" id="cities"></div>
     <button class="add" data-action="add">＋ &nbsp; ${t('add')}</button>
     </div>
-    <div class="footer"><span>${esc(version)}</span><button class="whats-next" data-action="whats-next">${t('whatsNext')}</button></div>
+    <div class="footer"><button class="version-button" id="versionButton" type="button">${esc(version)}</button><button class="update-button context-token" id="updateButton" type="button">${checkUpdateIcon}</button><button class="whats-next" data-action="whats-next">${t('whatsNext')}</button></div>
   </div>`;
   renderCities();
   renderAlarms();
@@ -993,6 +999,9 @@ function bindMain() {
   $('[data-action=add]').onclick = () => openCities('add');
   $('[data-action=hide]').onclick = () => send('hide');
   $('[data-action=whats-next]').onclick = () => send('openExternal\nhttps://world-clock-next.decent-rat-2368.chatgpt.site');
+  $('#versionButton').onclick = openFeatureGuide;
+  $('#updateButton').onclick = updateButtonClick;
+  updateUpdateButton();
   $('.header h1').onpointerdown = () => send('drag');
 
   const slider = $('#timeSlider');
@@ -1359,6 +1368,110 @@ function modal(title, body, onBack = closeModal) {
 }
 
 function closeModal() { if (capturingHotkey) send('endHotkeyCapture'); detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
+
+function openFeatureGuide() {
+  const ru = lang() === 'ru';
+  const groups = ru ? [
+    ['Время и города', 'Местное время, разница с базовым городом и переходы на летнее время. Добавляйте, заменяйте и переставляйте города. Передвигайте шкалу, чтобы увидеть время в ближайшие 24 часа.'],
+    ['Имена и графики', 'Укажите имя человека или клиента и его часы связи. Зелёная полоса означает рабочее время, жёлтая — можно связаться при необходимости, тёмная — «Не беспокоить».'],
+    ['Удобно всем', 'Выберите участников, и приложение найдёт 30 минут для звонка: сначала в общие рабочие часы, затем в доступное время. Скопируйте местные дату и время каждого участника в общий чат.'],
+    ['Напоминания', 'Откройте быстрые интервалы значком будильника, выберите город или перетащите интервал на его карточку. Настраивайте интервалы, названия и звук.'],
+    ['Ваш виджет', 'Выберите тему, язык, формат времени, базовый город, размер и положение окна. Настройте автозапуск и сочетание клавиш.']
+  ] : [
+    ['Time and cities', 'See local times, the difference from your base city, and daylight saving changes. Add, replace, and reorder cities. Move the timeline to explore the next 24 hours.'],
+    ['Names and schedules', 'Set a person or client name and contact hours. Green means working time, yellow means reachable if needed, and dark means do not disturb.'],
+    ['Good for all', 'Choose participants and find a 30-minute call window, preferring shared working hours. Copy each participant’s local date and time to your group chat.'],
+    ['Reminders', 'Open quick intervals with the alarm icon, choose a city, or drag an interval onto a city card. Adjust intervals, names, and sound.'],
+    ['Your widget', 'Choose a theme, language, time format, base city, window size and position. Set startup and a keyboard shortcut.']
+  ];
+  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Widget ${esc(version)}</strong><p>${ru ? 'Планируйте звонки между городами без ручного пересчёта времени.' : 'Plan calls across cities without calculating time zones by hand.'}</p></div>${groups.map(([title, description]) => `<section class="feature-card"><h3>${esc(title)}</h3><p>${esc(description)}</p></section>`).join('')}</div>`);
+}
+
+function versionParts(value) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:\s|$)/.exec(value || '');
+  return match ? match.slice(1, 4).map(Number) : null;
+}
+
+function newerVersion(candidate, installed) {
+  const next = versionParts(candidate), current = versionParts(installed);
+  if (!next || !current) return false;
+  for (let i = 0; i < 3; i++) if (next[i] !== current[i]) return next[i] > current[i];
+  return false;
+}
+
+function updateUpdateButton() {
+  const button = $('#updateButton');
+  if (!button) return;
+  const ru = lang() === 'ru';
+  const available = Boolean(updateState.release && newerVersion(updateState.release.tag, version));
+  const caption = updateState.checking ? (ru ? 'Проверяем обновление…' : 'Checking for updates…')
+    : available ? (ru ? `Скачать обновление ${updateState.release.tag}` : `Download update ${updateState.release.tag}`)
+    : (ru ? 'Проверить обновление' : 'Check for updates');
+  button.innerHTML = available ? downloadUpdateIcon : checkUpdateIcon;
+  button.dataset.tooltip = caption;
+  button.setAttribute('aria-label', caption);
+  button.disabled = updateState.checking;
+  button.classList.toggle('available', available);
+  button.classList.toggle('checking', updateState.checking);
+}
+
+async function checkForUpdates(manual = false) {
+  if (updateState.checking) return;
+  const now = Date.now();
+  let last = updateState.lastCheck || 0;
+  try { last = Number(localStorage.getItem(updateCheckKey) || last); } catch {}
+  if (!manual && now - last < updateCheckPeriod) return;
+  updateState.checking = true;
+  updateUpdateButton();
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 10000);
+  try {
+    const response = await fetch('https://api.github.com/repos/CandFlip/world-clock-widget/releases/latest', {
+      headers: {'Accept':'application/vnd.github+json'}, signal:abort.signal, cache:'no-store'
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const release = await response.json();
+    if (release.draft || release.prerelease || !versionParts(release.tag_name)) throw new Error('Invalid release');
+    const suffix = platform === 'macos' ? '.dmg' : '.exe';
+    const asset = (release.assets || []).find(item => item.name?.startsWith('WorldClockWidget-') && item.name.endsWith(suffix));
+    if (!asset || !asset.browser_download_url?.startsWith('https://github.com/CandFlip/world-clock-widget/releases/download/')) throw new Error('Release asset missing');
+    if (platform === 'windows' && !/^sha256:[a-f\d]{64}$/i.test(asset.digest || '')) throw new Error('Release checksum missing');
+    updateState.release = {tag:release.tag_name, url:asset.browser_download_url, digest:asset.digest || ''};
+    try { localStorage.setItem(updateReleaseKey, JSON.stringify(updateState.release)); } catch {}
+    if (manual) toast(newerVersion(release.tag_name, version)
+      ? (lang() === 'ru' ? `Доступна версия ${release.tag_name}` : `Version ${release.tag_name} is available`)
+      : (lang() === 'ru' ? 'У вас актуальная версия' : 'You have the latest version'));
+  } catch (error) {
+    if (manual) toast(lang() === 'ru' ? 'Не удалось проверить обновления' : 'Could not check for updates');
+  } finally {
+    updateState.lastCheck = now;
+    try { localStorage.setItem(updateCheckKey, String(now)); } catch {}
+    clearTimeout(timeout);
+    updateState.checking = false;
+    updateUpdateButton();
+  }
+}
+
+function restoreUpdateState() {
+  try {
+    const release = JSON.parse(localStorage.getItem(updateReleaseKey) || 'null');
+    if (release && versionParts(release.tag) &&
+        release.url?.startsWith('https://github.com/CandFlip/world-clock-widget/releases/download/'))
+      updateState.release = release;
+  } catch {}
+}
+
+function updateButtonClick() {
+  const release = updateState.release;
+  if (!release || !newerVersion(release.tag, version)) { checkForUpdates(true); return; }
+  if (platform === 'macos') {
+    send(`openExternal\n${release.url}`);
+    toast(lang() === 'ru' ? 'Загрузка открыта в браузере' : 'Download opened in browser');
+  } else {
+    send(`downloadUpdate\n${release.tag}\n${release.digest}`);
+    toast(lang() === 'ru' ? 'Загружаем обновление…' : 'Downloading update…');
+  }
+}
 
 function directionOptions() {
   return lang() === 'ru'
@@ -1823,6 +1936,7 @@ window.__nativeTickCount = 0;
 window.nativeTick = () => {
   window.__nativeTickCount += 1;
   updateDynamic(); updateLiveCityTimes(); updateAlarmDetail(); checkDue();
+  if (window.__nativeTickCount % 3600 === 0) checkForUpdates();
 };
 
 $('#resize').onpointerdown = () => send('resize');
@@ -1861,6 +1975,12 @@ document.addEventListener('click', event => {
 }, true);
 
 host?.addEventListener('message', event => {
+  if (event.data?.type === 'updateResult') {
+    toast(event.data.success
+      ? (lang() === 'ru' ? 'Открываем установщик обновления…' : 'Opening update installer…')
+      : (lang() === 'ru' ? 'Не удалось установить обновление' : 'Could not install the update'));
+    return;
+  }
   if (event.data?.type === 'copyResult') {
     toast(event.data.success ? (lang() === 'ru' ? 'Время скопировано' : 'Times copied') : (lang() === 'ru' ? 'Не удалось скопировать' : 'Could not copy'));
     return;
@@ -1895,6 +2015,7 @@ host?.addEventListener('message', event => {
   try { config = JSON.parse(event.data.configText || '{}'); } catch { config = {}; }
   try { reminders = JSON.parse(event.data.remindersText || '{}'); } catch { reminders = {lead: 15, entries: []}; }
   version = event.data.version || version;
+  restoreUpdateState();
   const previousTitleVersion = config.settings?.title_library_version;
   const previousReminders = JSON.stringify(reminders);
   normalize();
@@ -1909,6 +2030,7 @@ host?.addEventListener('message', event => {
   send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
   render();
   send('rendered');
+  if (typeof setTimeout === 'function') setTimeout(() => checkForUpdates(), 1200);
   window.syncInitialize?.(event.data.syncCredential || '');
 });
 window.addEventListener?.('widgetCopyResult', event => toast(event.detail ? (lang() === 'ru' ? 'Время скопировано' : 'Times copied') : (lang() === 'ru' ? 'Не удалось скопировать' : 'Could not copy')));

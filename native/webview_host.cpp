@@ -2,6 +2,8 @@
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <shellapi.h>
+#include <urlmon.h>
+#include <bcrypt.h>
 #include <wincred.h>
 #include <shlobj.h>
 #include <shobjidl.h>
@@ -14,6 +16,10 @@
 #include <string>
 #include <cstring>
 #include <regex>
+#include <thread>
+#include <atomic>
+#include <vector>
+#include <memory>
 #include "WebView2.h"
 
 using Microsoft::WRL::ComPtr;
@@ -27,13 +33,15 @@ constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kShowMessage = WM_APP + 2;
 constexpr UINT kShutdownMessage = WM_APP + 3;
 constexpr UINT kOutsideClick = WM_APP + 4;
+constexpr UINT kUpdateDownloaded = WM_APP + 5;
 constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.128";
+constexpr wchar_t kVersion[] = L"v1.1.129";
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
+std::atomic_bool g_updateDownloading{false};
 
 HWND g_window{};
 ComPtr<ICoreWebView2Controller> g_controller;
@@ -547,6 +555,51 @@ void trayMenu() {
     if (result == 2) PostMessageW(g_window, WM_CLOSE, 0, 0);
 }
 
+struct UpdateDownloadResult { std::filesystem::path path; bool success=false; };
+
+bool matchesSha256(const std::filesystem::path& path, const std::wstring& expected) {
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input) return false;
+    const auto size=input.tellg();
+    if (size <= 0 || size > 100 * 1024 * 1024) return false;
+    std::vector<unsigned char> bytes(static_cast<size_t>(size));
+    input.seekg(0);
+    if (!input.read(reinterpret_cast<char*>(bytes.data()), size)) return false;
+    BCRYPT_ALG_HANDLE algorithm{};
+    if (BCryptOpenAlgorithmProvider(&algorithm, BCRYPT_SHA256_ALGORITHM, nullptr, 0) < 0) return false;
+    unsigned char hash[32]{};
+    const auto status=BCryptHash(algorithm, nullptr, 0, bytes.data(), static_cast<ULONG>(bytes.size()), hash, sizeof(hash));
+    BCryptCloseAlgorithmProvider(algorithm, 0);
+    if (status < 0) return false;
+    const wchar_t digits[]=L"0123456789abcdef";
+    std::wstring actual=L"sha256:";
+    for (const auto byte:hash) {actual+=digits[byte >> 4]; actual+=digits[byte & 15];}
+    return _wcsicmp(actual.c_str(), expected.c_str()) == 0;
+}
+
+void downloadUpdate(const std::wstring& tag, const std::wstring& digest) {
+    if (!std::regex_match(tag, std::wregex(LR"(^v\d+\.\d+\.\d+$)")) ||
+        !std::regex_match(digest, std::wregex(LR"(^sha256:[0-9a-fA-F]{64}$)")) ||
+        g_updateDownloading.exchange(true)) return;
+    std::thread([tag,digest] {
+        auto* result=new UpdateDownloadResult();
+        const auto fileName=L"WorldClockWidget-Setup-"+tag+L".exe";
+        const auto url=L"https://github.com/CandFlip/world-clock-widget/releases/download/"+tag+L"/"+fileName;
+        const HRESULT initialized=CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        try {
+            auto directory=dataDir()/L"updates";
+            std::filesystem::create_directories(directory);
+            result->path=directory/fileName;
+            result->success=SUCCEEDED(URLDownloadToFileW(nullptr,url.c_str(),result->path.c_str(),0,nullptr)) &&
+                matchesSha256(result->path,digest);
+            if (!result->success) std::filesystem::remove(result->path);
+        } catch (...) { result->success=false; }
+        if (SUCCEEDED(initialized)) CoUninitialize();
+        g_updateDownloading=false;
+        if (!PostMessageW(g_window,kUpdateDownloaded,0,reinterpret_cast<LPARAM>(result))) delete result;
+    }).detach();
+}
+
 void handleMessage(const std::wstring& message) {
     auto payload = [&](const wchar_t* prefix) -> std::wstring {
         size_t n = wcslen(prefix); return message.size() > n ? message.substr(n) : L"";
@@ -600,6 +653,11 @@ void handleMessage(const std::wstring& message) {
     else if (message.rfind(L"openExternal\n", 0) == 0) {
         const auto url = payload(L"openExternal\n");
         if (url.rfind(L"https://", 0) == 0) ShellExecuteW(g_window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    }
+    else if (message.rfind(L"downloadUpdate\n", 0) == 0) {
+        const auto argument=payload(L"downloadUpdate\n");
+        const auto separator=argument.find(L'\n');
+        if (separator != std::wstring::npos) downloadUpdate(argument.substr(0,separator),argument.substr(separator+1));
     }
     else if (message.rfind(L"setStartup\n", 0) == 0 && !setStartupEnabled(payload(L"setStartup\n") == L"1")) logStartup(L"Failed to update Windows startup setting");
     else if (message == L"systemBeep" || message == L"beep") MessageBeep(MB_ICONEXCLAMATION);
@@ -705,6 +763,16 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             showWidget(false); return 0;
         }
         case kShutdownMessage: PostMessageW(window, WM_CLOSE, 0, 0); return 0;
+        case kUpdateDownloaded: {
+            std::unique_ptr<UpdateDownloadResult> result(reinterpret_cast<UpdateDownloadResult*>(lParam));
+            const bool launched=result && result->success &&
+                reinterpret_cast<INT_PTR>(ShellExecuteW(window,L"runas",result->path.c_str(),nullptr,nullptr,SW_SHOWNORMAL)) > 32;
+            if (g_webview) g_webview->PostWebMessageAsJson(launched
+                ? L"{\"type\":\"updateResult\",\"success\":true}"
+                : L"{\"type\":\"updateResult\",\"success\":false}");
+            if (launched) PostMessageW(window,WM_CLOSE,0,0);
+            return 0;
+        }
         case kTrayMessage:
             if (LOWORD(lParam)==WM_LBUTTONUP) showWidget(!g_visible);
             if (LOWORD(lParam)==WM_RBUTTONUP || LOWORD(lParam)==WM_CONTEXTMENU) trayMenu();

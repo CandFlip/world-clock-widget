@@ -24,7 +24,7 @@ if ($LASTEXITCODE -ne 0) { throw "Version resource failed" }
   -DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -D_WIN32_WINNT=0x0A00 `
   "-I$include" (Join-Path $PSScriptRoot "webview_host.cpp") $resource $loader `
   -o (Join-Path $output "WorldClockWidget.exe") `
-  -lole32 -lshell32 -luuid -luser32 -lgdi32 -ladvapi32 -ldwmapi
+  -lole32 -lshell32 -luuid -luser32 -lgdi32 -ladvapi32 -ldwmapi -lurlmon -lbcrypt
 if ($LASTEXITCODE -ne 0) { throw "Native WebView build failed" }
 
 Copy-Item -LiteralPath $loaderDll -Destination $output -Force
