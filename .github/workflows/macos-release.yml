@@ -33,6 +33,13 @@ jobs:
       - name: Check shared scheduling and meeting behavior
         run: node native/test_ui_logic.cjs
 
+      - name: Check release description
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          test -s RELEASE_NOTES.md
+          grep -Fq "## $GITHUB_REF_NAME" RELEASE_NOTES.md
+
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -46,11 +53,9 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: World Clock Widget ${{ github.ref_name }}
-          body: |
-            Бесплатный MVP-релиз World Clock Widget для Windows и macOS.
-
-            macOS Beta собрана как универсальное приложение для Apple Silicon и Intel (macOS 13+). Пока проект не использует платный Apple Developer ID, при первом запуске откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть». Отключать Gatekeeper или использовать терминал не требуется.
+          body_path: RELEASE_NOTES.md
           files: |
             release/WorldClockWidget-macOS-*.dmg
-            release/WorldClockWidget-Setup-v1.1.128.exe
+            release/WorldClockWidget-Setup-${{ github.ref_name }}.exe
+          fail_on_unmatched_files: true
           make_latest: true
