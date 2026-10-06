@@ -15,12 +15,12 @@ VSVersionInfo(
         '040904B0',
          [StringStruct('CompanyName', 'CandFlip'),
          StringStruct('FileDescription', 'World Clock Widget'),
-        StringStruct('FileVersion', '1.1.130.0'),
+        StringStruct('FileVersion', '1.1.131.0'),
          StringStruct('InternalName', 'WorldClockWidget'),
          StringStruct('LegalCopyright', 'Copyright (c) 2026 CandFlip'),
          StringStruct('OriginalFilename', 'WorldClockWidget.exe'),
          StringStruct('ProductName', 'World Clock Widget'),
-        StringStruct('ProductVersion', '1.1.130.0')])
+        StringStruct('ProductVersion', '1.1.131.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
