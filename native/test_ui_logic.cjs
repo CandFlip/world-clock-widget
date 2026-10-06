@@ -373,3 +373,28 @@ assert.match(appSource, /id="versionButton"/);
 assert.match(appSource, /id="updateButton"/);
 assert.match(css, /\.update-button::after\{white-space:nowrap/);
 console.log('Feature entry and icon update control checks passed.');
+assert.equal(run('featureGuideItems().length'), 7);
+assert.match(run("featurePreview('timeline')"), /feature-preview-scale/);
+assert.match(run("featurePreview('meeting')"), /Удобно всем/);
+run('modal=(title,body)=>{window.featureGuideBody=body}');
+run('openFeatureGuide()');
+assert.match(context.window.featureGuideBody, /Нажмите:/);
+assert.match(context.window.featureGuideBody, /Увидите:/);
+assert.equal((context.window.featureGuideBody.match(/data-feature=/g) || []).length, 7);
+assert.doesNotMatch(context.window.featureGuideBody, /feature-intro[^>]*style=.*border/);
+assert.match(css, /\.feature-intro\{padding:0 1px 5px\}/);
+const guideNodes = new Map();
+context.window.innerHeight = 800;
+context.document.querySelector = selector => {
+  if (!guideNodes.has(selector)) guideNodes.set(selector, {
+    classList: {added: new Set(), add(name) {this.added.add(name);}, remove(name) {this.added.delete(name);}},
+    getBoundingClientRect: () => ({top: 300}), scrollIntoView() {}, innerHTML:'', className:''
+  });
+  return guideNodes.get(selector);
+};
+run("showFeatureInApp('timeline')");
+assert.ok(guideNodes.get('#sliderArea').classList.added.has('feature-tour-focus'));
+assert.match(guideNodes.get('#featureTour').innerHTML, /Передвиньте ползунок/);
+run('openFeatureGuide()');
+assert.equal(guideNodes.get('#sliderArea').classList.added.size, 0);
+console.log('Interactive feature guide routes to controls and returns cleanly.');

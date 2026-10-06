@@ -1369,22 +1369,85 @@ function modal(title, body, onBack = closeModal) {
 
 function closeModal() { if (capturingHotkey) send('endHotkeyCapture'); detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
 
-function openFeatureGuide() {
-  const ru = lang() === 'ru';
-  const groups = ru ? [
-    ['Время и города', 'Местное время, разница с базовым городом и переходы на летнее время. Добавляйте, заменяйте и переставляйте города. Передвигайте шкалу, чтобы увидеть время в ближайшие 24 часа.'],
-    ['Имена и графики', 'Укажите имя человека или клиента и его часы связи. Зелёная полоса означает рабочее время, жёлтая — можно связаться при необходимости, тёмная — «Не беспокоить».'],
-    ['Удобно всем', 'Выберите участников, и приложение найдёт 30 минут для звонка: сначала в общие рабочие часы, затем в доступное время. Скопируйте местные дату и время каждого участника в общий чат.'],
-    ['Напоминания', 'Откройте быстрые интервалы значком будильника, выберите город или перетащите интервал на его карточку. Настраивайте интервалы, названия и звук.'],
-    ['Ваш виджет', 'Выберите тему, язык, формат времени, базовый город, размер и положение окна. Настройте автозапуск и сочетание клавиш.']
+let featureTourTarget = null;
+
+function stopFeatureTour() {
+  featureTourTarget?.classList.remove('feature-tour-focus');
+  featureTourTarget = null;
+  const panel = $('#featureTour');
+  if (panel) { panel.className = ''; panel.innerHTML = ''; }
+}
+
+function featureGuideItems() {
+  return lang() === 'ru' ? [
+    ['timeline','Шкала времени','Передвиньте ползунок от «Сейчас».','Время и цветные полосы всех городов покажут тот же будущий момент.'],
+    ['cities','Добавить город','Нажмите «+ Добавить город».','Откроется поиск. Выбранный город появится в списке со своим местным временем.'],
+    ['schedule','Имя и часы связи','Откройте город и нажмите «Имя и график».','Появятся имя и часы связи. Зелёный — рабочее время, жёлтый — можно связаться, тёмный — не беспокоить.'],
+    ['meeting','Удобно всем','Раскройте интервалы и нажмите «Удобно всем».','Выберите участников на карточках. Виджет предложит 30 минут; местное время каждого можно скопировать.'],
+    ['reminders','Напоминания','Нажмите будильник рядом со шкалой, затем быстрый интервал.','Выберите город или перетащите интервал на его карточку. Напоминание появится в верхнем списке.'],
+    ['settings','Настройки виджета','Откройте шестерёнку слева вверху.','Там находятся тема, язык, базовый город, звук, автозапуск и сочетание клавиш.'],
+    ['updates','Обновления','Нажмите иконку рядом с номером версии.','Виджет проверит GitHub и предложит скачать новую версию, когда она выйдет.']
   ] : [
-    ['Time and cities', 'See local times, the difference from your base city, and daylight saving changes. Add, replace, and reorder cities. Move the timeline to explore the next 24 hours.'],
-    ['Names and schedules', 'Set a person or client name and contact hours. Green means working time, yellow means reachable if needed, and dark means do not disturb.'],
-    ['Good for all', 'Choose participants and find a 30-minute call window, preferring shared working hours. Copy each participant’s local date and time to your group chat.'],
-    ['Reminders', 'Open quick intervals with the alarm icon, choose a city, or drag an interval onto a city card. Adjust intervals, names, and sound.'],
-    ['Your widget', 'Choose a theme, language, time format, base city, window size and position. Set startup and a keyboard shortcut.']
+    ['timeline','Time slider','Move the slider away from “Now”.','Every city and contact-hours band will show the same future moment.'],
+    ['cities','Add a city','Press “+ Add city”.','Search for a city and select it to see its local time in the list.'],
+    ['schedule','Name and contact hours','Open a city and press “Name and schedule”.','Set a name and contact hours. Green means work, yellow means reachable, dark means do not disturb.'],
+    ['meeting','Good for all','Expand quick intervals and press “Good for all”.','Select participants on their cards. The widget suggests 30 minutes and lets you copy everyone’s local time.'],
+    ['reminders','Reminders','Press the alarm icon by the timeline, then a quick interval.','Choose a city or drag the interval onto its card. The reminder appears in the list above.'],
+    ['settings','Widget settings','Open the gear in the top left corner.','Choose a theme, language, base city, sound, startup, and keyboard shortcut.'],
+    ['updates','Updates','Press the icon next to the version number.','The widget checks GitHub and offers a download when a new version is available.']
   ];
-  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Widget ${esc(version)}</strong><p>${ru ? 'Планируйте звонки между городами без ручного пересчёта времени.' : 'Plan calls across cities without calculating time zones by hand.'}</p></div>${groups.map(([title, description]) => `<section class="feature-card"><h3>${esc(title)}</h3><p>${esc(description)}</p></section>`).join('')}</div>`);
+}
+
+function featurePreview(id) {
+  const ru = lang() === 'ru';
+  const button = value => `<span class="feature-preview-button">${value}</span>`;
+  if (id === 'timeline') return `<span>${ru ? 'Сейчас' : 'Now'}</span><span class="feature-preview-scale"><i></i></span><span>+6 ${ru ? 'ч' : 'h'}</span>`;
+  if (id === 'cities') return `${button(ru ? '＋ Добавить город' : '＋ Add city')}<span>→</span><span>${ru ? 'Поиск' : 'Search'}</span>`;
+  if (id === 'schedule') return `${button(ru ? 'Имя и график' : 'Name and schedule')}<span class="feature-preview-band"></span>`;
+  if (id === 'meeting') return `${button(ru ? 'Удобно всем' : 'Good for all')}<span>→</span><span class="feature-preview-selected">${ru ? 'Москва · Ханой' : 'Moscow · Hanoi'}</span>`;
+  if (id === 'reminders') return `<span>${quickAlarmIcon}</span>${button('+15 '+(ru ? 'мин' : 'min'))}<span>→</span><span>${ru ? 'Город' : 'City'}</span>`;
+  if (id === 'settings') return `<span>⚙</span><span>→</span><span>${ru ? 'Тема · Язык · Базовый город' : 'Theme · Language · Base city'}</span>`;
+  return `<span>${esc(version)}</span><span>${checkUpdateIcon}</span><span>→</span><span>${downloadUpdateIcon}</span>`;
+}
+
+function openFeatureGuide() {
+  stopFeatureTour();
+  const ru = lang() === 'ru';
+  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Widget ${esc(version)}</strong><p>${ru ? 'Выберите сценарий и посмотрите нужную кнопку прямо в виджете.' : 'Choose a task and see the right control in the widget.'}</p></div>${featureGuideItems().map(([id,title,press,result]) => `<section class="feature-card"><h3>${esc(title)}</h3><div class="feature-preview" aria-hidden="true">${featurePreview(id)}</div><p><b>${ru ? 'Нажмите:' : 'Press:'}</b> ${esc(press)}</p><p><b>${ru ? 'Увидите:' : 'You’ll see:'}</b> ${esc(result)}</p><button class="feature-show" data-feature="${id}" type="button">${ru ? 'Показать в виджете' : 'Show in the widget'} ›</button></section>`).join('')}</div>`);
+  $$('[data-feature]').forEach(button => button.onclick = () => showFeatureInApp(button.dataset.feature));
+}
+
+function showFeatureInApp(id) {
+  stopFeatureTour();
+  closeModal();
+  let selector = '', focusSelector = '';
+  if (id === 'timeline') { selector = '#timeSlider'; focusSelector = '#sliderArea'; }
+  else if (id === 'cities') selector = '[data-action=add]';
+  else if (id === 'schedule') {
+    if (config.timezones.length) { openCityActions(config.timezones[0]); selector = '#scheduleCity'; }
+    else selector = '[data-action=add]';
+  }
+  else if (id === 'meeting') {
+    if (!meetingMode && offset === 0) { quickAtNowOpen = true; updateQuickVisibility(); }
+    selector = '#meetingToggle';
+  }
+  else if (id === 'reminders') {
+    if (offset === 0) { quickAtNowOpen = true; updateQuickVisibility(); }
+    selector = '.quick .chip';
+  }
+  else if (id === 'settings') { openSettings(); selector = '#theme'; }
+  else if (id === 'updates') selector = '#updateButton';
+  const target = $(selector);
+  if (!target) { openFeatureGuide(); return; }
+  const [,title,press,result] = featureGuideItems().find(([key]) => key === id);
+  featureTourTarget = $(focusSelector || selector) || target;
+  featureTourTarget.classList.add('feature-tour-focus');
+  target.scrollIntoView?.({block:'center',behavior:'smooth'});
+  const panel = $('#featureTour');
+  panel.innerHTML = `<div class="feature-tour-card"><strong>${esc(title)}</strong><p>${esc(press)}</p><p class="feature-tour-result">${esc(result)}</p><button id="featureTourBack" type="button">${lang() === 'ru' ? '← Все возможности' : '← All features'}</button></div>`;
+  panel.className = 'show';
+  if (target.getBoundingClientRect?.().top > window.innerHeight / 2) panel.classList.add('top');
+  $('#featureTourBack').onclick = openFeatureGuide;
 }
 
 function versionParts(value) {
@@ -1948,6 +2011,7 @@ $$('[data-resize]').forEach(edge => edge.onpointerdown = event => {
 });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') {
+    if ($('#featureTour')?.classList.contains('show')) { openFeatureGuide(); return; }
     if ($('#namePopover')?.firstElementChild) closeNamePopover();
     else if ($('#modal .modal-root')) closeModal();
     else if (pendingLead !== null) { pendingLead = null; updateSelectionState(); }
