@@ -6,6 +6,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'mac-test-*'
 
 permissions:
   contents: write
@@ -29,6 +30,9 @@ jobs:
       - name: Check shared shortcut behavior
         run: node native/test_hotkey_ui.cjs
 
+      - name: Check shared scheduling and meeting behavior
+        run: node native/test_ui_logic.cjs
+
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -48,4 +52,5 @@ jobs:
             macOS Beta собрана как универсальное приложение для Apple Silicon и Intel (macOS 13+). Пока проект не использует платный Apple Developer ID, при первом запуске откройте «Системные настройки → Конфиденциальность и безопасность» и нажмите «Всё равно открыть». Отключать Gatekeeper или использовать терминал не требуется.
           files: |
             release/WorldClockWidget-macOS-*.dmg
+            release/WorldClockWidget-Setup-v1.1.128.exe
           make_latest: true

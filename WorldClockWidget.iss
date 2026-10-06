@@ -1,5 +1,5 @@
 #define MyAppName "World Clock Widget"
-#define MyAppVersion "1.1.115"
+#define MyAppVersion "1.1.128"
 #define MyAppExeName "WorldClockWidget.exe"
 #define MyAppPublisher "CandFlip"
 #define MyAppURL "https://github.com/CandFlip/world-clock-widget"
@@ -36,7 +36,7 @@ SetupLogging=yes
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoProductName={#MyAppName}
-VersionInfoVersion=1.1.115.0
+VersionInfoVersion=1.1.128.0
 SetupIconFile=native\app-icon.ico
 
 [InstallDelete]
@@ -59,7 +59,7 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 Filename: "{app}\{#MyAppExeName}"; Description: "Запустить {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\taskkill.exe"; Parameters: "/F /T /IM {#MyAppExeName}"; Flags: runhidden waituntilterminated; RunOnceId: "StopWorldClockWidget"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -eq '{app}\{#MyAppExeName}' } | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }"""; Flags: runhidden waituntilterminated; RunOnceId: "StopWorldClockWidget"
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""WorldClockWidget"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveWorldClockWidgetScheduledTask"
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -Command ""$meta = 'HKLM:\Software\WorldClockWidget'; $sid = (Get-ItemProperty -Path $meta -Name 'InstallUserSid' -ErrorAction SilentlyContinue).InstallUserSid; if ($sid) {{ $run = 'Registry::HKEY_USERS\' + $sid + '\Software\Microsoft\Windows\CurrentVersion\Run'; Remove-ItemProperty -Path $run -Name 'World Clock Widget' -ErrorAction SilentlyContinue; Remove-ItemProperty -Path $run -Name 'WorldClockWidget' -ErrorAction SilentlyContinue }; exit 0"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveWorldClockWidgetAutostart"
 Filename: "{sys}\reg.exe"; Parameters: "DELETE ""HKLM\Software\WorldClockWidget"" /f"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveWorldClockWidgetMetadata"

@@ -44,7 +44,13 @@ button{color:inherit}
 .slider{--slider-x:10px;--track-inset:10px;height:90px;position:relative;flex:none;margin-top:16px;touch-action:none}
 .shift-label{position:absolute;top:0;left:var(--slider-x);z-index:2;max-width:80px;color:var(--muted);font-size:13px;white-space:nowrap;transform:translateX(-50%);pointer-events:none}
 .shift-label.start{transform:none}.shift-label.end{transform:translateX(-100%)}
+.quick-toggle{position:absolute;top:-3px;right:0;z-index:5;display:flex;align-items:center;justify-content:center;gap:2px;width:40px;height:28px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.quick-toggle:hover,.quick-toggle:focus-visible{border-color:var(--border);background:var(--hover);color:var(--text);outline:none}
+.quick-toggle.away-from-now{visibility:hidden;pointer-events:none}
+.quick-alarm-glyph{width:17px;height:17px;flex:none}.quick-chevron-glyph{width:11px;height:11px;flex:none;transition:transform 180ms ease}
+.quick-toggle[aria-expanded="true"] .quick-chevron-glyph{transform:rotate(180deg)}
 .slider-rail{position:absolute;left:var(--track-inset);right:var(--track-inset);top:36px;z-index:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;pointer-events:none}
+.meeting-range{position:absolute;top:34px;z-index:2;height:10px;border-radius:5px;background:color-mix(in srgb,var(--accent) 46%,transparent);pointer-events:none}
 .slider-fill{width:calc(var(--slider-x) - var(--track-inset));height:100%;border-radius:inherit;background:var(--accent)}
 .slider-thumb{position:absolute;left:var(--slider-x);top:29px;z-index:3;width:20px;height:20px;border:3px solid var(--accent);border-radius:50%;background:var(--bg);transform:translateX(-50%);pointer-events:none}
 .slider input[type=range]{appearance:none;-webkit-appearance:none;position:absolute;inset:25px 0 auto;z-index:4;width:100%;height:28px;margin:0;background:transparent;cursor:pointer;outline:none}
@@ -58,7 +64,30 @@ button{color:inherit}
 .marks span:first-child:before{left:0}.marks span:last-child:before{left:auto;right:0}
 
 .quick-section{max-height:0;opacity:0;overflow:hidden;flex:none;transition:max-height 140ms ease,opacity 100ms ease,margin 140ms ease;margin-top:0}
-.quick-section.open{max-height:102px;opacity:1;margin-top:8px;overflow:visible}
+.quick-section.open{max-height:150px;opacity:1;margin-top:8px;overflow:visible}
+.timeline-actions{height:25px;min-height:25px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.timeline-actions .quick-title{margin:0 2px;font-size:13px;white-space:nowrap}
+.meeting-actions{display:flex;align-items:center;gap:5px;margin-left:auto}
+.meeting-toggle,.meeting-copy{height:23px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--muted);cursor:pointer}
+.meeting-toggle{padding:0 8px;font-size:11px;font-weight:650;white-space:nowrap}
+.meeting-copy{width:25px;padding:3px;display:flex;align-items:center;justify-content:center}
+.meeting-copy svg{width:15px;height:15px}
+.meeting-toggle:hover,.meeting-copy:hover:not(:disabled),.meeting-toggle.active{border-color:var(--accent);color:var(--text)}
+.meeting-toggle.active{background:var(--badge)}
+.meeting-copy:disabled{opacity:.42;cursor:default}
+.meeting-status{min-height:21px;display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden}
+.meeting-status[hidden]{display:none}
+.meeting-status span{overflow:hidden;text-overflow:ellipsis}
+.meeting-status button{flex:none;padding:1px 3px;border:0;background:transparent;color:var(--accent);cursor:pointer;font-size:11px}
+.meeting-mode .clock,.meeting-mode .city-card{cursor:pointer;border-color:transparent}
+.meeting-outline{display:none;position:absolute;inset:0;z-index:5;width:100%;height:100%;overflow:visible;pointer-events:none}
+.meeting-mode .clock:not(.meeting-selected)>.meeting-outline,.meeting-mode .city-card:not(.meeting-selected)>.meeting-outline{display:block}
+.meeting-outline rect{fill:none;stroke:var(--accent);stroke-opacity:.68;stroke-width:1.5;stroke-linecap:round;stroke-dasharray:1 7;x:1px;y:1px;width:calc(100% - 2px);height:calc(100% - 2px);rx:8px;ry:8px;animation:meeting-outline 900ms linear infinite}
+.meeting-mode .clock.meeting-selected,.meeting-mode .city-card.meeting-selected{border:2px solid var(--accent);animation:none}
+.meeting-mode .card-actions-wrap{display:none}
+.meeting-mode .city-summary>.delete{display:none}
+@keyframes meeting-outline{to{stroke-dashoffset:-8}}
+@media(prefers-reduced-motion:reduce){.quick-chevron-glyph{transition:none}.meeting-outline rect{animation:none}}
 .quick-title,.cities-title{font-weight:700;color:var(--muted);font-size:14px;margin:0 2px 8px}
 .quick{display:flex;gap:8px;min-width:0;overflow-x:auto;scrollbar-width:thin;padding-bottom:3px}
 .quick>.chip{flex:1 0 100px}
@@ -176,7 +205,7 @@ button{color:inherit}
   .saved-card{margin-bottom:0}
 }
 @media (max-height:690px){
-  .shell{padding-top:14px}.hero{margin-top:10px;height:136px}.clock,.saved-panel{height:136px}.slider{height:82px;margin-top:10px}.marks{top:54px}.quick-section.open{max-height:112px}.card{min-height:76px}.city-main{padding-top:9px;padding-bottom:9px}
+  .shell{padding-top:14px}.hero{margin-top:10px;height:136px}.clock,.saved-panel{height:136px}.slider{height:82px;margin-top:10px}.marks{top:54px}.quick-section.open{max-height:150px}.card{min-height:76px}.city-main{padding-top:9px;padding-bottom:9px}
 }
 
 /* Adjustable main section and city-local reminder times. */
@@ -234,6 +263,7 @@ button{color:inherit}
 .sound-choice:focus-visible,.sound-select:focus-visible,.sound-action:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .hotkey-active,.hotkey-preview{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
 .hotkey-active strong{max-width:68%}
+.toggle-row small{display:block;color:var(--muted);font-size:12px;font-weight:500;margin-top:3px}
 #hotkey{gap:12px;padding-top:10px;padding-bottom:10px}
 #hotkey .row-value{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;text-align:right;max-width:62%}
 #hotkeyCustom[hidden]{display:none}
@@ -247,7 +277,7 @@ button{color:inherit}
 .hotkey-feedback{min-height:32px;margin:10px 2px 0;color:var(--muted);font-size:12px;line-height:1.4}
 .hotkey-feedback + .primary{margin-top:2px}.hotkey-feedback + .primary:disabled{opacity:.45;cursor:default}
 .schedule-times input[type=time]{margin-left:auto;width:118px;height:34px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text)}
-.schedule-default{margin-bottom:12px}.schedule-error{min-height:20px;margin:8px 0;color:var(--danger);font-size:12px}.rename-save{margin-top:14px}.danger-row{color:var(--danger)}
+.schedule-name{margin-bottom:14px}.schedule-error{min-height:20px;margin:8px 0;color:var(--danger);font-size:12px}.rename-save{margin-top:14px}.danger-row{color:var(--danger)}
 .direction-picker{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .direction-choice{min-height:64px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
 .direction-choice.selected{border-color:var(--accent);background:var(--badge)}

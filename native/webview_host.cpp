@@ -12,6 +12,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <cstring>
 #include <regex>
 #include "WebView2.h"
 
@@ -30,7 +31,7 @@ constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.115";
+constexpr wchar_t kVersion[] = L"v1.1.128";
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
 
@@ -51,9 +52,14 @@ bool g_trayAdded=false;
 bool g_webViewInitializationStarted=false;
 bool g_showWhenReady=false;
 UINT g_taskbarCreatedMessage=0;
-UINT g_hotkeyModifiers=MOD_ALT|MOD_SHIFT;
-UINT g_hotkeyKey='T';
+UINT g_hotkeyModifiers=MOD_ALT;
+UINT g_hotkeyKey=VK_SPACE;
 bool g_hotkeyRegistered=false;
+HHOOK g_shortcutKeyboardHook{}, g_shortcutMouseHook{};
+bool g_capturingHotkey=false;
+bool g_shortcutKeyDown=false;
+bool g_swallowShortcutRelease=false;
+UINT g_swallowMouseRelease=0;
 
 LRESULT CALLBACK outsideMouse(int code, WPARAM message, LPARAM data);
 void initializeWebView();
@@ -217,12 +223,69 @@ bool autostartAllowed() {
 
 bool supportedHotkey(UINT modifiers, UINT key) {
     if (modifiers & ~(MOD_ALT|MOD_CONTROL|MOD_SHIFT)) return false;
+    if (key == 1001 || key == 1002) return true;
+    if (!modifiers && (key == VK_BACK || key == VK_TAB || key == VK_RETURN || key == VK_ESCAPE ||
+        key == VK_SPACE || (key >= VK_PRIOR && key <= VK_DOWN) || key == VK_INSERT || key == VK_DELETE)) return false;
     return (key >= '0' && key <= '9') || (key >= 'A' && key <= 'Z') ||
-        (key >= VK_F1 && key <= VK_F11) || (key >= VK_NUMPAD0 && key <= VK_DIVIDE) ||
+        (key >= VK_F1 && key <= VK_F11) || (key >= VK_F13 && key <= VK_F20) ||
+        (key >= VK_NUMPAD0 && key <= VK_DIVIDE) ||
         (key >= VK_OEM_1 && key <= VK_OEM_3) || (key >= VK_OEM_4 && key <= VK_OEM_7) ||
         key == VK_BACK || key == VK_TAB || key == VK_RETURN || key == VK_ESCAPE ||
         key == VK_SPACE || (key >= VK_PRIOR && key <= VK_DOWN) ||
         key == VK_INSERT || key == VK_DELETE;
+}
+
+UINT shortcutModifiers(bool altDown=false) {
+    return (altDown || (GetAsyncKeyState(VK_MENU)&0x8000) ? MOD_ALT : 0) |
+        (GetAsyncKeyState(VK_CONTROL)&0x8000 ? MOD_CONTROL : 0) |
+        (GetAsyncKeyState(VK_SHIFT)&0x8000 ? MOD_SHIFT : 0);
+}
+
+LRESULT CALLBACK shortcutKeyboard(int code, WPARAM message, LPARAM data) {
+    if (code == HC_ACTION) {
+        const auto* event=reinterpret_cast<const KBDLLHOOKSTRUCT*>(data);
+        const UINT key=event->vkCode;
+        if (key == g_hotkeyKey && (message==WM_KEYUP || message==WM_SYSKEYUP)) {
+            g_shortcutKeyDown=false;
+            if(g_swallowShortcutRelease) {g_swallowShortcutRelease=false;return 1;}
+        }
+        if (!g_capturingHotkey && g_hotkeyRegistered && key==g_hotkeyKey &&
+            (message==WM_KEYDOWN || message==WM_SYSKEYDOWN) &&
+            shortcutModifiers((event->flags&LLKHF_ALTDOWN)!=0)==g_hotkeyModifiers) {
+            if (!g_shortcutKeyDown) {g_shortcutKeyDown=true;PostMessageW(g_window,WM_HOTKEY,kHotkey,0);}
+            // A plain letter or digit remains usable for typing when selected alone.
+            const bool swallow=g_hotkeyModifiers!=0 || (key>=VK_F1 && key<=VK_F20);
+            g_swallowShortcutRelease=swallow;
+            if(swallow) return 1;
+        }
+    }
+    return CallNextHookEx(g_shortcutKeyboardHook,code,message,data);
+}
+
+LRESULT CALLBACK shortcutMouse(int code, WPARAM message, LPARAM data) {
+    if (code==HC_ACTION && message==WM_XBUTTONDOWN) {
+        const auto* event=reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+        const UINT key=HIWORD(event->mouseData)==XBUTTON1 ? 1001 : 1002;
+        const UINT modifiers=shortcutModifiers();
+        if (g_capturingHotkey && g_webview) {
+            const std::wstring result=L"{\"type\":\"hotkeyCaptured\",\"modifiers\":"+
+                std::to_wstring(modifiers)+L",\"key\":"+std::to_wstring(key)+L"}";
+            g_webview->PostWebMessageAsJson(result.c_str());
+            g_swallowMouseRelease=key;
+            return 1;
+        }
+        if (g_hotkeyRegistered && key==g_hotkeyKey && modifiers==g_hotkeyModifiers) {
+            PostMessageW(g_window,WM_HOTKEY,kHotkey,0);
+            g_swallowMouseRelease=key;
+            return 1;
+        }
+    }
+    if (code==HC_ACTION && message==WM_XBUTTONUP && g_swallowMouseRelease) {
+        const auto* event=reinterpret_cast<const MSLLHOOKSTRUCT*>(data);
+        const UINT key=HIWORD(event->mouseData)==XBUTTON1 ? 1001 : 1002;
+        if (key==g_swallowMouseRelease) {g_swallowMouseRelease=0;return 1;}
+    }
+    return CallNextHookEx(g_shortcutMouseHook,code,message,data);
 }
 
 void loadHotkey() {
@@ -232,7 +295,10 @@ void loadHotkey() {
     if (std::regex_search(config,match,pattern)) {
         try {
             const auto modifiers=std::stoul(match[1].str()), key=std::stoul(match[2].str());
-            if(supportedHotkey(modifiers,key)) {g_hotkeyModifiers=modifiers;g_hotkeyKey=key;}
+            if(supportedHotkey(modifiers,key)) {
+                if(modifiers==(MOD_ALT|MOD_SHIFT) && key=='T') return;
+                g_hotkeyModifiers=modifiers;g_hotkeyKey=key;
+            }
         } catch (...) {}
     }
 }
@@ -240,16 +306,10 @@ void loadHotkey() {
 bool registerHotkey(UINT modifiers, UINT key) {
     if(!supportedHotkey(modifiers,key)) return false;
     if(g_hotkeyRegistered && modifiers==g_hotkeyModifiers && key==g_hotkeyKey) return true;
-    const UINT oldModifiers=g_hotkeyModifiers, oldKey=g_hotkeyKey;
-    const bool hadRegistration=g_hotkeyRegistered;
-    if(hadRegistration) UnregisterHotKey(g_window,kHotkey);
-    g_hotkeyRegistered=false;
-    if(RegisterHotKey(g_window,kHotkey,modifiers|MOD_NOREPEAT,key)) {
-        g_hotkeyModifiers=modifiers;g_hotkeyKey=key;g_hotkeyRegistered=true;
-        return true;
-    }
-    if(hadRegistration && RegisterHotKey(g_window,kHotkey,oldModifiers|MOD_NOREPEAT,oldKey)) g_hotkeyRegistered=true;
-    return false;
+    if ((key==1001 || key==1002) ? !g_shortcutMouseHook : !g_shortcutKeyboardHook) return false;
+    g_hotkeyModifiers=modifiers;g_hotkeyKey=key;g_hotkeyRegistered=true;
+    g_shortcutKeyDown=false;g_swallowShortcutRelease=false;
+    return true;
 }
 
 void postHotkeyResult(bool success) {
@@ -415,11 +475,68 @@ LRESULT CALLBACK outsideMouse(int code, WPARAM message, LPARAM data) {
     return CallNextHookEx(g_mouseHook,code,message,data);
 }
 
+void copyTextToClipboard(const std::wstring& value) {
+    bool success=false;
+    if(OpenClipboard(g_window)) {
+        if(EmptyClipboard()) {
+            const SIZE_T bytes=(value.size()+1)*sizeof(wchar_t);
+            HGLOBAL block=GlobalAlloc(GMEM_MOVEABLE,bytes);
+            if(block) {
+                void* data=GlobalLock(block);
+                if(data) {
+                    memcpy(data,value.c_str(),bytes);
+                    GlobalUnlock(block);
+                    if(SetClipboardData(CF_UNICODETEXT,block)) success=true;
+                }
+                if(!success) GlobalFree(block);
+            }
+        }
+        CloseClipboard();
+    }
+    if(g_webview) g_webview->PostWebMessageAsJson(success?L"{\"type\":\"copyResult\",\"success\":true}":L"{\"type\":\"copyResult\",\"success\":false}");
+}
+
+std::wstring shortcutKeyName(UINT key) {
+    if ((key >= '0' && key <= '9') || (key >= 'A' && key <= 'Z'))
+        return std::wstring(1,static_cast<wchar_t>(key));
+    if (key >= VK_NUMPAD0 && key <= VK_NUMPAD9) return L"Num " + std::to_wstring(key-VK_NUMPAD0);
+    if (key >= VK_F1 && key <= VK_F20) return L"F" + std::to_wstring(key-VK_F1+1);
+    switch (key) {
+        case VK_BACK: return L"Backspace"; case VK_TAB: return L"Tab";
+        case VK_RETURN: return L"Enter"; case VK_ESCAPE: return L"Escape";
+        case VK_SPACE: return L"Space"; case VK_PRIOR: return L"Page Up";
+        case VK_NEXT: return L"Page Down"; case VK_END: return L"End";
+        case VK_HOME: return L"Home"; case VK_LEFT: return L"←";
+        case VK_UP: return L"↑"; case VK_RIGHT: return L"→"; case VK_DOWN: return L"↓";
+        case VK_INSERT: return L"Insert"; case VK_DELETE: return L"Delete";
+        case VK_MULTIPLY: return L"Num *"; case VK_ADD: return L"Num +";
+        case VK_SEPARATOR: return L"Num Enter"; case VK_SUBTRACT: return L"Num −";
+        case VK_DECIMAL: return L"Num ."; case VK_DIVIDE: return L"Num /";
+        case VK_OEM_1: return L";"; case VK_OEM_PLUS: return L"=";
+        case VK_OEM_COMMA: return L","; case VK_OEM_MINUS: return L"−";
+        case VK_OEM_PERIOD: return L"."; case VK_OEM_2: return L"/";
+        case VK_OEM_3: return L"`"; case VK_OEM_4: return L"[";
+        case VK_OEM_5: return L"\\"; case VK_OEM_6: return L"]";
+        case VK_OEM_7: return L"'"; case 1001: return L"Mouse 4";
+        case 1002: return L"Mouse 5";
+        default: return L"Key " + std::to_wstring(key);
+    }
+}
+
+std::wstring shortcutLabel() {
+    std::wstring label;
+    if (g_hotkeyModifiers&MOD_CONTROL) label += L"Ctrl+";
+    if (g_hotkeyModifiers&MOD_ALT) label += L"Alt+";
+    if (g_hotkeyModifiers&MOD_SHIFT) label += L"Shift+";
+    return label + shortcutKeyName(g_hotkeyKey);
+}
+
 void trayMenu() {
     g_trayMenuOpen=true;
     POINT point{}; GetCursorPos(&point);
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, 1, g_visible ? L"Скрыть" : L"Открыть");
+    const std::wstring toggleCaption=std::wstring(g_visible ? L"Скрыть\t" : L"Открыть\t")+shortcutLabel();
+    AppendMenuW(menu, MF_STRING, 1, toggleCaption.c_str());
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, 2, L"Выход");
     SetForegroundWindow(g_window);
@@ -462,6 +579,8 @@ void handleMessage(const std::wstring& message) {
     else if (message == L"hide") showWidget(false);
     else if (message == L"show") showWidget(true);
     else if (message == L"quit") PostMessageW(g_window, WM_CLOSE, 0, 0);
+    else if (message == L"beginHotkeyCapture") g_capturingHotkey=true;
+    else if (message == L"endHotkeyCapture") g_capturingHotkey=false;
     else if (message.rfind(L"setHotkey\n", 0) == 0) {
         const auto choice=payload(L"setHotkey\n");
         UINT modifiers=0,key=0;
@@ -475,6 +594,7 @@ void handleMessage(const std::wstring& message) {
     }
     else if (message.rfind(L"saveConfig\n", 0) == 0) writeUtf8Atomic(dataDir()/L"widget_config.json", payload(L"saveConfig\n"));
     else if (message.rfind(L"saveReminders\n", 0) == 0) writeUtf8Atomic(dataDir()/L"reminders.json", payload(L"saveReminders\n"));
+    else if (message.rfind(L"copyText\n", 0) == 0) copyTextToClipboard(payload(L"copyText\n"));
     else if (message.rfind(L"saveSyncCredential\n", 0) == 0 && !writeSyncCredential(payload(L"saveSyncCredential\n"))) logStartup(L"Failed to store sync credential");
     else if (message == L"deleteSyncCredential") CredDeleteW(kSyncCredentialTarget, CRED_TYPE_GENERIC, 0);
     else if (message.rfind(L"openExternal\n", 0) == 0) {
@@ -608,7 +728,9 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
             return 0;
         case WM_CLOSE:
             if(g_mouseHook){UnhookWindowsHookEx(g_mouseHook);g_mouseHook=nullptr;}
-            saveWindow(); if(g_shutdownEvent)SetEvent(g_shutdownEvent); KillTimer(window,kTickTimer); KillTimer(window,kUiReadyTimer); KillTimer(window,kTrayRetryTimer); if(g_hotkeyRegistered) UnregisterHotKey(window,kHotkey);
+            if(g_shortcutKeyboardHook){UnhookWindowsHookEx(g_shortcutKeyboardHook);g_shortcutKeyboardHook=nullptr;}
+            if(g_shortcutMouseHook){UnhookWindowsHookEx(g_shortcutMouseHook);g_shortcutMouseHook=nullptr;}
+            saveWindow(); if(g_shutdownEvent)SetEvent(g_shutdownEvent); KillTimer(window,kTickTimer); KillTimer(window,kUiReadyTimer); KillTimer(window,kTrayRetryTimer);
             if(g_trayAdded)Shell_NotifyIconW(NIM_DELETE,&g_tray); DestroyWindow(window); return 0;
         case WM_DESTROY: PostQuitMessage(0); return 0;
     }
@@ -647,10 +769,12 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     g_showEvent=CreateEventW(nullptr,FALSE,FALSE,kShowEventName); g_shutdownEvent=CreateEventW(nullptr,TRUE,FALSE,kShutdownEventName);
     g_watchThread=CreateThread(nullptr,0,eventWatcher,nullptr,0,nullptr);
     g_taskbarCreatedMessage=RegisterWindowMessageW(L"TaskbarCreated");
+    g_shortcutKeyboardHook=SetWindowsHookExW(WH_KEYBOARD_LL,shortcutKeyboard,GetModuleHandleW(nullptr),0);
+    g_shortcutMouseHook=SetWindowsHookExW(WH_MOUSE_LL,shortcutMouse,GetModuleHandleW(nullptr),0);
     loadHotkey();
     const UINT configuredModifiers=g_hotkeyModifiers, configuredKey=g_hotkeyKey;
     if(!registerHotkey(configuredModifiers,configuredKey)) {
-        registerHotkey(MOD_ALT|MOD_SHIFT,'T');
+        registerHotkey(MOD_ALT,VK_SPACE);
         logStartup(L"Configured hotkey unavailable; using default");
     }
     g_tray.cbSize=sizeof(g_tray); g_tray.hWnd=g_window; g_tray.uID=1; g_tray.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;

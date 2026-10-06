@@ -1,10 +1,15 @@
 const trashIcon = `<svg class="trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><g class="trash-lid"><path d="M4 6h16M9 6V4h6v2"/></g><path d="M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>`;
+const quickAlarmIcon = `<svg class="quick-alarm-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M5.5 3.5 2.5 6.5M18.5 3.5l3 3M7 20l-1.5 2M17 20l1.5 2"/></svg>`;
+const quickChevronIcon = `<svg class="quick-chevron-glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 6 5 5 5-5"/></svg>`;
+const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg>`;
+const meetingOutlineSvg = `<svg class="meeting-outline" aria-hidden="true" focusable="false"><rect x="1" y="1" width="100%" height="100%" rx="8" ry="8"/></svg>`;
 const host = window.chrome?.webview;
 const send = message => host?.postMessage(message);
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
 const zoneOf = key => (key || 'Etc/UTC').split('@@')[0];
 const defaultAvailability = Object.freeze({okayStart:'07:00',workingStart:'09:00',workingEnd:'18:00',dndStart:'22:00'});
+const baseScheduleKey = '__base_schedule__';
 
 const defaults = {
   timezones: ['Europe/Moscow', 'Asia/Vladivostok', 'Asia/Almaty'],
@@ -12,7 +17,7 @@ const defaults = {
   settings: {
     top_clock_mode: 'auto', manual_top_timezone: 'Asia/Ho_Chi_Minh', base_timezone: '',
     overlay_direction: 'right', time_format: 'system', theme: 'system', language: 'ru',
-    availabilityDefault: {...defaultAvailability},
+    availabilityDefault: {...defaultAvailability}, baseAvailabilityOverride: null,
     reminder_intervals: [15, 30, 60], autostart: true,
   },
   cityContext: {},
@@ -23,6 +28,12 @@ let config = structuredClone(defaults);
 let reminders = {lead: 15, entries: []};
 let version = 'native';
 let offset = 0;
+let quickAtNowOpen = false;
+let meetingMode = false;
+let meetingSelected = new Set();
+let meetingResult = null;
+let meetingEarlier = null;
+let meetingShowingEarlier = false;
 let liveOffset = null;
 let pendingLead = null;
 let cityDragIndex = -1;
@@ -75,7 +86,7 @@ async function loadSoundLibrary() {
       await soundStorage('delete', 'alarm');
     }
     soundLibrary = (await soundStorage('getAll')).filter(sound => sound?.id && sound.blob);
-  } catch { console.warn('Alarm sound library could not be loaded'); }
+  } catch { console.warn('Reminder sound library could not be loaded'); }
 }
 
 function defaultSoundId() {
@@ -134,7 +145,7 @@ function bindSoundChoices(root, selected = 'default') {
 let detailId = null;
 let applyingRemoteSync = false;
 let platform = 'windows';
-const defaultHotkeyForPlatform = () => ({modifiers: 5, key: 84});
+const defaultHotkeyForPlatform = () => ({modifiers: 1, key: 32});
 let activeHotkey = {...defaultHotkeyForPlatform()};
 let pendingHotkey = null;
 let pendingHotkeyMode = null;
@@ -148,18 +159,20 @@ const specialHotkeyKeys = {
   ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
   Insert: 45, Delete: 46,
   NumpadMultiply: 106, NumpadAdd: 107, NumpadSubtract: 109,
-  NumpadDecimal: 110, NumpadDivide: 111,
+  NumpadDecimal: 110, NumpadDivide: 111, NumpadEnter: 108,
   Semicolon: 186, Equal: 187, Comma: 188, Minus: 189, Period: 190,
   Slash: 191, Backquote: 192, BracketLeft: 219, Backslash: 220,
   BracketRight: 221, Quote: 222,
 };
 const hotkeyNames = Object.fromEntries(Object.entries(specialHotkeyKeys).map(([name, key]) => [key, name.replace('Arrow', '').replace('Numpad', 'Num ')]));
+Object.assign(hotkeyNames, {32:'Space', 186:';', 187:'=', 188:',', 189:'−', 190:'.', 191:'/', 192:'`', 219:'[', 220:'\\', 221:']', 222:"'", 1001:'Mouse 4', 1002:'Mouse 5'});
 const macHotkeyNames = {
   8: 'Delete', 9: 'Tab', 13: 'Return', 27: 'Escape', 32: 'Space',
   33: 'Page Up', 34: 'Page Down', 35: 'End', 36: 'Home',
   37: 'Left Arrow', 38: 'Up Arrow', 39: 'Right Arrow', 40: 'Down Arrow',
   46: 'Forward Delete', 106: 'Keypad Multiply', 107: 'Keypad Plus',
-  109: 'Keypad Minus', 110: 'Keypad Decimal', 111: 'Keypad Divide',
+  108: 'Keypad Enter', 109: 'Keypad Minus', 110: 'Keypad Decimal', 111: 'Keypad Divide',
+  186:';', 187:'=', 188:',', 189:'−', 190:'.', 191:'/', 192:'`', 219:'[', 220:'\\', 221:']', 222:"'", 1001:'Mouse 4', 1002:'Mouse 5',
 };
 
 function hotkeyFromEvent(event) {
@@ -170,24 +183,26 @@ function hotkeyFromEvent(event) {
   if (/^Key[A-Z]$/.test(code)) key = code.charCodeAt(3);
   else if (/^Digit[0-9]$/.test(code)) key = code.charCodeAt(5);
   else if (/^Numpad[0-9]$/.test(code)) key = 96 + Number(code.slice(6));
-  else if (/^F([1-9]|10|11)$/.test(code)) key = 111 + Number(code.slice(1));
+  else if (/^F([1-9]|1[01]|1[3-9]|20)$/.test(code)) key = 111 + Number(code.slice(1));
   if (!key) return null;
-  return {modifiers: (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0), key};
+  const modifiers = (event.altKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.shiftKey ? 4 : 0) | (event.metaKey ? 8 : 0);
+  if (!modifiers && [8,9,13,27,32,33,34,35,36,37,38,39,40,45,46].includes(key)) return null;
+  return {modifiers, key};
 }
 
 function hotkeyLabel(hotkey = activeHotkey) {
   const key = hotkey.key;
   const name = (key >= 48 && key <= 90) ? String.fromCharCode(key) :
     (key >= 96 && key <= 105) ? `${platform === 'macos' ? 'Keypad' : 'Num'} ${key - 96}` :
-    (key >= 112 && key <= 122) ? `F${key - 111}` : (platform === 'macos' ? macHotkeyNames[key] : hotkeyNames[key]) || '?';
+    (key >= 112 && key <= 131) ? `F${key - 111}` : (platform === 'macos' ? macHotkeyNames[key] : hotkeyNames[key]) || '?';
   const modifiers = platform === 'macos'
-    ? [(hotkey.modifiers & 2) && 'Control', (hotkey.modifiers & 1) && 'Option', (hotkey.modifiers & 4) && 'Shift', (hotkey.modifiers & 8) && 'Command']
+    ? [(hotkey.modifiers & 2) && '⌃', (hotkey.modifiers & 1) && '⌥', (hotkey.modifiers & 4) && '⇧', (hotkey.modifiers & 8) && '⌘']
     : [(hotkey.modifiers & 2) && 'Ctrl', (hotkey.modifiers & 1) && 'Alt', (hotkey.modifiers & 4) && 'Shift'];
   return [...modifiers, name].filter(Boolean).join('+');
 }
 function modifierLabel(modifiers) {
   return (platform === 'macos'
-    ? [(modifiers & 2) && 'Control', (modifiers & 1) && 'Option', (modifiers & 4) && 'Shift', (modifiers & 8) && 'Command']
+    ? [(modifiers & 2) && '⌃', (modifiers & 1) && '⌥', (modifiers & 4) && '⇧', (modifiers & 8) && '⌘']
     : [(modifiers & 2) && 'Ctrl', (modifiers & 1) && 'Alt', (modifiers & 4) && 'Shift']).filter(Boolean).join('+');
 }
 const availabilityGradientCache = new Map();
@@ -222,10 +237,10 @@ const strings = {
     title: 'Мировое время', cities: 'ГОРОДА', add: 'Добавить город', reminders: 'Напоминания', none: 'Пока нет',
     settings: 'Настройки', theme: 'Тема', systemTheme: 'Системная', dark: 'Тёмная', light: 'Светлая', language: 'Язык', base: 'Базовый город',
     timeFormat: 'Формат времени', systemFormat: 'Системный', hour24: '24-часовой', hour12: '12-часовой',
-    typicalSchedule: 'Типичный график', citySettings: 'График в городах', defaultSchedule: 'График по умолчанию',
+    typicalSchedule: 'Общий график', citySettings: 'Имена и графики городов', defaultSchedule: 'График по умолчанию', addedCities: 'ДОБАВЛЕННЫЕ ГОРОДА', baseTimeSection: 'БАЗОВОЕ ВРЕМЯ', nameAndSchedule: 'Имя и график',
     working: 'Рабочее время', okay: 'Можно связаться', dnd: 'Не беспокоить', daylight: 'Светло', twilight: 'Сумерки', night: 'Темно',
-    rename: 'Переименовать', schedule: 'График', makeBase: 'Сделать базовым', remove: 'Удалить', useDefault: 'Использовать общий график', displayLabel: 'Имя человека или клиента',
-    alarmAction: 'Будильник', changeCity: 'Сменить город', contactHours: 'Часы связи',
+    schedule: 'График', makeBase: 'Сделать базовым', remove: 'Удалить', useDefault: 'Использовать общий график', displayLabel: 'Имя человека или клиента', baseContactHours: 'Часы связи базового времени',
+    alarmAction: 'Напоминание', changeCity: 'Сменить город', contactHours: 'Часы связи',
     intervals: 'Интервалы напоминания', autostart: 'Запускать вместе с Windows', favorites: 'ИЗБРАННЫЕ ГОРОДА',
     results: 'РЕЗУЛЬТАТЫ ПОИСКА', search: 'Поиск города...', system: 'Время Windows', from: 'от базы', now: 'Сейчас',
     save: 'Сохранить', choose: 'Выберите город', got: 'Понятно', snooze: 'Повторить через 5 минут', alarm: 'Напоминание',
@@ -237,10 +252,10 @@ const strings = {
     title: 'World time', cities: 'CITIES', add: 'Add city', reminders: 'Reminders', none: 'None yet',
     settings: 'Settings', theme: 'Theme', systemTheme: 'System', dark: 'Dark', light: 'Light', language: 'Language', base: 'Base city',
     timeFormat: 'Time format', systemFormat: 'System', hour24: '24-hour', hour12: '12-hour',
-    typicalSchedule: 'Typical schedule', citySettings: 'Schedules by city', defaultSchedule: 'Default schedule',
+    typicalSchedule: 'Shared schedule', citySettings: 'City names and schedules', defaultSchedule: 'Default schedule', addedCities: 'ADDED CITIES', baseTimeSection: 'BASE TIME', nameAndSchedule: 'Name and schedule',
     working: 'Working', okay: 'Okay to contact', dnd: 'Do not disturb', daylight: 'Daylight', twilight: 'Twilight', night: 'Night',
-    rename: 'Rename', schedule: 'Schedule', makeBase: 'Make base', remove: 'Remove', useDefault: 'Use default schedule', displayLabel: 'Person or client name',
-    alarmAction: 'Alarm', changeCity: 'Change city', contactHours: 'Contact hours',
+    schedule: 'Schedule', makeBase: 'Make base', remove: 'Remove', useDefault: 'Use default schedule', displayLabel: 'Person or client name', baseContactHours: 'Base clock contact hours',
+    alarmAction: 'Reminder', changeCity: 'Change city', contactHours: 'Contact hours',
     intervals: 'Reminder intervals', autostart: 'Start with Windows', favorites: 'FAVORITE CITIES',
     results: 'SEARCH RESULTS', search: 'Search city...', system: 'Windows time', from: 'from base', now: 'Now',
     save: 'Save', choose: 'Choose a city', got: 'Got it', snooze: 'Remind again in 5 minutes', alarm: 'Reminder',
@@ -479,6 +494,124 @@ function scheduleFor(key) {
   return normalizeSchedule(cityContext(key).availabilityOverride || config.settings.availabilityDefault);
 }
 
+function baseSchedule() {
+  return normalizeSchedule(config.settings.baseAvailabilityOverride || config.settings.availabilityDefault);
+}
+
+const meetingLengthMinutes = 30;
+function meetingMembers() {
+  const members = config.timezones.filter(key => meetingSelected.has(key)).map(key => ({key, zone:zoneOf(key), schedule:scheduleFor(key)}));
+  if (meetingSelected.has(baseScheduleKey)) members.unshift({key:baseScheduleKey, zone:baseZone(), schedule:baseSchedule()});
+  return members;
+}
+
+function meetingQuality(at, members, durationMinutes = meetingLengthMinutes) {
+  let yellow = 0;
+  for (const member of members) {
+    let memberYellow = false;
+    for (let minute = 0; minute < durationMinutes; minute += 15) {
+      const local = localMinute(new Date(at + minute * 60000), member.zone);
+      const availability = availabilityAt(member.schedule, local);
+      if (availability === 'dnd') return null;
+      if (availability === 'okay') memberYellow = true;
+    }
+    if (memberYellow) yellow += 1;
+  }
+  return yellow;
+}
+
+function findMeetingTimes(members, now = Date.now()) {
+  if (members.length < 2) return {best:null, earlier:null};
+  let green = null, mixed = null;
+  const step = 15 * 60000, duration = meetingLengthMinutes * 60000;
+  for (let at = Math.ceil(now / step) * step; at + duration <= now + 24 * 3600000; at += step) {
+    const yellow = meetingQuality(at, members);
+    if (yellow === 0 && !green) green = {at, yellow};
+    else if (yellow !== null && yellow > 0 && !mixed) mixed = {at, yellow};
+    if (green && mixed) break;
+  }
+  return {best:green || mixed, earlier:green && mixed && mixed.at < green.at ? mixed : null};
+}
+
+function meetingOffsetAt(at) {
+  const zone = baseZone(), parts = zonedParts(new Date(), zone);
+  const hour = epochAt(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:00`, zone);
+  return clamp(Math.round((at - hour) / 900000) / 4, 0, 24);
+}
+
+function meetingStatusText() {
+  const count = meetingMembers().length;
+  if (count < 2) return lang() === 'ru' ? 'Выберите минимум два времени' : 'Choose at least two clocks';
+  if (!meetingResult) return lang() === 'ru' ? 'Нет общего времени в ближайшие 24 ч' : 'No shared time in the next 24 h';
+  const quality = meetingShowingEarlier ? meetingEarlier : meetingResult;
+  const prefix = quality?.yellow ? (lang() === 'ru' ? 'Можно связаться' : 'Okay to contact') : (lang() === 'ru' ? 'Все в рабочее время' : 'All within working hours');
+  return `${prefix} · ${timeAt(new Date(referenceTimestamp()), baseZone())} · ${meetingLengthMinutes} ${lang() === 'ru' ? 'мин' : 'min'}`;
+}
+
+function updateMeetingUI() {
+  document.body.classList.toggle('meeting-mode', meetingMode);
+  const button = $('#meetingToggle');
+  if (button) { button.classList.toggle('active', meetingMode); button.setAttribute('aria-pressed', String(meetingMode)); }
+  const copy = $('#meetingCopy');
+  if (copy) copy.disabled = !meetingMode || meetingMembers().length < 2;
+  const status = $('#meetingStatus');
+  if (status) {
+    status.hidden = !meetingMode;
+    if (meetingMode) status.innerHTML = `<span>${esc(meetingStatusText())}</span>${config.timezones.some(key => !meetingSelected.has(key)) ? `<button id="meetingAll" type="button">${lang() === 'ru' ? 'Все' : 'All'}</button>` : ''}${meetingEarlier ? `<button id="meetingEarlier" type="button">${meetingShowingEarlier ? (lang() === 'ru' ? 'Лучшее' : 'Best') : (lang() === 'ru' ? 'Раньше' : 'Earlier')}</button>` : ''}`;
+    $('#meetingAll')?.addEventListener('click', () => { meetingSelected = new Set(config.timezones); recalculateMeeting(); });
+    $('#meetingEarlier')?.addEventListener('click', () => {
+      meetingShowingEarlier = !meetingShowingEarlier;
+      setOffset(meetingOffsetAt((meetingShowingEarlier ? meetingEarlier : meetingResult).at));
+      updateMeetingUI();
+    });
+  }
+  $('#baseClock')?.classList.toggle('meeting-selected', meetingSelected.has(baseScheduleKey));
+  $$('.city-card').forEach(card => card.classList.toggle('meeting-selected', meetingSelected.has(card.dataset.zone)));
+  const rail = $('#meetingRange');
+  if (rail) {
+    rail.hidden = !meetingMode || !meetingResult;
+    if (!rail.hidden) {
+      rail.style.left = `${sliderPosition(offset, $('#sliderArea').clientWidth)}px`;
+      rail.style.width = `${Math.max(3, $('#sliderArea').clientWidth - 20) * (meetingLengthMinutes / 60) / 24}px`;
+    }
+  }
+}
+
+function recalculateMeeting() {
+  const found = findMeetingTimes(meetingMembers());
+  meetingResult = found.best;
+  meetingEarlier = found.earlier;
+  meetingShowingEarlier = false;
+  if (meetingResult) setOffset(meetingOffsetAt(meetingResult.at));
+  updateMeetingUI();
+}
+
+function toggleMeeting() {
+  meetingMode = !meetingMode;
+  meetingSelected = meetingMode ? new Set(config.timezones) : new Set();
+  meetingResult = null; meetingEarlier = null; meetingShowingEarlier = false;
+  expandedBase = false; expandedCityKey = null;
+  applyExpandedBaseState(); applyExpandedCityState();
+  updateQuickVisibility();
+  if (meetingMode) recalculateMeeting(); else updateMeetingUI();
+}
+
+function toggleMeetingMember(key) {
+  if (meetingSelected.has(key)) meetingSelected.delete(key); else meetingSelected.add(key);
+  recalculateMeeting();
+}
+
+function meetingCopyText(at = referenceTimestamp(), members = meetingMembers()) {
+  const date = new Date(at);
+  const title = lang() === 'ru' ? `Созвон · ${meetingLengthMinutes} мин` : `Call · ${meetingLengthMinutes} min`;
+  return [title, ...members.map(member => {
+    const name = member.key === baseScheduleKey
+      ? `${lang() === 'ru' ? 'Моё время' : 'My time'} (${config.settings.top_clock_mode === 'auto' ? systemCities() : cityName(config.settings.manual_top_timezone)})`
+      : `${cityContext(member.key).label ? `${cityContext(member.key).label} · ` : ''}${cityName(member.key)}`;
+    return `${name} — ${displayDate(date, member.zone)}, ${timeAt(date, member.zone)}`;
+  })].join('\n');
+}
+
 function gradientFor(sample, cssPrefix, steps = 96) {
   const stops = [];
   let previous = sample(0), start = 0;
@@ -559,6 +692,8 @@ function normalize() {
     config.settings.reminder_intervals = intervals.map(Number);
   }
   config.settings.availabilityDefault = normalizeSchedule(config.settings.availabilityDefault);
+  config.settings.baseAvailabilityOverride = config.settings.baseAvailabilityOverride
+    ? normalizeSchedule(config.settings.baseAvailabilityOverride) : null;
   if (!['system','12','24'].includes(config.settings.time_format)) config.settings.time_format = 'system';
   if (!['system','dark','light'].includes(config.settings.theme)) config.settings.theme = 'system';
   for (const [key, value] of Object.entries(config.cityContext)) {
@@ -594,7 +729,7 @@ function render() {
   const baseSolar = temporalContext(selected, baseSolarKey()).solar;
   const baseSolarLabel = t(baseSolar);
   const shift = shiftCaption(offset);
-  const quickClass = offset > 0 ? 'quick-section open' : 'quick-section';
+  const quickClass = offset > 0 || quickAtNowOpen || meetingMode ? 'quick-section open' : 'quick-section';
 
   $('#app').innerHTML = `<div class="shell">
     <div class="header">
@@ -604,27 +739,31 @@ function render() {
     </div>
     <div class="main-controls">
     <section class="hero" style="height:${heroHeight()}px">
-      <article class="clock panel ${config.settings.top_clock_mode === 'manual' ? 'manual-base ' : ''}${expandedBase ? 'expanded' : ''}" id="baseClock" data-zone="${esc(zone)}" aria-expanded="${expandedBase}">
+       <article class="clock panel ${config.settings.top_clock_mode === 'manual' ? 'manual-base ' : ''}${expandedBase ? 'expanded' : ''}" id="baseClock" data-zone="${esc(zone)}" aria-expanded="${expandedBase}">
         <div class="base-summary">
           <span class="base-solar solar-glyph" role="img" aria-label="${esc(baseSolarLabel)}">${solarGlyph(baseSolar)}</span>
           ${source}<div class="clock-time">${timeAt(selected, zone)}</div>
           <div class="clock-city">${esc(city)}</div><div class="date">${displayDate(selected, zone)}</div><div class="base-reminders" id="baseReminders"></div>
         </div>
-        <div class="card-actions-wrap" aria-hidden="${!expandedBase}"><div class="card-actions"><button data-base-action="alarm">${t('alarmAction')}</button><button data-base-action="replace">${t('changeCity')}</button></div></div>
+         <div class="card-actions-wrap" aria-hidden="${!expandedBase}"><div class="card-actions"><button data-base-action="alarm">${t('alarmAction')}</button><button data-base-action="replace">${t('changeCity')}</button><button data-base-action="schedule">${t('contactHours')}</button></div></div>
+         ${meetingOutlineSvg}
       </article>
       <article class="saved-panel panel"><div class="saved-heading" id="savedHeading"></div><div class="saved-list" id="alarmList"></div></article>
     </section>
     <div class="hero-resizer" id="heroResizer" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="${lang() === 'ru' ? 'Высота секции времени и напоминаний' : 'Time and reminders section height'}"></div>
     <section class="slider" id="sliderArea">
       <div class="shift-label ${offset === 0 ? 'start' : offset === 24 ? 'end' : ''}" id="shiftLabel">${shift}</div>
-      <div class="slider-rail" aria-hidden="true"><div class="slider-fill"></div></div>
+       <button class="quick-toggle ${offset > 0 ? 'away-from-now' : ''}" id="quickToggle" type="button" aria-label="${lang() === 'ru' ? 'Быстрые напоминания' : 'Quick reminders'}" title="${lang() === 'ru' ? 'Быстрые напоминания' : 'Quick reminders'}" aria-controls="quickSection" aria-expanded="${offset > 0 || quickAtNowOpen || meetingMode}">${quickAlarmIcon}${quickChevronIcon}</button>
+       <div class="slider-rail" aria-hidden="true"><div class="slider-fill"></div></div>
+       <div class="meeting-range" id="meetingRange" hidden></div>
       <div class="slider-thumb" aria-hidden="true"></div>
       <input id="timeSlider" type="range" min="0" max="24" step="1" value="${offset}" aria-label="${t('moveFuture')}" aria-valuetext="${shift}">
       <div class="marks"><span id="originLabel">${timelineCaption(0)}</span>${[6,12,18,24].map(hours => `<span data-timeline-hour="${hours}">${timelineCaption(hours)}</span>`).join('')}</div>
-    </section>
-    <section class="${quickClass}" id="quickSection">
-      <div class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</div>
-      <div class="quick">${config.settings.reminder_intervals.map((minutes, index) =>
+     </section>
+     <section class="${quickClass}" id="quickSection">
+       <div class="timeline-actions"><span class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</span><div class="meeting-actions"><button class="meeting-toggle" id="meetingToggle" type="button" aria-pressed="${meetingMode}">${lang() === 'ru' ? 'Удобно всем' : 'Good for all'}</button><button class="meeting-copy" id="meetingCopy" type="button" aria-label="${lang() === 'ru' ? 'Скопировать время созвона' : 'Copy call times'}" title="${lang() === 'ru' ? 'Скопировать время созвона' : 'Copy call times'}" disabled>${copyIcon}</button></div></div>
+       <div class="meeting-status" id="meetingStatus" role="status" hidden></div>
+       <div class="quick">${config.settings.reminder_intervals.map((minutes, index) =>
         `<button class="chip" draggable="true" data-preset="${index}" data-lead="${minutes}" title="${lang() === 'ru' ? 'Прокрутка: изменить интервал' : 'Scroll to adjust interval'}"><span class="chip-caption">${intervalCaption(minutes)}</span><span class="grip">⋮</span></button>`).join('')}</div>
       <div class="selection-status" id="selectionStatus"></div>
     </section>
@@ -640,6 +779,7 @@ function render() {
   renderAlarms();
   bindMain();
   updateSelectionState();
+  updateMeetingUI();
 }
 
 function renderCities() {
@@ -655,7 +795,7 @@ function renderCities() {
     const context = temporalContext(selected, key);
     const extra = secondaryContext(selected, zone);
     const expanded = expandedCityKey === key;
-    return `<article class="card city-card ${expanded ? 'expanded' : ''}" draggable="true" data-city="${index}" data-zone="${esc(key)}" aria-expanded="${expanded}">
+     return `<article class="card city-card ${expanded ? 'expanded' : ''}" draggable="${!meetingMode}" data-city="${index}" data-zone="${esc(key)}" aria-expanded="${expanded}">
       <div class="city-summary">
         <div class="city-main"><div class="city-name">${label(key)}</div><div class="offset">${delta >= 0 ? '+' : ''}${delta} ${lang() === 'ru' ? 'ч.' : 'h'} ${t('from')}</div><div class="city-reminders"></div></div>
         <div class="city-clock"><div class="city-time"><span class="clock-value">${timeAt(selected, zone)}</span></div><div class="until">${remaining}${extra ? ` · ${esc(extra)}` : ''}</div></div>
@@ -663,11 +803,13 @@ function renderCities() {
         <span class="city-context"><span class="solar-glyph context-token" tabindex="0" aria-label="${esc(contextAccessibility(context))}" data-tooltip="${esc(contextAccessibility(context))}">${solarGlyph(context.solar)}</span></span>
         ${temporalBandHtml(selected, key)}
       </div>
-      <div class="card-actions-wrap" aria-hidden="${!expanded}"><div class="card-actions"><button data-city-action="alarm">${t('alarmAction')}</button><button data-city-action="base">${t('makeBase')}</button><button data-city-action="replace">${t('changeCity')}</button><button data-city-action="schedule">${t('contactHours')}</button></div></div>
+       <div class="card-actions-wrap" aria-hidden="${!expanded}"><div class="card-actions"><button data-city-action="alarm">${t('alarmAction')}</button><button data-city-action="base">${t('makeBase')}</button><button data-city-action="replace">${t('changeCity')}</button><button data-city-action="schedule">${t('nameAndSchedule')}</button></div></div>
+       ${meetingOutlineSvg}
     </article>`;
   }).join('');
   bindCards();
   renderCityAlarms();
+  updateMeetingUI();
 }
 
 function cityReminders(key) {
@@ -854,10 +996,19 @@ function bindMain() {
   $('.header h1').onpointerdown = () => send('drag');
 
   const slider = $('#timeSlider');
+  $('#quickToggle').onclick = event => {
+    event.stopPropagation();
+    toggleQuickAtNow();
+  };
+  $('#meetingToggle').onclick = toggleMeeting;
+  $('#meetingCopy').onclick = () => {
+    if (!meetingMode || meetingMembers().length < 2) return;
+    send(`copyText\n${meetingCopyText()}`);
+  };
   updateSliderVisual(offset);
   slider.oninput = event => {liveOffset = +event.target.value; setOffset(liveOffset);};
   slider.onchange = event => {liveOffset = null; setOffset(+event.target.value);};
-  $('#sliderArea').oncontextmenu = event => { event.preventDefault(); liveOffset = null; setOffset(0); };
+  $('#sliderArea').oncontextmenu = event => { event.preventDefault(); resetTimeline(); };
   bindValueScroll($('#sliderArea'), {read:()=>offset,write:setOffset,min:0,max:24,stepForEvent:event=>event.shiftKey?.25:1,paint:value=>{
     liveOffset = value; slider.value = value;
     updateSliderVisual(value);
@@ -886,6 +1037,7 @@ function bindMain() {
   const reminderClick = baseClock?.onclick;
   if (baseClock) baseClock.onclick = event => {
     if (event.target.closest('button,input,label')) return;
+    if (meetingMode) { toggleMeetingMember(baseScheduleKey); return; }
     if (pendingLead !== null) return reminderClick?.(event);
     toggleExpandedBase();
     applyExpandedBaseState();
@@ -896,14 +1048,51 @@ function bindMain() {
     applyExpandedBaseState();
     if (button.dataset.baseAction === 'alarm') newAlarmForBase();
     else if (button.dataset.baseAction === 'replace') openCities('base');
+    else if (button.dataset.baseAction === 'schedule') openScheduleEditor(baseScheduleKey, 'base');
   });
 }
 
 function setOffset(value) {
   offset = clamp(Math.round(value * 4) / 4, 0, 24);
   if (pendingLead !== null) pendingLead = null;
-  $('#quickSection')?.classList.toggle('open', offset > 0);
+  updateQuickVisibility();
   updateDynamic();
+  if (meetingMode) updateMeetingUI();
+}
+
+function resetTimeline() {
+  liveOffset = null;
+  quickAtNowOpen = false;
+  meetingMode = false;
+  meetingSelected.clear();
+  meetingResult = null;
+  meetingEarlier = null;
+  meetingShowingEarlier = false;
+  setOffset(0);
+  updateMeetingUI();
+}
+
+function toggleQuickAtNow() {
+  if (offset !== 0) return;
+  if (meetingMode) {
+    meetingMode = false;
+    meetingSelected.clear();
+    meetingResult = null; meetingEarlier = null; meetingShowingEarlier = false;
+    quickAtNowOpen = false;
+    updateMeetingUI();
+    updateQuickVisibility();
+    return;
+  }
+  quickAtNowOpen = !quickAtNowOpen;
+  updateQuickVisibility();
+}
+
+function updateQuickVisibility() {
+  $('#quickSection')?.classList.toggle('open', offset > 0 || quickAtNowOpen || meetingMode);
+  const button = $('#quickToggle');
+  if (!button) return;
+  button.classList.toggle('away-from-now', offset > 0);
+  button.setAttribute('aria-expanded', String(offset > 0 || quickAtNowOpen || meetingMode));
 }
 
 function updateDynamic() {
@@ -952,6 +1141,7 @@ function updateDynamic() {
   $$('.chip[data-preset]').forEach(chip => { chip.querySelector('.chip-caption').textContent = intervalCaption(+chip.dataset.lead); });
   renderAlarms();
   updateSelectionState();
+  if (meetingMode) updateMeetingUI();
 }
 
 function bindReminderDrop(element, zone, name, sourceType = 'city') {
@@ -984,12 +1174,14 @@ function bindCards() {
     card.onclick = event => {
       if (event.target.closest('button,input,label')) return;
       if (suppressCityClick) return;
+      if (meetingMode) { toggleMeetingMember(card.dataset.zone); return; }
       if (pendingLead !== null) return reminderClick?.(event);
       toggleExpandedCity(card.dataset.zone);
       applyExpandedCityState();
     };
-    card.oncontextmenu = event => { event.preventDefault(); openCityActions(card.dataset.zone); };
+    card.oncontextmenu = event => { event.preventDefault(); if (!meetingMode) openCityActions(card.dataset.zone); };
     card.ondragstart = event => {
+      if (meetingMode) { event.preventDefault(); return; }
       if (event.target.closest('button,input,label')) { event.preventDefault(); return; }
       cityDragIndex = +card.dataset.city;
       card.classList.add('dragging');
@@ -1119,7 +1311,9 @@ function openAlarmForCity(key) {
 }
 
 function beginReminder(lead) {
-  if (offset === 0 || referenceTimestamp() <= Date.now()) {
+  if (offset === 0 && quickAtNowOpen) {
+    if (!validAlarm(Date.now(), lead)) { toast(invalidAlarmMessage()); return; }
+  } else if (offset === 0 || referenceTimestamp() <= Date.now()) {
     toast(t('moveFuture'));
     return;
   }
@@ -1157,13 +1351,14 @@ function createReminder(zone, lead, city, options = {}) {
   return (duplicate || entry).id;
 }
 
-function modal(title, body) {
+function modal(title, body, onBack = closeModal) {
+  if (capturingHotkey) send('endHotkeyCapture');
   detailId = null; capturingHotkey = false; closeNamePopover();
   $('#modal').innerHTML = `<section class="modal-root"><div class="modal-head"><button class="icon" id="back">‹</button><h2>${esc(title)}</h2></div><div class="modal-body">${body}</div></section>`;
-  $('#back').onclick = closeModal;
+  $('#back').onclick = onBack;
 }
 
-function closeModal() { detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
+function closeModal() { if (capturingHotkey) send('endHotkeyCapture'); detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
 
 function directionOptions() {
   return lang() === 'ru'
@@ -1188,8 +1383,8 @@ function openHotkey() {
   capturedModifiers = 0;
   hotkeySelection = currentHotkeyMode();
   modal(lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut',
-    `<div class="hotkey-active"><span>${lang() === 'ru' ? 'Сейчас назначено' : 'Current shortcut'}</span><strong id="hotkeyCurrent">${esc(hotkeyLabel())}</strong></div>
-    <div class="group"><div class="row toggle-row"><span>${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}</span><button class="switch" id="hotkeyModeSwitch" type="button" role="switch" aria-label="${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}"></button></div></div>
+    `<div class="group"><div class="row toggle-row"><span>${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'} <small>${esc(hotkeyLabel(defaultHotkeyForPlatform()))}</small></span><button class="switch" id="hotkeyModeSwitch" type="button" role="switch" aria-label="${lang() === 'ru' ? 'Сочетание по умолчанию' : 'Default shortcut'}"></button></div></div>
+    <div class="hotkey-active"><span>${lang() === 'ru' ? 'Сейчас назначено' : 'Current shortcut'}</span><strong id="hotkeyCurrent">${esc(hotkeyLabel())}</strong></div>
     <div id="hotkeyCustom">
     <button class="hotkey-recorder" id="hotkeyCapture" type="button"></button>
     <div class="hotkey-preview"><span>${lang() === 'ru' ? 'Новое сочетание' : 'New shortcut'}</span><strong id="hotkeyPreview">—</strong></div>
@@ -1199,6 +1394,7 @@ function openHotkey() {
   $('#hotkeyApply').onclick = () => {if (candidateHotkey) requestHotkey(candidateHotkey, 'custom');};
   $('#hotkeyModeSwitch').onclick = () => {
     if (pendingHotkey) return;
+    if (capturingHotkey) send('endHotkeyCapture');
     capturingHotkey = false;
     candidateHotkey = null;
     if (hotkeySelection === 'custom') {
@@ -1237,16 +1433,18 @@ function startHotkeyCapture() {
   if (pendingHotkey) return;
   capturingHotkey = true;
   candidateHotkey = null;
+  send('beginHotkeyCapture');
   capturedModifiers = 0;
   const modifiers = platform === 'macos' ? 'Control, Option, Shift и Command' : 'Ctrl, Alt и Shift';
   const modifiersEn = platform === 'macos' ? 'Control, Option, Shift and Command' : 'Ctrl, Alt and Shift';
-  updateHotkeyUI(lang() === 'ru' ? `Нажатые ${modifiers} появляются ниже. Завершите сочетание клавишей.` : `${modifiersEn} appear below as you press them. Finish with a key.`);
+  updateHotkeyUI(lang() === 'ru' ? `Нажатые ${modifiers} появляются ниже. Нажмите клавишу или Mouse 4/5.` : `${modifiersEn} appear below. Press a key or Mouse 4/5.`);
   $('#hotkeyCapture').focus();
 }
 
 function requestHotkey(hotkey, mode = 'custom') {
   if (pendingHotkey) return;
   capturingHotkey = false;
+  send('endHotkeyCapture');
   pendingHotkey = hotkey;
   pendingHotkeyMode = mode;
   updateHotkeyUI(lang() === 'ru' ? `Проверяем ${hotkeyLabel(hotkey)}…` : `Checking ${hotkeyLabel(hotkey)}…`);
@@ -1266,6 +1464,7 @@ document.addEventListener('keydown', event => {
   }
   candidateHotkey = hotkey;
   capturingHotkey = false;
+  send('endHotkeyCapture');
   updateHotkeyUI(lang() === 'ru' ? 'Сочетание записано. Нажмите «Применить», чтобы проверить и сохранить.' : 'Shortcut recorded. Press Apply to check and save it.');
 }, true);
 
@@ -1280,15 +1479,13 @@ function openSettings() {
   const themeName = config.settings.theme === 'system' ? t('systemTheme') : t(config.settings.theme);
   const formatName = config.settings.time_format === 'system' ? t('systemFormat') : t(config.settings.time_format === '12' ? 'hour12' : 'hour24');
   modal(t('settings'), `<div class="group"><div class="row" id="theme"><span>${t('theme')}</span><span class="row-value">${themeName} ›</span></div>
-    <div class="row" id="timeFormat"><span>${t('timeFormat')}</span><span class="row-value">${formatName} ›</span></div></div>
-    <div class="group"><div class="row" id="language"><span>${t('language')}</span><span class="row-value">${lang() === 'ru' ? 'Русский' : 'English'} ›</span></div>
+    <div class="row" id="timeFormat"><span>${t('timeFormat')}</span><span class="row-value">${formatName} ›</span></div>
     <div class="row" id="base"><span>${t('base')}</span><span class="row-value">${config.settings.top_clock_mode === 'auto' ? t('system') : esc(cityName(config.settings.manual_top_timezone))} ›</span></div></div>
-    <div class="group"><button class="row settings-button" id="typicalSchedule"><span>${t('typicalSchedule')}</span><span class="row-value">›</span></button>
-    <button class="row settings-button" id="citySettings"><span>${t('citySettings')}</span><span class="row-value">${config.timezones.length} ›</span></button></div>
-    <div class="group"><div class="row" id="intervals"><span>${t('intervals')}</span><span class="row-value">${config.settings.reminder_intervals.join(' · ')} ›</span></div>
-    <button class="row settings-button" id="alarmSound"><span>${lang() === 'ru' ? 'Звук будильника' : 'Alarm sound'}</span><span class="row-value">${esc(soundName(defaultSoundId()))} ›</span></button></div>
-    <div class="group"><button class="row settings-button" id="quickTitles"><span>${lang() === 'ru' ? 'Быстрые названия' : 'Quick titles'}</span><span class="row-value">›</span></button></div>
-    <div class="group"><button class="row settings-button" id="phone"><span>${lang() === 'ru' ? 'Телефон' : 'Phone'}</span><span class="row-value">${window.syncSettingsLabel?.() || (lang() === 'ru' ? 'Подключить Android' : 'Connect Android')} ›</span></button></div>
+    <div class="group"><div class="row" id="language"><span>${t('language')}</span><span class="row-value">${lang() === 'ru' ? 'Русский' : 'English'} ›</span></div></div>
+    <div class="group"><button class="row settings-button" id="citySettings"><span>${t('citySettings')}</span><span class="row-value">›</span></button></div>
+    <div class="group"><button class="row settings-button" id="quickTitles"><span>${lang() === 'ru' ? 'Быстрые названия напоминаний' : 'Quick reminder titles'}</span><span class="row-value">${config.settings.quick_titles.length} ›</span></button>
+    <div class="row" id="intervals"><span>${t('intervals')}</span><span class="row-value">${config.settings.reminder_intervals.join(' · ')} ›</span></div>
+    <button class="row settings-button" id="alarmSound"><span>${lang() === 'ru' ? 'Звук напоминания' : 'Reminder sound'}</span><span class="row-value">${esc(soundName(defaultSoundId()))} ›</span></button></div>
     <div class="group"><button class="row settings-button" id="direction"><span>${lang() === 'ru' ? 'Появление и скрытие' : 'Show and hide'}</span><span class="row-value">${directionOptions().find(([value]) => value === config.settings.overlay_direction)?.[1] || directionOptions()[1][1]} ›</span></button>
     <button class="row settings-button" id="hotkey"><span>${lang() === 'ru' ? 'Клавиша вызова панели' : 'Panel shortcut'}</span><span class="row-value">${esc(hotkeyLabel())}</span></button></div>
     <div class="group"><div class="row toggle-row"><span>${t('autostart')}</span><button class="switch ${config.settings.autostart ? 'on' : ''}" id="autostartSwitch" role="switch" aria-checked="${config.settings.autostart ? 'true' : 'false'}" aria-label="${t('autostart')}"></button></div></div>`);
@@ -1298,18 +1495,16 @@ function openSettings() {
   $('#timeFormat').onclick = () => choice(t('timeFormat'), [['system', t('systemFormat')], ['24', t('hour24')], ['12', t('hour12')]], config.settings.time_format, value => {
     config.settings.time_format = value; saveConfig(); render(); openSettings();
   });
+  $('#base').onclick = () => openCities('base-settings');
   $('#language').onclick = () => choice(t('language'), [['ru', 'Русский'], ['en', 'English']], lang(), value => {
     config.settings.language = value; saveConfig(); render(); openSettings();
   });
-  $('#base').onclick = () => openCities('base');
-  $('#typicalSchedule').onclick = () => openScheduleEditor(null);
   $('#citySettings').onclick = openCitySettingsList;
   $('#intervals').onclick = openIntervals;
   $('#alarmSound').onclick = openAlarmSound;
   $('#direction').onclick = openDirection;
   $('#hotkey').onclick = openHotkey;
   $('#quickTitles').onclick = openQuickTitles;
-  $('#phone').onclick = () => window.openPhoneSettings?.();
   $('#autostartSwitch').onclick = () => {
     config.settings.autostart = !config.settings.autostart;
     saveConfig();
@@ -1321,9 +1516,9 @@ function openSettings() {
 async function openAlarmSound() {
   await soundLibraryReady;
   const ru = lang() === 'ru', selected = defaultSoundId();
-  modal(ru ? 'Звуки будильника' : 'Alarm sounds',
+  modal(ru ? 'Звуки напоминаний' : 'Reminder sounds',
     `<div class="group"><div class="row toggle-row"><span>${ru ? 'Звук системы' : 'System sound'}</span><button class="switch ${selected === 'system' ? 'on' : ''}" id="systemSoundSwitch" role="switch" aria-checked="${selected === 'system'}" aria-label="${ru ? 'Звук системы' : 'System sound'}"></button></div></div>
-    <p class="settings-help">${ru ? 'Общий звук для будильников. Добавляйте файлы, отмечайте избранное звёздочкой и выбирайте отдельный звук в редакторе будильника.' : 'Default alarm sound. Add files, mark favorites with a star and choose an individual sound in the alarm editor.'}</p>
+    <p class="settings-help">${ru ? 'Общий звук для напоминаний. Добавляйте файлы, отмечайте избранное звёздочкой и выбирайте отдельный звук при редактировании напоминания.' : 'Default reminder sound. Add files, mark favorites with a star and choose an individual sound when editing a reminder.'}</p>
     <label class="sound-drop" id="soundDrop" for="soundFile"><strong>${ru ? 'Перетащите звуки сюда' : 'Drop sounds here'}</strong><span>${ru ? 'или нажмите, чтобы выбрать файлы' : 'or click to choose files'}</span></label>
     <input id="soundFile" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.wma,.ogg,.flac,.opus" multiple hidden>
     <p class="sound-feedback" id="soundFeedback" role="status"></p>
@@ -1395,65 +1590,77 @@ async function importAlarmSounds(files) {
   if (errors.length) $('#soundFeedback').textContent = (lang() === 'ru' ? 'Не удалось добавить (нужен аудиофайл до 30 МБ): ' : 'Could not add (audio file under 30 MB required): ') + errors.join(', ');
 }
 
-function scheduleEditorBody(schedule, inherited = false) {
+function scheduleEditorBody(schedule, {customizable = false, inherited = false, cityLabel = null} = {}) {
   const fields = [
     ['okayStart', lang() === 'ru' ? 'Можно связаться с' : 'Okay from'],
     ['workingStart', lang() === 'ru' ? 'Рабочее время с' : 'Working from'],
     ['workingEnd', lang() === 'ru' ? 'Рабочее время до' : 'Working until'],
     ['dndStart', lang() === 'ru' ? 'Не беспокоить с' : 'DND from'],
   ];
-  return `${inherited ? `<button class="secondary schedule-default" id="useDefault">${t('useDefault')}</button>` : ''}<div class="group schedule-times">${fields.map(([key,name]) => `<label class="row"><span>${name}</span><input type="time" step="900" value="${schedule[key]}" data-schedule-time="${key}"></label>`).join('')}</div><div class="schedule-error" id="scheduleError" role="status"></div><button class="primary" id="saveSchedule">${t('save')}</button>`;
+  return `${cityLabel !== null ? `<label class="section" for="scheduleCityLabel">${t('displayLabel')}</label><input class="search schedule-name" id="scheduleCityLabel" maxlength="80" value="${esc(cityLabel)}">` : ''}${customizable ? `<div class="group"><div class="row toggle-row"><span>${t('useDefault')}</span><button class="switch ${inherited ? 'on' : ''}" id="useDefaultSwitch" role="switch" aria-checked="${inherited}" aria-label="${t('useDefault')}"></button></div></div>` : ''}<div class="group schedule-times">${fields.map(([key,name]) => `<label class="row"><span>${name}</span><input type="time" step="900" value="${schedule[key]}" data-schedule-time="${key}" ${inherited ? 'disabled' : ''}></label>`).join('')}</div><div class="schedule-error" id="scheduleError" role="status"></div><button class="primary" id="saveSchedule">${t('save')}</button>`;
 }
 
 function openScheduleEditor(key, returnTo = 'actions') {
-  const override = key ? cityContext(key).availabilityOverride : null;
+  const isBase = key === baseScheduleKey;
+  const isCity = Boolean(key) && !isBase;
+  const override = isBase ? config.settings.baseAvailabilityOverride : isCity ? cityContext(key).availabilityOverride : null;
   const schedule = normalizeSchedule(override || config.settings.availabilityDefault);
-  modal(key ? `${t('schedule')}: ${cityName(key)}` : t('typicalSchedule'), scheduleEditorBody(schedule, Boolean(key)));
-  $('#useDefault')?.addEventListener('click', () => {
-    const context = cityContext(key); delete context.availabilityOverride;
-    if (!context.label) delete config.cityContext[key];
-    saveConfig(); render(); ['card','base'].includes(returnTo) ? closeModal() : openCityActions(key);
+  const title = isBase ? `${t('contactHours')}: ${config.settings.top_clock_mode === 'auto' ? t('system') : cityName(config.settings.manual_top_timezone)}` : isCity ? `${t('nameAndSchedule')}: ${cityName(key)}` : t('typicalSchedule');
+  const back = returnTo === 'citySettings' ? openCitySettingsList : isCity && returnTo === 'actions' ? () => openCityActions(key) : returnTo === 'settings' ? openSettings : closeModal;
+  modal(title, scheduleEditorBody(schedule, {customizable:Boolean(key), inherited:Boolean(key) && !override, cityLabel:isCity ? cityContext(key).label || '' : null}), back);
+  let draft = {...schedule};
+  const times = $$('[data-schedule-time]');
+  const useDefaultSwitch = $('#useDefaultSwitch');
+  useDefaultSwitch?.addEventListener('click', () => {
+    const inherited = useDefaultSwitch.getAttribute('aria-checked') !== 'true';
+    if (inherited) draft = Object.fromEntries(times.map(input => [input.dataset.scheduleTime, input.value]));
+    useDefaultSwitch.setAttribute('aria-checked', String(inherited));
+    useDefaultSwitch.classList.toggle('on', inherited);
+    times.forEach(input => { input.disabled = inherited; input.value = inherited ? config.settings.availabilityDefault[input.dataset.scheduleTime] : draft[input.dataset.scheduleTime]; });
+    $('#scheduleError').textContent = '';
   });
   $('#saveSchedule').onclick = () => {
     const value = Object.fromEntries($$('[data-schedule-time]').map(input => [input.dataset.scheduleTime, input.value]));
-    if (!scheduleIsValid(value)) {
+    const inherited = useDefaultSwitch?.getAttribute('aria-checked') === 'true';
+    if (!inherited && !scheduleIsValid(value)) {
       $('#scheduleError').textContent = lang() === 'ru' ? 'Границы должны идти по кругу суток в указанном порядке.' : 'Boundaries must follow this order around the 24-hour day.';
       return;
     }
-    if (key) {
-      config.cityContext[key] = {...cityContext(key), availabilityOverride:value};
+    if (isBase) config.settings.baseAvailabilityOverride = inherited ? null : value;
+    else if (isCity) {
+      const context = {...cityContext(key)};
+      context.label = $('#scheduleCityLabel').value.trim().slice(0, 80);
+      if (inherited) delete context.availabilityOverride;
+      else context.availabilityOverride = value;
+      if (!context.label) delete context.label;
+      if (!context.label && !context.availabilityOverride) delete config.cityContext[key];
+      else config.cityContext[key] = context;
     } else config.settings.availabilityDefault = value;
-    saveConfig(); render(); returnTo === 'base' ? closeModal() : key ? (returnTo === 'card' ? closeModal() : openCityActions(key)) : openSettings();
+    saveConfig(); render();
+    if (returnTo === 'base' || returnTo === 'card') closeModal();
+    else if (returnTo === 'citySettings') openCitySettingsList();
+    else if (isCity) openCityActions(key);
+    else openSettings();
   };
 }
 
 function openCitySettingsList() {
-  modal(t('citySettings'), `<div class="group">${config.timezones.map(key => `<button class="row settings-button" data-city-settings="${esc(key)}"><span>${label(key)}</span><span class="row-value">›</span></button>`).join('')}</div>`);
+  modal(t('citySettings'), `<div class="section">${t('baseTimeSection')}</div><div class="group"><button class="row settings-button" id="baseSchedule"><span>${t('baseContactHours')}</span><span class="row-value">›</span></button><button class="row settings-button" id="typicalSchedule"><span>${t('typicalSchedule')}</span><span class="row-value">›</span></button></div><div class="section">${t('addedCities')}</div><div class="group">${config.timezones.map(key => `<button class="row settings-button" data-city-settings="${esc(key)}"><span>${label(key)}</span><span class="row-value">›</span></button>`).join('')}</div>`, openSettings);
+  $('#baseSchedule').onclick = () => openScheduleEditor(baseScheduleKey, 'citySettings');
+  $('#typicalSchedule').onclick = () => openScheduleEditor(null, 'citySettings');
   $$('[data-city-settings]').forEach(button => button.onclick = () => openCityActions(button.dataset.citySettings));
 }
 
 function openCityActions(key) {
   if (!config.timezones.includes(key)) { openCitySettingsList(); return; }
-  modal(cityName(key), `<div class="group city-actions"><button class="row settings-button" id="renameCity"><span>${t('rename')}</span><span class="row-value">${esc(cityContext(key).label || '')} ›</span></button><button class="row settings-button" id="scheduleCity"><span>${t('schedule')}</span><span class="row-value">${cityContext(key).availabilityOverride ? (lang() === 'ru' ? 'Свой' : 'Custom') : (lang() === 'ru' ? 'Общий' : 'Default')} ›</span></button><button class="row settings-button" id="makeBase">${t('makeBase')}</button><button class="row settings-button danger-row" id="removeCity">${t('remove')}</button></div>`);
-  $('#renameCity').onclick = () => openRenameCity(key);
+  modal(cityName(key), `<div class="group city-actions"><button class="row settings-button" id="scheduleCity"><span>${t('nameAndSchedule')}</span><span class="row-value">${cityContext(key).availabilityOverride ? (lang() === 'ru' ? 'Свой' : 'Custom') : (lang() === 'ru' ? 'Общий' : 'Default')} ›</span></button><button class="row settings-button" id="makeBase">${t('makeBase')}</button><button class="row settings-button danger-row" id="removeCity">${t('remove')}</button></div>`, openCitySettingsList);
   $('#scheduleCity').onclick = () => openScheduleEditor(key);
   $('#makeBase').onclick = () => {
-    makeBaseCity(key);
+    makeBaseCity(key); openCitySettingsList();
   };
   $('#removeCity').onclick = () => {
     config.timezones = config.timezones.filter(candidate => candidate !== key); delete config.cityContext[key];
-    saveConfig(); render(); closeModal();
-  };
-}
-
-function openRenameCity(key) {
-  modal(`${t('rename')}: ${cityName(key)}`, `<label class="section" for="cityLabel">${t('displayLabel')}</label><input class="search" id="cityLabel" maxlength="80" value="${esc(cityContext(key).label || '')}"><button class="primary rename-save" id="saveCityLabel">${t('save')}</button>`);
-  const input = $('#cityLabel'); input.focus(); input.select();
-  $('#saveCityLabel').onclick = () => {
-    const context = {...cityContext(key), label:input.value.trim().slice(0,80)};
-    if (!context.label) delete context.label;
-    if (!context.label && !context.availabilityOverride) delete config.cityContext[key]; else config.cityContext[key] = context;
-    saveConfig(); render(); openCityActions(key);
+    saveConfig(); render(); openCitySettingsList();
   };
 }
 
@@ -1490,9 +1697,10 @@ function openIntervals() {
 }
 
 function openCities(mode) {
+  const choosingBase = mode === 'base' || mode === 'base-settings';
   const replaceIndex = mode.startsWith('replace:') ? Number(mode.split(':')[1]) : -1;
-  const system = mode === 'base' ? `<div class="result system-result"><div><b>${t('system')}</b><div class="region">(${esc(systemCities())})</div></div><b data-live-zone="${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}">${timeAt(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)}</b><button class="switch ${config.settings.top_clock_mode === 'auto' ? 'on' : ''}" id="systemSwitch" role="switch"></button></div>` : '';
-  modal(mode === 'base' ? t('base') : replaceIndex >= 0 ? t('changeCity') : t('add'), `<input class="search" id="search" placeholder="${t('search')}">${system}<div class="section" id="section">${t('favorites')}</div><div id="results"></div>`);
+  const system = choosingBase ? `<div class="result system-result"><div><b>${t('system')}</b><div class="region">(${esc(systemCities())})</div></div><b data-live-zone="${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}">${timeAt(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)}</b><button class="switch ${config.settings.top_clock_mode === 'auto' ? 'on' : ''}" id="systemSwitch" role="switch"></button></div>` : '';
+  modal(choosingBase ? t('base') : replaceIndex >= 0 ? t('changeCity') : t('add'), `<input class="search" id="search" placeholder="${t('search')}">${system}<div class="section" id="section">${t('favorites')}</div><div id="results"></div>`, mode === 'base-settings' ? openSettings : closeModal);
   const input = $('#search');
   input.oninput = () => renderResults(mode, input.value);
   if ($('#systemSwitch')) $('#systemSwitch').onclick = () => {
@@ -1500,7 +1708,7 @@ function openCities(mode) {
     if (config.settings.top_clock_mode === 'manual' && !config.settings.manual_top_timezone) config.settings.manual_top_timezone = 'Asia/Ho_Chi_Minh';
     config.settings.base_timezone = config.settings.top_clock_mode === 'auto' ? '' : config.settings.manual_top_timezone;
     expandedBase = false;
-    saveConfig(); render(); openCities('base');
+    saveConfig(); render(); openCities(mode);
   };
   renderResults(mode, '');
   input.focus();
@@ -1526,6 +1734,7 @@ function rank(city, query, russian) {
 }
 
 function renderResults(mode, query) {
+  const choosingBase = mode === 'base' || mode === 'base-settings';
   const replaceIndex = mode.startsWith('replace:') ? Number(mode.split(':')[1]) : -1;
   const rows = matches(query);
   $('#section').textContent = query.trim() ? t('results') : t('favorites');
@@ -1533,12 +1742,12 @@ function renderResults(mode, query) {
     const favorite = config.favorites.includes(city.key);
     const chosen = config.settings.top_clock_mode === 'manual' && config.settings.manual_top_timezone === city.key;
     const duplicate = replaceIndex >= 0 && config.timezones.includes(city.key) && config.timezones[replaceIndex] !== city.key;
-    const disabled = (mode === 'base' && chosen) || duplicate;
-    return `<div class="result city-result"><div><b>${label(city.key)}</b></div><b class="result-time" data-live-zone="${esc(zoneOf(city.key))}">${timeAt(new Date(), zoneOf(city.key))}</b><button data-add="${esc(city.key)}" ${disabled ? 'disabled' : ''}>${mode === 'base' && chosen ? '✓' : '＋'}</button><button class="${favorite ? 'on' : ''}" data-star="${esc(city.key)}">☆</button>${favorite ? `<button class="trash" aria-label="${lang() === 'ru' ? 'Удалить из избранного' : 'Remove from favorites'}" data-unfav="${esc(city.key)}">${trashIcon}</button>` : '<span></span>'}</div>`;
+    const disabled = (choosingBase && chosen) || duplicate;
+    return `<div class="result city-result"><div><b>${label(city.key)}</b></div><b class="result-time" data-live-zone="${esc(zoneOf(city.key))}">${timeAt(new Date(), zoneOf(city.key))}</b><button data-add="${esc(city.key)}" ${disabled ? 'disabled' : ''}>${choosingBase && chosen ? '✓' : '＋'}</button><button class="${favorite ? 'on' : ''}" data-star="${esc(city.key)}">☆</button>${favorite ? `<button class="trash" aria-label="${lang() === 'ru' ? 'Удалить из избранного' : 'Remove from favorites'}" data-unfav="${esc(city.key)}">${trashIcon}</button>` : '<span></span>'}</div>`;
   }).join('');
   $$('[data-add]').forEach(button => button.onclick = () => {
     const key = button.dataset.add;
-    if (mode === 'base') {
+    if (choosingBase) {
       config.settings.top_clock_mode = 'manual';
       config.settings.manual_top_timezone = key;
       config.settings.base_timezone = key;
@@ -1546,7 +1755,7 @@ function renderResults(mode, query) {
     } else if (replaceIndex >= 0 && config.timezones[replaceIndex]) {
       replaceCityAt(replaceIndex, key);
     } else if (!config.timezones.includes(key)) config.timezones.push(key);
-    saveConfig(); render(); closeModal();
+    saveConfig(); render(); mode === 'base-settings' ? openSettings() : closeModal();
   });
   $$('[data-star]').forEach(button => button.onclick = () => {
     const key = button.dataset.star;
@@ -1652,6 +1861,17 @@ document.addEventListener('click', event => {
 }, true);
 
 host?.addEventListener('message', event => {
+  if (event.data?.type === 'copyResult') {
+    toast(event.data.success ? (lang() === 'ru' ? 'Время скопировано' : 'Times copied') : (lang() === 'ru' ? 'Не удалось скопировать' : 'Could not copy'));
+    return;
+  }
+  if (event.data?.type === 'hotkeyCaptured' && capturingHotkey) {
+    candidateHotkey = {modifiers: event.data.modifiers, key: event.data.key};
+    capturingHotkey = false;
+    send('endHotkeyCapture');
+    updateHotkeyUI(lang() === 'ru' ? 'Кнопка записана. Нажмите «Применить».' : 'Button recorded. Press Apply.');
+    return;
+  }
   if (event.data?.type === 'hotkeyResult') {
     activeHotkey = {modifiers: event.data.modifiers, key: event.data.key};
     if (event.data.success && pendingHotkey) {
@@ -1681,7 +1901,7 @@ host?.addEventListener('message', event => {
   activeHotkey = Number.isInteger(event.data.hotkeyModifiers) && Number.isInteger(event.data.hotkeyKey)
     ? {modifiers: event.data.hotkeyModifiers, key: event.data.hotkeyKey}
     : {...(config.settings.hotkey || defaultHotkeyForPlatform())};
-  if (!config.settings.manual_hotkey && config.settings.hotkey && !sameHotkey(config.settings.hotkey, defaultHotkeyForPlatform()))
+  if (!config.settings.manual_hotkey && config.settings.hotkey && !sameHotkey(config.settings.hotkey, {modifiers:5,key:84}) && !sameHotkey(config.settings.hotkey, defaultHotkeyForPlatform()))
     config.settings.manual_hotkey = {...config.settings.hotkey};
   soundLibraryReady = loadSoundLibrary();
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
@@ -1691,6 +1911,7 @@ host?.addEventListener('message', event => {
   send('rendered');
   window.syncInitialize?.(event.data.syncCredential || '');
 });
+window.addEventListener?.('widgetCopyResult', event => toast(event.detail ? (lang() === 'ru' ? 'Время скопировано' : 'Times copied') : (lang() === 'ru' ? 'Не удалось скопировать' : 'Could not copy')));
 
 send('ready');
 

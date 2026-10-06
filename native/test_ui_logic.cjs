@@ -21,14 +21,29 @@ run("config.settings.time_format='12'");
 assert.equal(run("timelineHour(12,new Date('2026-09-26T19:24:00Z'),'Asia/Bangkok')"), '2 PM');
 run("config.settings.time_format='system'");
 const css = fs.readFileSync(__dirname + '/ui/style.css', 'utf8');
-assert.equal(run('strings.ru.citySettings'), 'График в городах');
-assert.equal(run('strings.en.citySettings'), 'Schedules by city');
-assert.equal(run('hotkeyLabel()'), 'Alt+Shift+T');
+const appSource = fs.readFileSync(__dirname + '/ui/app.js', 'utf8');
+assert.match(appSource, /<section class="\$\{quickClass\}" id="quickSection">\s*<div class="timeline-actions">[\s\S]*?id="meetingToggle"[\s\S]*?id="meetingCopy"/);
+assert.equal(appSource.includes('quickClass = offset > 0 || quickAtNowOpen || meetingMode'), true);
+assert.equal(run('strings.ru.citySettings'), 'Имена и графики городов');
+assert.equal(run('strings.en.citySettings'), 'City names and schedules');
+assert.equal(run('strings.ru.nameAndSchedule'), 'Имя и график');
+assert.ok(run("openSettings.toString().includes('id=\"citySettings\"')"));
+assert.ok(run("openSettings.toString().includes('id=\"base\"')"));
+assert.ok(run("openSettings.toString().indexOf('id=\"theme\"') < openSettings.toString().indexOf('id=\"timeFormat\"') && openSettings.toString().indexOf('id=\"timeFormat\"') < openSettings.toString().indexOf('id=\"base\"')"));
+assert.equal(run("openSettings.toString().includes('id=\"typicalSchedule\"')"), false);
+assert.equal(run("openSettings.toString().includes('id=\"baseSchedule\"')"), false);
+assert.equal(run("openCitySettingsList.toString().includes('id=\"selectBaseCity\"')"), false);
+assert.ok(run("openCitySettingsList.toString().includes('id=\"baseSchedule\"')"));
+assert.ok(run("openCitySettingsList.toString().includes('id=\"typicalSchedule\"')"));
+assert.equal(run("openCityActions.toString().includes('id=\"renameCity\"')"), false);
+assert.equal(run('hotkeyLabel()'), 'Alt+Space');
 assert.equal(run("hotkeyLabel({modifiers:2,key:112})"), 'Ctrl+F1');
 assert.equal(run("hotkeyLabel({modifiers:0,key:65})"), 'A');
 assert.equal(run("hotkeyFromEvent({code:'KeyK',key:'л',ctrlKey:true,altKey:false,shiftKey:true,metaKey:false})?.key"), 75);
 assert.equal(run("hotkeyFromEvent({code:'F11',key:'F11',ctrlKey:false,altKey:false,shiftKey:false,metaKey:false})?.key"), 122);
 assert.equal(run("hotkeyFromEvent({code:'F12',key:'F12',ctrlKey:false,altKey:false,shiftKey:false,metaKey:false})"), null);
+assert.equal(run("hotkeyLabel({modifiers:2,key:191})"), 'Ctrl+/');
+assert.equal(run("hotkeyFromEvent({code:'Space',key:' ',ctrlKey:false,altKey:false,shiftKey:false,metaKey:false})"), null);
 assert.equal(run("hotkeyFromEvent({code:'KeyT',key:'t',ctrlKey:false,altKey:false,shiftKey:false,metaKey:true})"), null);
 assert.equal(run("offsetHours('Asia/Kolkata', new Date('2026-09-05T00:00:00Z'))"), 5.5);
 assert.equal(run("offsetHours('Asia/Kathmandu', new Date('2026-09-05T00:00:00Z'))"), 5.75);
@@ -48,6 +63,13 @@ assert.equal(run("availabilityAt(defaultAvailability, 18 * 60)"), 'okay');
 assert.equal(run("availabilityAt(defaultAvailability, 22 * 60)"), 'dnd');
 assert.equal(run("availabilityAt({okayStart:'10:00',workingStart:'12:00',workingEnd:'20:00',dndStart:'01:00'}, 30)"), 'okay');
 assert.equal(run("availabilityAt({okayStart:'10:00',workingStart:'12:00',workingEnd:'20:00',dndStart:'01:00'}, 120)"), 'dnd');
+assert.equal(run("meetingQuality(Date.parse('2026-10-06T06:00:00Z'), [{zone:'Europe/Moscow',schedule:defaultAvailability},{zone:'Asia/Bangkok',schedule:defaultAvailability}])"), 0);
+assert.equal(run("findMeetingTimes([{zone:'Europe/Moscow',schedule:defaultAvailability},{zone:'Asia/Bangkok',schedule:defaultAvailability}], Date.parse('2026-10-06T05:45:00Z')).best.at"), Date.parse('2026-10-06T06:00:00Z'));
+assert.equal(run("findMeetingTimes([{zone:'Europe/Moscow',schedule:defaultAvailability},{zone:'Asia/Bangkok',schedule:{okayStart:'07:00',workingStart:'14:00',workingEnd:'18:00',dndStart:'22:00'}}], Date.parse('2026-10-06T05:45:00Z')).earlier.at"), Date.parse('2026-10-06T05:45:00Z'));
+assert.equal(run("findMeetingTimes([{zone:'Europe/Moscow',schedule:defaultAvailability},{zone:'Asia/Bangkok',schedule:{okayStart:'07:00',workingStart:'14:00',workingEnd:'18:00',dndStart:'22:00'}}], Date.parse('2026-10-06T05:45:00Z')).best.at"), Date.parse('2026-10-06T07:00:00Z'));
+assert.equal(run("findMeetingTimes([{zone:'UTC',schedule:{okayStart:'09:00',workingStart:'10:00',workingEnd:'11:00',dndStart:'12:00'}},{zone:'Pacific/Auckland',schedule:{okayStart:'09:00',workingStart:'10:00',workingEnd:'11:00',dndStart:'12:00'}}], Date.parse('2026-10-06T00:00:00Z')).best"), null);
+assert.ok(run("meetingCopyText(Date.parse('2026-10-06T06:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])").includes('Moscow'));
+assert.ok(run("meetingCopyText(Date.parse('2026-10-06T06:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])").includes('Vladivostok'));
 assert.ok(run("contextAccessibility({availability:'dnd',solar:'night'}).includes(t('dnd'))"));
 run("config.settings.language='en'");
 assert.ok(run("contextAccessibility({availability:'dnd',solar:'night'}).includes(t('dnd'))"));
@@ -72,6 +94,7 @@ assert.equal(css.includes('--hero-min-height'), false);
 assert.ok(css.includes('transition:height 220ms cubic-bezier(.25,.1,.25,1)'));
 assert.ok(css.includes('.base-summary>.base-solar{position:absolute;z-index:3;top:12px;right:12px}'));
 assert.ok(css.includes('.card-actions button{'));
+assert.ok(css.includes('.quick-toggle[aria-expanded="true"] .quick-chevron-glyph{transform:rotate(180deg)}'));
 assert.equal((css.match(/\.card-actions button\{/g) || []).length, 1);
 assert.equal(css.includes('.base-expanded'), false);
 assert.equal(css.includes('.city-expanded'), false);
@@ -93,7 +116,7 @@ assert.ok(run("syncHeroHeight.toString().includes(\"- currentPadding\")"));
 assert.equal(run("applyExpandedBaseState.toString().includes('setTimeout')"), false);
 assert.ok(fs.readFileSync(__dirname + '/ui/app.js', 'utf8').includes('const collapsedCard = interactiveTarget ? false : closeExpandedCardsOutside(event.target)'));
 assert.ok(fs.readFileSync(__dirname + '/ui/app.js', 'utf8').includes("document.addEventListener('click', event => {"));
-assert.equal(run("render.toString().includes('data-base-action=\"schedule\"')"), false);
+assert.equal(run("render.toString().includes('data-base-action=\"schedule\"')"), true);
 assert.ok(run("render.toString().includes('class=\"card-actions-wrap\"')"));
 assert.equal(run("render.toString().includes('base-expanded')"), false);
 run("config = {timezones:[],settings:{theme:'dark',time_format:'24'}}; normalize()");
@@ -101,6 +124,12 @@ assert.equal(run("JSON.stringify(config.settings.availabilityDefault)"), JSON.st
 assert.equal(run("JSON.stringify(config.cityContext)"), '{}');
 run("config.cityContext.test = {label:'John',availabilityOverride:{okayStart:'10:00',workingStart:'12:00',workingEnd:'20:00',dndStart:'01:00'}}; normalize()");
 assert.equal(run("scheduleFor('test').workingStart"), '12:00');
+assert.equal(run("baseSchedule().workingStart"), '09:00');
+run("config.settings.baseAvailabilityOverride={okayStart:'10:00',workingStart:'12:00',workingEnd:'20:00',dndStart:'01:00'}; normalize()");
+assert.equal(run("baseSchedule().workingStart"), '12:00');
+assert.equal(run("scheduleFor('test').workingStart"), '12:00');
+assert.ok(run("scheduleEditorBody(defaultAvailability,{customizable:true,inherited:true,cityLabel:'John'}).includes('id=\"scheduleCityLabel\"')"));
+assert.ok(run("scheduleEditorBody(defaultAvailability,{customizable:true,inherited:true}).includes('role=\"switch\"')"));
 run("config.settings.top_clock_mode='manual'; config.settings.manual_top_timezone='America/New_York'; offset=2");
 assert.ok(run("referenceTimestamp() - Date.now()") > 36e5);
 assert.ok(run("referenceTimestamp() - Date.now()") <= 2 * 36e5);
@@ -245,3 +274,95 @@ run(`
 assert.equal(run('reminders.entries.length'), 4);
 assert.equal(run('reminders.entries[3].alarm'), run('reminders.entries[3].target'));
 console.log('Signed interval checks passed: zero crossing, persistence, captions, before/at/after, past rejection, zero drag/drop.');
+
+run(`
+  let editorNodes = {}, editorTimes = [];
+  document.querySelector = selector => editorNodes[selector] || null;
+  document.querySelectorAll = selector => selector === '[data-schedule-time]' ? editorTimes : [];
+  modal = (_title, body) => {
+    editorTimes = ['okayStart','workingStart','workingEnd','dndStart'].map(key => ({dataset:{scheduleTime:key},value:'',disabled:false}));
+    const schedule = config.settings.availabilityDefault;
+    editorTimes.forEach(input => input.value = schedule[input.dataset.scheduleTime]);
+    const inherited = body.includes('id="useDefaultSwitch" role="switch" aria-checked="true"');
+    const attrs = {'aria-checked':String(inherited)};
+    editorNodes = {
+      '#useDefaultSwitch': body.includes('id="useDefaultSwitch"') ? {getAttribute:key => attrs[key],setAttribute:(key,value) => attrs[key]=value,classList:{toggle(){}},addEventListener(_name,handler){this.click=handler}} : null,
+      '#scheduleCityLabel': {value:'Alice'}, '#scheduleError': {textContent:''}, '#saveSchedule': {},
+    };
+  };
+  saveConfig = () => {}; render = () => {}; closeModal = () => {}; openCityActions = () => {}; openSettings = () => {};
+  config=structuredClone(defaults); config.cityContext['Asia/Vladivostok']={label:'Old'};
+  openScheduleEditor('Asia/Vladivostok','card');
+  editorNodes['#saveSchedule'].onclick();
+`);
+assert.equal(run("config.cityContext['Asia/Vladivostok'].label"), 'Alice');
+assert.equal(run("config.cityContext['Asia/Vladivostok'].availabilityOverride"), undefined);
+run(`
+  openScheduleEditor(baseScheduleKey,'base');
+  editorNodes['#useDefaultSwitch'].click();
+  editorTimes[1].value='10:00';
+  editorNodes['#saveSchedule'].onclick();
+`);
+assert.equal(run('baseSchedule().workingStart'), '10:00');
+assert.equal(run("scheduleFor('Asia/Vladivostok').workingStart"), '09:00');
+run(`openScheduleEditor(baseScheduleKey,'base'); editorNodes['#useDefaultSwitch'].click(); editorNodes['#saveSchedule'].onclick()`);
+assert.equal(run('config.settings.baseAvailabilityOverride'), null);
+console.log('Contact hour editor checks passed: city label, base override and default switch.');
+
+run(`
+  let settingsMenu = '';
+  modal = (_title, body) => {
+    settingsMenu = body;
+    editorNodes = {'#baseSchedule':{},'#typicalSchedule':{}};
+  };
+  config.timezones = ['Asia/Vladivostok'];
+  openCitySettingsList();
+`);
+assert.equal(run("settingsMenu.includes('id=\"selectBaseCity\"')"), false);
+assert.ok(run("settingsMenu.includes('id=\"baseSchedule\"')"));
+assert.ok(run("settingsMenu.includes('id=\"typicalSchedule\"')"));
+assert.ok(run("settingsMenu.includes('data-city-settings=\"Asia/Vladivostok\"')"));
+console.log('Settings navigation checks passed: base chooser on main screen and grouped schedules.');
+
+run(`
+  let quickVisible = false, toggleHidden = false, expandedValue = '';
+  document.body = {classList:{toggle(){}}};
+  document.querySelector = selector => ({
+    '#quickSection': {classList:{toggle:(_name,value) => quickVisible=value}},
+    '#quickToggle': {classList:{toggle:(_name,value) => toggleHidden=value},setAttribute:(_name,value) => expandedValue=value},
+  })[selector] || null;
+  offset=0; quickAtNowOpen=false; pendingLead=null;
+  toggleQuickAtNow();
+`);
+assert.equal(run('offset'), 0);
+assert.equal(run('quickVisible'), true);
+assert.equal(run('expandedValue'), 'true');
+run('beginReminder(15)');
+assert.equal(run('pendingLead'), 15);
+run('pendingLead=null; toggleQuickAtNow()');
+assert.equal(run('quickVisible'), false);
+assert.equal(run('expandedValue'), 'false');
+run("quickAtNowOpen=true; reminders.entries=[]; createReminder('Asia/Tokyo',15,'Tokyo')");
+assert.equal(run('reminders.entries[0].alarm - reminders.entries[0].target'), 900);
+assert.ok(Math.abs(run('reminders.entries[0].target * 1000') - Date.now()) < 2000);
+run('quickAtNowOpen=false; offset=2; updateQuickVisibility(); toggleQuickAtNow()');
+assert.equal(run('quickVisible'), true);
+assert.equal(run('toggleHidden'), true);
+assert.equal(run('quickAtNowOpen'), false);
+console.log('Quick reminder disclosure checks passed: zero-offset selection, toggle and chevron state.');
+run(`meetingMode=true; quickAtNowOpen=true; offset=3; liveOffset=3; pendingLead=15;
+  meetingSelected=new Set(['Europe/Moscow']); meetingResult={at:1}; meetingEarlier={at:2}; meetingShowingEarlier=true;
+  resetTimeline();`);
+assert.equal(run('offset'), 0);
+assert.equal(run('liveOffset'), null);
+assert.equal(run('quickAtNowOpen'), false);
+assert.equal(run('meetingMode'), false);
+assert.equal(run('meetingSelected.size'), 0);
+assert.equal(run('meetingResult'), null);
+assert.equal(run('meetingEarlier'), null);
+assert.equal(run('meetingShowingEarlier'), false);
+assert.equal(run('pendingLead'), null);
+assert.equal(run('quickVisible'), false);
+assert.equal(run('expandedValue'), 'false');
+assert.ok(run("bindMain.toString().includes('oncontextmenu = event => { event.preventDefault(); resetTimeline(); }')"));
+console.log('Timeline right-click reset clears meeting selection, reminders and offset.');

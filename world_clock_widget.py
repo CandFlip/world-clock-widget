@@ -39,7 +39,7 @@ except ImportError:
 
 
 APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.115"
+APP_VERSION = "v1.1.128"
 APP_DIR_NAME = "WorldClockWidget"
 ROADMAP_URL = "https://world-clock-next.decent-rat-2368.chatgpt.site"
 MIN_WIDGET_HEIGHT = 640
@@ -899,9 +899,8 @@ def get_available_tz_names() -> set[str]:
 class GlobalHotkeyListener(threading.Thread):
     HOTKEY_ID = 1
     MOD_ALT = 0x0001
-    MOD_SHIFT = 0x0004
     MOD_NOREPEAT = 0x4000
-    VK_T = 0x54
+    VK_SPACE = 0x20
     PM_REMOVE = 0x0001
     WM_HOTKEY = 0x0312
 
@@ -915,8 +914,8 @@ class GlobalHotkeyListener(threading.Thread):
         registered = self.user32.RegisterHotKey(
             None,
             self.HOTKEY_ID,
-            self.MOD_ALT | self.MOD_SHIFT | self.MOD_NOREPEAT,
-            self.VK_T,
+            self.MOD_ALT | self.MOD_NOREPEAT,
+            self.VK_SPACE,
         )
         if not registered:
             return
@@ -2344,7 +2343,7 @@ class WorldClockWidget(tk.Tk):
         self.start_background_services()
         self.tick()
 
-        # Стартуем в трее: окно скрыто, открывается по Alt+Shift+T.
+        # Стартуем в трее: окно скрыто, открывается по Alt+Space.
         self.after(250, lambda: self.hide_overlay(animated=False))
 
     def _default_overlay_geometry(self) -> tuple[int, int, int, int]:
@@ -2658,7 +2657,7 @@ class WorldClockWidget(tk.Tk):
 
         hotkey_hint = tk.Label(
             top_bar,
-            text="Alt+Shift+T",
+            text="Alt+Space",
             fg="#8E95AA",
             bg="#070B1A",
             font=("Segoe UI", 10),
@@ -3118,7 +3117,7 @@ class WorldClockWidget(tk.Tk):
 
         tray_menu = pystray.Menu(
             pystray.MenuItem(
-                "Открыть/скрыть (Alt+Shift+T)",
+                "Открыть/скрыть (Alt+Space)",
                 lambda _icon, _item: self.after(0, self.toggle_overlay),
             ),
             pystray.MenuItem(
