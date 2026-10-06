@@ -6,7 +6,7 @@ export async function GET(request: Request) {
   const user = await getSessionUser(request);
   if (!user?.isAdmin) return Response.json({ error: 'Administrator access required.' }, { status: 403 });
   const config = await env.DB.prepare("SELECT value FROM site_settings WHERE key='download_version'").first<{value:string}>();
-  const version = config?.value || 'v1.1.130';
+  const version = config?.value || 'v1.1.131';
   let github: Array<{ name: string; download_count: number }> | null = null;
   try {
     const response = await fetch(`https://api.github.com/repos/CandFlip/world-clock-widget/releases/tags/${encodeURIComponent(version)}`, {

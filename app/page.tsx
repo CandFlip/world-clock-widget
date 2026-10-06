@@ -18,8 +18,8 @@ type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<s
 type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [], ownSuggestions: [] };
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.130/WorldClockWidget-Setup-v1.1.130.exe';
-const macDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.130/WorldClockWidget-macOS-v1.1.130.dmg';
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.131/WorldClockWidget-Setup-v1.1.131.exe';
+const macDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.131/WorldClockWidget-macOS-v1.1.131.dmg';
 export default function Home() {
   const [lang, setLang] = useState<'ru' | 'en'>('ru');
   const [data, setData] = useState<Roadmap>(defaults);
@@ -59,7 +59,7 @@ export default function Home() {
     localStorage.setItem('wc-lang', value);
     document.documentElement.setAttribute('lang', value);
   };
-  const version = data.settings.download_version || 'v1.1.130';
+  const version = data.settings.download_version || 'v1.1.131';
   const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   function trackDownload(platform: 'windows' | 'mac') {
     void fetch('/api/downloads', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({platform}), keepalive:true}).catch(() => {});
@@ -132,7 +132,7 @@ export default function Home() {
 
     <section className="hero" id="top">
       <h1>{t.headline}</h1><p className="hero-copy">{t.intro}</p>
-      <div className="hero-actions"><a className="primary-action" href={download} onClick={() => trackDownload('windows')}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action" href={macDownload} onClick={() => trackDownload('mac')}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.130" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
+      <div className="hero-actions"><a className="primary-action" href={download} onClick={() => trackDownload('windows')}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action" href={macDownload} onClick={() => trackDownload('mac')}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href="https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.131" target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
       <p className="download-note">{t.downloadNote}</p>
     </section>
 
