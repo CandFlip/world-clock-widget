@@ -1,4 +1,6 @@
-# Production website baseline — 2026-10-04
+# Production website baseline — 2026-10-06
+
+2026-10-06: Production Worker version 4742dd68-6d33-4485-ac5e-126ba5697c4e serves GitHub release v1.1.128 links for Windows and macOS. D1 site_settings download_version and download_url were updated to v1.1.128. Typecheck and Cloudflare build passed; production homepage returned HTTP 200 with both links. The Cloudflare OAuth login was refreshed with Workers Script and D1 write scopes.
 
 Production: https://world-clock-next.uuuraaaaa.workers.dev
 Admin: https://world-clock-next.uuuraaaaa.workers.dev/admin
