@@ -253,6 +253,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             if passed {
                 self.hideWidget()
                 self.runHiddenAlarmSelfTest()
+                return
             }
             if attempt < 6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runSelfTest(attempt: attempt + 1) }
