@@ -25,10 +25,17 @@
 using Microsoft::WRL::ComPtr;
 
 namespace {
+#ifdef WORLD_CLOCK_QA
+constexpr wchar_t kClassName[] = L"WorldClockWidgetNativeQA";
+constexpr wchar_t kMutexName[] = L"Local\\WorldClockWidgetQASingleInstance";
+constexpr wchar_t kShowEventName[] = L"Local\\WorldClockWidgetQAShow";
+constexpr wchar_t kShutdownEventName[] = L"Local\\WorldClockWidgetQAShutdown";
+#else
 constexpr wchar_t kClassName[] = L"WorldClockWidgetNative";
 constexpr wchar_t kMutexName[] = L"Local\\WorldClockWidgetSingleInstance";
 constexpr wchar_t kShowEventName[] = L"Local\\WorldClockWidgetShow";
 constexpr wchar_t kShutdownEventName[] = L"Local\\WorldClockWidgetShutdown";
+#endif
 constexpr UINT kTrayMessage = WM_APP + 1;
 constexpr UINT kShowMessage = WM_APP + 2;
 constexpr UINT kShutdownMessage = WM_APP + 3;
@@ -38,7 +45,7 @@ constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.131";
+constexpr wchar_t kVersion[] = L"v1.1.134";
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
 std::atomic_bool g_updateDownloading{false};
@@ -160,19 +167,51 @@ void clearStartupDisabledState() {
 }
 
 bool setStartupEnabled(bool enabled) {
+#ifdef WORLD_CLOCK_QA
+    (void)enabled;
+    return true;
+#else
     const auto shortcut = startupShortcutPath();
+    HKEY key{};
+    bool matches = false;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0,
+        KEY_QUERY_VALUE, &key) == ERROR_SUCCESS) {
+        DWORD type = 0;
+        DWORD size = 0;
+        const LONG current = RegQueryValueExW(key, kStartupValueName, nullptr, &type, nullptr, &size);
+        const bool legacyAbsent = RegQueryValueExW(key, L"WorldClockWidget", nullptr, nullptr, nullptr, nullptr) == ERROR_FILE_NOT_FOUND;
+        if (!enabled) matches = current == ERROR_FILE_NOT_FOUND && legacyAbsent;
+        else if (current == ERROR_SUCCESS && type == REG_SZ && legacyAbsent && size >= sizeof(wchar_t)) {
+            std::wstring value(size / sizeof(wchar_t), L'\0');
+            if (RegQueryValueExW(key, kStartupValueName, nullptr, &type,
+                reinterpret_cast<BYTE*>(value.data()), &size) == ERROR_SUCCESS) {
+                value.resize(wcsnlen_s(value.c_str(), value.size()));
+                matches = value == L"\"" + executablePath() + L"\" --startup";
+            }
+        }
+        RegCloseKey(key);
+    }
+    if (matches && !std::filesystem::exists(shortcut)) return true;
     std::error_code error;
     std::filesystem::remove(shortcut,error);
     clearStartupDisabledState();
     return setRegistryStartup(enabled);
+#endif
 }
 
 std::filesystem::path dataDir() {
+#ifdef WORLD_CLOCK_QA
+    wchar_t isolated[MAX_PATH]{};
+    const DWORD length=GetEnvironmentVariableW(L"WORLD_CLOCK_QA_DATA_DIR",isolated,MAX_PATH);
+    if(length == 0 || length >= MAX_PATH) std::terminate();
+    std::filesystem::path result(isolated);
+#else
     PWSTR raw{};
     SHGetKnownFolderPath(FOLDERID_LocalAppData, KF_FLAG_CREATE, nullptr, &raw);
     std::filesystem::path result(raw ? raw : L".");
     CoTaskMemFree(raw);
     result /= L"WorldClockWidget";
+#endif
     std::filesystem::create_directories(result);
     return result;
 }
@@ -204,12 +243,11 @@ bool writeUtf8Atomic(const std::filesystem::path& path, const std::wstring& valu
     std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
     if (!output.write(bytes.data(), bytes.size())) return false;
     output.close();
+    if (!output) return false;
+    if (MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) return true;
     std::error_code error;
-    std::filesystem::rename(temporary, path, error);
-    if (!error) return true;
-    std::filesystem::remove(path, error);
-    std::filesystem::rename(temporary, path, error);
-    return !error;
+    std::filesystem::remove(temporary, error);
+    return false;
 }
 
 std::wstring jsonQuote(const std::wstring& value) {
@@ -329,6 +367,9 @@ void postHotkeyResult(bool success) {
 }
 
 std::wstring readSyncCredential() {
+#ifdef WORLD_CLOCK_QA
+    return L"";
+#else
     PCREDENTIALW credential{};
     if (!CredReadW(kSyncCredentialTarget, CRED_TYPE_GENERIC, 0, &credential) || !credential) return L"";
     const auto* bytes = reinterpret_cast<const char*>(credential->CredentialBlob);
@@ -338,9 +379,14 @@ std::wstring readSyncCredential() {
     if (count) MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes, size, result.data(), count);
     CredFree(credential);
     return result;
+#endif
 }
 
 bool writeSyncCredential(const std::wstring& value) {
+#ifdef WORLD_CLOCK_QA
+    (void)value;
+    return true;
+#else
     int count = WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0, nullptr, nullptr);
     std::string bytes(count, '\0');
     if (count) WideCharToMultiByte(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), bytes.data(), count, nullptr, nullptr);
@@ -352,6 +398,7 @@ bool writeSyncCredential(const std::wstring& value) {
     credential.Persist = CRED_PERSIST_LOCAL_MACHINE;
     credential.UserName = const_cast<LPWSTR>(L"WorldClockWidget");
     return CredWriteW(&credential, 0) == TRUE;
+#endif
 }
 
 void postInitialState() {
@@ -464,6 +511,10 @@ void showWidget(bool show) {
     }
     if(g_controller) g_controller->NotifyParentWindowPositionChanged();
     g_visible = show;
+    SetTimer(g_window,kTickTimer,show?1000:60000,nullptr);
+    if(g_webview) g_webview->ExecuteScript(show
+        ? L"window.nativeTick&&window.nativeTick()"
+        : L"window.nativeTick&&window.nativeTick(false)", nullptr);
     if(show && !g_mouseHook) {
         g_mouseHook=SetWindowsHookExW(WH_MOUSE_LL,outsideMouse,GetModuleHandleW(nullptr),0);
         if(!g_mouseHook) logStartup(L"Outside-click listener unavailable");
@@ -613,6 +664,9 @@ void handleMessage(const std::wstring& message) {
         KillTimer(g_window,kUiReadyTimer);
         logStartup(L"UI ready");
         if(g_showWhenReady) { g_showWhenReady=false; showWidget(true); }
+        else if(!g_visible && g_webview) {
+            g_webview->ExecuteScript(L"window.nativeTick&&window.nativeTick(false)", nullptr);
+        }
     }
     else if (message == L"drag") { ReleaseCapture(); SendMessageW(g_window, WM_NCLBUTTONDOWN, HTCAPTION, 0); }
     else if (message == L"resize") { ReleaseCapture(); SendMessageW(g_window, WM_NCLBUTTONDOWN, HTBOTTOMRIGHT, 0); }
@@ -631,6 +685,13 @@ void handleMessage(const std::wstring& message) {
     }
     else if (message == L"hide") showWidget(false);
     else if (message == L"show") showWidget(true);
+    else if (message.rfind(L"scheduleTick\n", 0) == 0 && !g_visible) {
+        const std::wstring value=message.substr(wcslen(L"scheduleTick\n"));
+        try {
+            if(!value.empty() && value.find_first_not_of(L"0123456789")==std::wstring::npos)
+                SetTimer(g_window,kTickTimer,std::clamp(std::stoul(value),1000UL,60000UL),nullptr);
+        } catch (...) {}
+    }
     else if (message == L"quit") PostMessageW(g_window, WM_CLOSE, 0, 0);
     else if (message == L"beginHotkeyCapture") g_capturingHotkey=true;
     else if (message == L"endHotkeyCapture") g_capturingHotkey=false;
@@ -649,7 +710,11 @@ void handleMessage(const std::wstring& message) {
     else if (message.rfind(L"saveReminders\n", 0) == 0) writeUtf8Atomic(dataDir()/L"reminders.json", payload(L"saveReminders\n"));
     else if (message.rfind(L"copyText\n", 0) == 0) copyTextToClipboard(payload(L"copyText\n"));
     else if (message.rfind(L"saveSyncCredential\n", 0) == 0 && !writeSyncCredential(payload(L"saveSyncCredential\n"))) logStartup(L"Failed to store sync credential");
-    else if (message == L"deleteSyncCredential") CredDeleteW(kSyncCredentialTarget, CRED_TYPE_GENERIC, 0);
+    else if (message == L"deleteSyncCredential") {
+#ifndef WORLD_CLOCK_QA
+        CredDeleteW(kSyncCredentialTarget, CRED_TYPE_GENERIC, 0);
+#endif
+    }
     else if (message.rfind(L"openExternal\n", 0) == 0) {
         const auto url = payload(L"openExternal\n");
         if (url.rfind(L"https://", 0) == 0) ShellExecuteW(g_window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
@@ -660,7 +725,11 @@ void handleMessage(const std::wstring& message) {
         if (separator != std::wstring::npos) downloadUpdate(argument.substr(0,separator),argument.substr(separator+1));
     }
     else if (message.rfind(L"setStartup\n", 0) == 0 && !setStartupEnabled(payload(L"setStartup\n") == L"1")) logStartup(L"Failed to update Windows startup setting");
-    else if (message == L"systemBeep" || message == L"beep") MessageBeep(MB_ICONEXCLAMATION);
+    else if (message == L"systemBeep" || message == L"beep") {
+#ifndef WORLD_CLOCK_QA
+        MessageBeep(MB_ICONEXCLAMATION);
+#endif
+    }
 }
 
 void initializeWebView() {
@@ -749,6 +818,21 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         case WM_GETMINMAXINFO: { auto* info=(MINMAXINFO*)lParam; info->ptMinTrackSize={400,320}; return 0; }
         case WM_HOTKEY: if (wParam==kHotkey) showWidget(!g_visible); return 0;
         case kShowMessage: showWidget(true); return 0;
+        case WM_TIMECHANGE:
+            if(!g_visible) SetTimer(window,kTickTimer,60000,nullptr);
+            if(g_webview) g_webview->ExecuteScript(g_visible
+                ? L"window.nativeTick&&window.nativeTick()"
+                : L"window.nativeTick&&window.nativeTick(false)",nullptr);
+            return 0;
+        case WM_POWERBROADCAST:
+            if(wParam==PBT_APMRESUMEAUTOMATIC || wParam==PBT_APMRESUMESUSPEND) {
+                if(!g_visible) SetTimer(window,kTickTimer,60000,nullptr);
+                if(g_webview) g_webview->ExecuteScript(g_visible
+                    ? L"window.nativeTick&&window.nativeTick()"
+                    : L"window.nativeTick&&window.nativeTick(false)",nullptr);
+                return TRUE;
+            }
+            break;
         case kOutsideClick: {
             if(!g_visible || g_animating || g_trayMenuOpen) return 0;
             POINT point{GET_X_LPARAM(lParam),GET_Y_LPARAM(lParam)};
@@ -789,7 +873,10 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
                     logStartup(L"UI failed to become ready after retries");
                 }
             } else if (wParam==kTickTimer && g_webview) {
-                g_webview->ExecuteScript(L"window.nativeTick&&window.nativeTick()", nullptr);
+                if(!g_visible) SetTimer(window,kTickTimer,60000,nullptr);
+                g_webview->ExecuteScript(g_visible
+                    ? L"window.nativeTick&&window.nativeTick()"
+                    : L"window.nativeTick&&window.nativeTick(false)", nullptr);
             } else if(wParam==kTrayRetryTimer) {
                 retryTrayIcon();
             }
@@ -807,6 +894,11 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
+#ifdef WORLD_CLOCK_QA
+    wchar_t qaData[MAX_PATH]{};
+    const DWORD qaLength=GetEnvironmentVariableW(L"WORLD_CLOCK_QA_DATA_DIR",qaData,MAX_PATH);
+    if(qaLength == 0 || qaLength >= MAX_PATH || !std::filesystem::path(qaData).is_absolute()) return 7;
+#endif
     g_startedByWindows = commandLine && wcsstr(commandLine,L"--startup");
     if(g_startedByWindows && !autostartAllowed()) return 0;
     g_visible = false;
@@ -837,6 +929,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     g_showEvent=CreateEventW(nullptr,FALSE,FALSE,kShowEventName); g_shutdownEvent=CreateEventW(nullptr,TRUE,FALSE,kShutdownEventName);
     g_watchThread=CreateThread(nullptr,0,eventWatcher,nullptr,0,nullptr);
     g_taskbarCreatedMessage=RegisterWindowMessageW(L"TaskbarCreated");
+#ifdef WORLD_CLOCK_QA
+    g_webViewInitializationStarted=true;
+    initializeWebView();
+#else
     g_shortcutKeyboardHook=SetWindowsHookExW(WH_KEYBOARD_LL,shortcutKeyboard,GetModuleHandleW(nullptr),0);
     g_shortcutMouseHook=SetWindowsHookExW(WH_MOUSE_LL,shortcutMouse,GetModuleHandleW(nullptr),0);
     loadHotkey();
@@ -849,6 +945,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     g_tray.uCallbackMessage=kTrayMessage; g_tray.hIcon=appSmallIcon; wcscpy_s(g_tray.szTip,L"World Clock Widget");
     if(g_startedByWindows) SetTimer(g_window,kTrayRetryTimer,500,nullptr);
     else retryTrayIcon();
+#endif
     if(g_startedByWindows) {
         logStartup(L"Windows startup mode: background only");
     }

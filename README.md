@@ -4,10 +4,10 @@
 
 World Clock Widget показывает местное время ваших коллег, клиентов и близких, помогает выбрать удобный момент для звонка и напоминает о нём. Всё важное — в небольшом окне на рабочем столе.
 
-### Скачать v1.1.131
+### Скачать v1.1.134
 
-- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.131/WorldClockWidget-Setup-v1.1.131.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
-- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.131/WorldClockWidget-macOS-v1.1.131.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
+- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.134/WorldClockWidget-Setup-v1.1.134.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
+- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.134/WorldClockWidget-macOS-v1.1.134.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
 
 ## Что можно делать
 
@@ -21,12 +21,12 @@ World Clock Widget показывает местное время ваших к�
 
 ## Последнее обновление
 
-В v1.1.131 обзор стал компактнее и полнее: задачи сгруппированы по темам, а каждый пункт можно показать прямо в работающем виджете. Добавлены все способы создания напоминаний, управление городами и сценарии созвона.
+В v1.1.134 виджет продолжает следить за напоминаниями, когда окно скрыто, с меньшей фоновой активностью. После пробуждения компьютера он сразу проверяет, не наступило ли время напоминания. Это улучшение доступно на Windows и Mac.
 
-[Что нового в v1.1.131 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.131) · [История изменений →](CHANGELOG.md)
+[Что нового в v1.1.134 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.134) · [История изменений →](CHANGELOG.md)
 
 ---
 
-[Исходный код v1.1.131](https://github.com/CandFlip/world-clock-widget/tree/v1.1.131) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
+[Исходный код v1.1.134](https://github.com/CandFlip/world-clock-widget/tree/v1.1.134) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
 
 Каталог крупных городов основан на данных [GeoNames](https://www.geonames.org/) с указанием источника по лицензии CC BY 4.0.

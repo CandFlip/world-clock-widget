@@ -721,7 +721,20 @@ function normalize() {
 }
 
 function saveConfig() { send(`saveConfig\n${JSON.stringify(config, null, 2)}`); if (!applyingRemoteSync) window.syncLocalChanged?.(); }
-function saveReminders() { reminders.entries.forEach(syncReminderModel); send(`saveReminders\n${JSON.stringify(reminders, null, 2)}`); if (!applyingRemoteSync) window.syncLocalChanged?.(); }
+function saveReminders() { reminders.entries.forEach(syncReminderModel); send(`saveReminders\n${JSON.stringify(reminders, null, 2)}`); if (!applyingRemoteSync) window.syncLocalChanged?.(); scheduleBackgroundTick(); }
+
+function backgroundTickDelay(now = Date.now()) {
+  const next = reminders.entries.reduce((earliest, entry) => {
+    if (entry.state === 'ringing') return Math.min(earliest, now + 1000);
+    if (entry.state !== 'pending' || !Number.isFinite(entry.alarm)) return earliest;
+    return Math.min(earliest, entry.alarm * 1000);
+  }, now + 60000);
+  return Math.max(1000, Math.min(60000, Math.ceil(next - now)));
+}
+
+function scheduleBackgroundTick() {
+  send(`scheduleTick\n${backgroundTickDelay()}`);
+}
 
 function render() {
   liveOffset = null;
@@ -2032,10 +2045,12 @@ function updateLiveCityTimes() {
 }
 
 window.__nativeTickCount = 0;
-window.nativeTick = () => {
+window.nativeTick = (visible = true) => {
   window.__nativeTickCount += 1;
-  updateDynamic(); updateLiveCityTimes(); updateAlarmDetail(); checkDue();
-  if (window.__nativeTickCount % 3600 === 0) checkForUpdates();
+  if (visible) { updateDynamic(); updateLiveCityTimes(); updateAlarmDetail(); }
+  checkDue();
+  if (window.__nativeTickCount % 3600 === 0 || !visible) checkForUpdates();
+  if (!visible) scheduleBackgroundTick();
 };
 
 $('#resize').onpointerdown = () => send('resize');

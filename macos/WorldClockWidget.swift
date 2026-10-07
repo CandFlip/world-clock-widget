@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.131"
+private let appVersion = "v1.1.134"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -29,6 +29,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private var localResizeMonitor: Any?
     private var globalResizeMonitor: Any?
     private var tickTimer: Timer?
+    private var selfTestAlarmAt: Int?
     private var resizeEdge: String?
     private var resizeStartFrame = NSRect.zero
     private var resizeStartPoint = NSPoint.zero
@@ -59,6 +60,9 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         loadHotKeyFromConfig()
         _ = registerHotKey(modifiers: currentModifiers, key: currentKey)
         startTickTimer()
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshAfterSystemTimeChange), name: .NSSystemClockDidChange, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshAfterSystemTimeChange), name: .NSSystemTimeZoneDidChange, object: nil)
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refreshAfterSystemTimeChange), name: NSWorkspace.didWakeNotification, object: nil)
         if selfTestMode {
             DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.runSelfTest() }
         }
@@ -80,6 +84,8 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         if let globalShortcutMouseMonitor { NSEvent.removeMonitor(globalShortcutMouseMonitor) }
         if let localShortcutMouseMonitor { NSEvent.removeMonitor(localShortcutMouseMonitor) }
         tickTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "host")
     }
 
@@ -107,7 +113,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         let configuration = WKWebViewConfiguration()
         configuration.mediaTypesRequiringUserActionForPlayback = []
         configuration.userContentController = controller
-        configuration.websiteDataStore = .default()
+        configuration.websiteDataStore = selfTestMode ? .nonPersistent() : .default()
         webView = WKWebView(frame: panel.contentView!.bounds, configuration: configuration)
         webView.autoresizingMask = [.width, .height]
         webView.setValue(false, forKey: "drawsBackground")
@@ -208,18 +214,36 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func startTickTimer() {
-        let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        resetTickTimer(milliseconds: 1000)
+    }
+
+    private func resetTickTimer(milliseconds: Int) {
+        tickTimer?.invalidate()
+        let interval = TimeInterval(max(1000, min(60000, milliseconds))) / 1000
+        let timer = Timer(timeInterval: interval, target: self, selector: #selector(tick), userInfo: nil, repeats: false)
         tickTimer = timer
         RunLoop.main.add(timer, forMode: .common)
     }
 
     @objc private func tick() {
-        webView?.evaluateJavaScript("window.nativeTick && window.nativeTick()")
+        let visible = panel.isVisible
+        resetTickTimer(milliseconds: visible ? 1000 : 60000)
+        webView?.evaluateJavaScript("window.nativeTick && window.nativeTick(\(visible))")
+    }
+
+    @objc private func refreshAfterSystemTimeChange() {
+        tick()
+    }
+
+    private func hideWidget() {
+        panel.orderOut(nil)
+        resetTickTimer(milliseconds: 60000)
+        webView?.evaluateJavaScript("window.nativeTick && window.nativeTick(false)")
     }
 
     private func runSelfTest(attempt: Int = 1) {
         let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function' && !!document.querySelector('#quickToggle') && typeof window.resetTimeline === 'function' && typeof window.findMeetingTimes === 'function'"
-        panel.orderOut(nil)
+        hideWidget()
         _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         let nativeHotKeyMapping = currentModifiers == 1 && virtualKeyCode(for: 32) == UInt32(kVK_Space)
             && openMenuItem.keyEquivalent == " " && openMenuItem.keyEquivalentModifierMask.contains(.option)
@@ -227,16 +251,51 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         webView.evaluateJavaScript(script) { result, error in
             let passed = nativeHotKeyMapping && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
             if passed {
-                fputs("macOS runtime tick test passed\n", stderr)
-                exit(0)
+                self.hideWidget()
+                self.runHiddenAlarmSelfTest()
             }
             if attempt < 6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runSelfTest(attempt: attempt + 1) }
             } else {
                 fputs("macOS runtime tick test failed\n", stderr)
-                exit(3)
+                self.finishSelfTest(code: 3)
             }
         }
+    }
+
+    private func runHiddenAlarmSelfTest() {
+        guard let alarmAt = selfTestAlarmAt else {
+            fputs("macOS hidden alarm fixture missing\n", stderr)
+            finishSelfTest(code: 3)
+        }
+        let deadline = Date(timeIntervalSince1970: TimeInterval(alarmAt + 5))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self else { return }
+            let wait = self.tickTimer?.fireDate.timeIntervalSinceNow ?? 0
+            guard !self.panel.isVisible && wait > 1.5 else {
+                fputs("macOS hidden tick did not slow down\n", stderr)
+                self.finishSelfTest(code: 3)
+            }
+            self.waitForHiddenAlarm(deadline: deadline)
+        }
+    }
+
+    private func waitForHiddenAlarm(deadline: Date) {
+        let state = readDataFile(name: "reminders.json", fallback: "")
+        if panel.isVisible && state.contains("\"ringing\"") {
+            fputs("macOS hidden alarm and warm-open test passed\n", stderr)
+            finishSelfTest(code: 0)
+        }
+        if Date() > deadline {
+            fputs("macOS hidden alarm test timed out\n", stderr)
+            finishSelfTest(code: 3)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.waitForHiddenAlarm(deadline: deadline) }
+    }
+
+    private func finishSelfTest(code: Int32) -> Never {
+        try? FileManager.default.removeItem(at: dataDirectory)
+        exit(code)
     }
 
     private func configureMonitors() {
@@ -249,7 +308,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         }
         outsideMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             guard let self, self.panel.isVisible else { return }
-            if !self.panel.frame.contains(NSEvent.mouseLocation) { self.panel.orderOut(nil) }
+            if !self.panel.frame.contains(NSEvent.mouseLocation) { self.hideWidget() }
         }
         localResizeMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp]) { [weak self] event in
             self?.handleResizeEvent(event)
@@ -263,7 +322,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     @objc private func showFromNotification() { showWidget() }
 
     @objc private func toggleWidget() {
-        panel.isVisible ? panel.orderOut(nil) : showWidget()
+        panel.isVisible ? hideWidget() : showWidget()
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
@@ -271,6 +330,8 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private func showWidget() {
         if NSApp.isHidden { NSApp.unhide(nil) }
         panel.makeKeyAndOrderFront(nil)
+        resetTickTimer(milliseconds: 1000)
+        webView?.evaluateJavaScript("window.nativeTick && window.nativeTick()")
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -296,9 +357,14 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         } else if message.hasPrefix("resize:") {
             beginResize(edge: String(message.dropFirst(7)))
         } else if message == "hide" {
-            panel.orderOut(nil)
+            hideWidget()
         } else if message == "show" {
             showWidget()
+        } else if message.hasPrefix("scheduleTick\n"), !panel.isVisible {
+            let value = payload(message, prefix: "scheduleTick\n")
+            if !value.isEmpty, value.allSatisfy({ $0.isNumber }), let milliseconds = Int(value) {
+                resetTickTimer(milliseconds: milliseconds)
+            }
         } else if message == "quit" {
             NSApp.terminate(nil)
         } else if message == "beginHotkeyCapture" {
@@ -328,7 +394,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             let value = payload(message, prefix: "openExternal\n")
             if let url = URL(string: value), url.scheme == "https" { NSWorkspace.shared.open(url) }
         } else if message.hasPrefix("setStartup\n") {
-            setStartupEnabled(payload(message, prefix: "setStartup\n") == "1")
+            if !selfTestMode { setStartupEnabled(payload(message, prefix: "setStartup\n") == "1") }
         } else if message == "systemBeep" || message == "beep" {
             NSSound.beep()
         }
@@ -339,6 +405,11 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private var dataDirectory: URL {
+        if selfTestMode {
+            let directory = FileManager.default.temporaryDirectory.appendingPathComponent("WorldClockWidgetSelfTest-\(ProcessInfo.processInfo.processIdentifier)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            return directory
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let directory = base.appendingPathComponent("WorldClockWidget", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -354,13 +425,21 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func postInitialState() {
+        let remindersText: String
+        if selfTestMode {
+            let alarm = Int(Date().timeIntervalSince1970) + 18
+            selfTestAlarmAt = alarm
+            remindersText = "{\"lead\":15,\"entries\":[{\"id\":\"mac-hidden-qa\",\"alarm\":\(alarm),\"target\":\(alarm),\"state\":\"pending\",\"lead\":0,\"direction\":\"after\",\"zone\":\"Etc/UTC\",\"city_key\":\"Etc/UTC\",\"city\":\"QA\",\"source_type\":\"city\",\"started_at\":\(alarm - 18),\"repeat\":\"none\",\"title\":\"QA\"}]}"
+        } else {
+            remindersText = readDataFile(name: "reminders.json", fallback: "{\"lead\":15,\"entries\":[]}")
+        }
         let payload: [String: Any] = [
             "type": "init",
             "platform": "macos",
             "version": appVersion + " macOS Beta",
             "configText": readDataFile(name: "widget_config.json", fallback: "{}"),
-            "remindersText": readDataFile(name: "reminders.json", fallback: "{\"lead\":15,\"entries\":[]}"),
-            "syncCredential": readSyncCredential(),
+            "remindersText": remindersText,
+            "syncCredential": selfTestMode ? "" : readSyncCredential(),
             "hotkeyModifiers": currentModifiers,
             "hotkeyKey": currentKey
         ]
