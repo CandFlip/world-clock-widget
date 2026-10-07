@@ -257,8 +257,11 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             if attempt < 6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.runSelfTest(attempt: attempt + 1) }
             } else {
-                fputs("macOS runtime tick test failed\n", stderr)
-                self.finishSelfTest(code: 3)
+                let diagnostic = "JSON.stringify({tick:typeof window.nativeTick==='function',count:window.__nativeTickCount,platform:window.__worldClockPlatform,slider:!!document.querySelector('#timeSlider'),hours:document.querySelectorAll('[data-timeline-hour]').length,sync:typeof window.syncRequest,sound:typeof window.openAlarmSound,quick:!!document.querySelector('#quickToggle'),reset:typeof window.resetTimeline,meeting:typeof window.findMeetingTimes})"
+                self.webView.evaluateJavaScript(diagnostic) { details, diagnosticError in
+                    fputs("macOS runtime tick test failed: hotkey=\(nativeHotKeyMapping), result=\(String(describing: result)), error=\(String(describing: error)), details=\(String(describing: details)), detailError=\(String(describing: diagnosticError))\n", stderr)
+                    self.finishSelfTest(code: 3)
+                }
             }
         }
     }
