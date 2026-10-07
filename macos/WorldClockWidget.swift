@@ -242,14 +242,14 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     }
 
     private func runSelfTest(attempt: Int = 1) {
-        let script = "typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function' && !!document.querySelector('#quickToggle') && typeof window.resetTimeline === 'function' && typeof window.findMeetingTimes === 'function'"
+        let script = "(typeof window.nativeTick === 'function' && window.__nativeTickCount >= 2 && window.__worldClockPlatform === 'macos' && !!document.querySelector('#timeSlider') && document.querySelectorAll('[data-timeline-hour]').length === 4 && typeof window.syncRequest === 'function' && typeof window.openAlarmSound === 'function' && !!document.querySelector('#quickToggle') && typeof window.resetTimeline === 'function' && typeof window.findMeetingTimes === 'function') ? 'pass' : 'fail'"
         hideWidget()
         _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         let nativeHotKeyMapping = currentModifiers == 1 && virtualKeyCode(for: 32) == UInt32(kVK_Space)
             && openMenuItem.keyEquivalent == " " && openMenuItem.keyEquivalentModifierMask.contains(.option)
             && panel.isVisible
         webView.evaluateJavaScript(script) { result, error in
-            let passed = nativeHotKeyMapping && error == nil && (result as? Bool == true || (result as? NSNumber)?.boolValue == true)
+            let passed = nativeHotKeyMapping && error == nil && result as? String == "pass"
             if passed {
                 self.hideWidget()
                 self.runHiddenAlarmSelfTest()
