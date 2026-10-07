@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.134"
+private let appVersion = "v1.1.135"
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
