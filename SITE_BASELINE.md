@@ -1,3 +1,5 @@
+2026-10-07: Production Worker version 79f79532-1d0b-465a-a75e-e25c9111fa79 serves GitHub release v1.1.134 links for Windows and macOS. D1 download_version and download_url both point to v1.1.134. Typecheck and Cloudflare build passed; production homepage contains both v1.1.134 links and the release link, all returning HTTP 200. The previous v1.1.131 settings can be restored for rollback. Existing repository-wide lint findings remain.
+
 2026-10-07: Production Worker version e1a2f648-ac31-4c3d-a90f-67d0b64a0d4f serves GitHub release v1.1.131 links for Windows and macOS. D1 download_version and download_url both point to v1.1.131. Typecheck and Cloudflare build passed; deployment succeeded. Both GitHub assets returned HTTP 200. Existing repository-wide lint findings remain.
 
 2026-10-07: Production Worker version 65ec1a4f-2e1a-4375-8c30-f89cfcb879a1 served GitHub release v1.1.130 links for Windows and macOS. D1 download_version and download_url both pointed to v1.1.130. Typecheck and Cloudflare build passed; deployment succeeded. Existing repository-wide lint findings remained.
