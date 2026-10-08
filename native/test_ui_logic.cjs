@@ -70,6 +70,16 @@ assert.equal(run("findMeetingTimes([{zone:'Europe/Moscow',schedule:defaultAvaila
 assert.equal(run("findMeetingTimes([{zone:'UTC',schedule:{okayStart:'09:00',workingStart:'10:00',workingEnd:'11:00',dndStart:'12:00'}},{zone:'Pacific/Auckland',schedule:{okayStart:'09:00',workingStart:'10:00',workingEnd:'11:00',dndStart:'12:00'}}], Date.parse('2026-10-06T00:00:00Z')).best"), null);
 assert.ok(run("meetingCopyText(Date.parse('2026-10-06T06:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])").includes('Moscow'));
 assert.ok(run("meetingCopyText(Date.parse('2026-10-06T06:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])").includes('Vladivostok'));
+const copiedMeeting = run("meetingCopyText(Date.parse('2026-10-09T11:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])");
+const copiedLines = copiedMeeting.split('\n');
+assert.equal(copiedLines.length, 2);
+assert.match(copiedLines[0], /^Moscow — .*14:00$/);
+assert.match(copiedLines[1], /^Vladivostok — .*21:00$/);
+run("config.settings.language='ru'");
+const copiedMeetingRu = run("meetingCopyText(Date.parse('2026-10-09T11:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])");
+assert.equal(copiedMeetingRu.split('\n').length, 2);
+assert.doesNotMatch(copiedMeetingRu, /^Созвон/);
+run("config.settings.language='en'");
 assert.ok(run("contextAccessibility({availability:'dnd',solar:'night'}).includes(t('dnd'))"));
 run("config.settings.language='en'");
 assert.ok(run("contextAccessibility({availability:'dnd',solar:'night'}).includes(t('dnd'))"));

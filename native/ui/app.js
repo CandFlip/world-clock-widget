@@ -609,13 +609,12 @@ function toggleMeetingMember(key) {
 
 function meetingCopyText(at = referenceTimestamp(), members = meetingMembers()) {
   const date = new Date(at);
-  const title = lang() === 'ru' ? `Созвон · ${meetingLengthMinutes} мин` : `Call · ${meetingLengthMinutes} min`;
-  return [title, ...members.map(member => {
+  return members.map(member => {
     const name = member.key === baseScheduleKey
       ? `${lang() === 'ru' ? 'Моё время' : 'My time'} (${config.settings.top_clock_mode === 'auto' ? systemCities() : cityName(config.settings.manual_top_timezone)})`
       : `${cityContext(member.key).label ? `${cityContext(member.key).label} · ` : ''}${cityName(member.key)}`;
     return `${name} — ${displayDate(date, member.zone)}, ${timeAt(date, member.zone)}`;
-  })].join('\n');
+  }).join('\n');
 }
 
 function gradientFor(sample, cssPrefix, steps = 96) {
