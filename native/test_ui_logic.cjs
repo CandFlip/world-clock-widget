@@ -70,6 +70,7 @@ assert.equal(run("findMeetingTimes([{zone:'Europe/Moscow',schedule:defaultAvaila
 assert.equal(run("findMeetingTimes([{zone:'UTC',schedule:{okayStart:'09:00',workingStart:'10:00',workingEnd:'11:00',dndStart:'12:00'}},{zone:'Pacific/Auckland',schedule:{okayStart:'09:00',workingStart:'10:00',workingEnd:'11:00',dndStart:'12:00'}}], Date.parse('2026-10-06T00:00:00Z')).best"), null);
 assert.ok(run("meetingCopyText(Date.parse('2026-10-06T06:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])").includes('Moscow'));
 assert.ok(run("meetingCopyText(Date.parse('2026-10-06T06:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])").includes('Vladivostok'));
+run("config.settings.time_format='24'");
 const copiedMeeting = run("meetingCopyText(Date.parse('2026-10-09T11:00:00Z'), [{key:'Europe/Moscow',zone:'Europe/Moscow'},{key:'Asia/Vladivostok',zone:'Asia/Vladivostok'}])");
 const copiedLines = copiedMeeting.split('\n');
 assert.equal(copiedLines.length, 2);
