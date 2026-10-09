@@ -40,6 +40,7 @@ let meetingSelected = new Set();
 let meetingResult = null;
 let meetingEarlier = null;
 let meetingShowingEarlier = false;
+let meetingWindowCache = {key:'', minutes:0};
 let liveOffset = null;
 let pendingLead = null;
 let cityDragIndex = -1;
@@ -511,6 +512,13 @@ function meetingMembers() {
   return members;
 }
 
+function copyTimeMembers() {
+  return meetingMode ? meetingMembers() : [
+    {key:baseScheduleKey, zone:baseZone()},
+    ...config.timezones.map(key => ({key, zone:zoneOf(key)})),
+  ];
+}
+
 function meetingQuality(at, members, durationMinutes = meetingLengthMinutes) {
   let yellow = 0;
   for (const member of members) {
@@ -524,6 +532,39 @@ function meetingQuality(at, members, durationMinutes = meetingLengthMinutes) {
     if (memberYellow) yellow += 1;
   }
   return yellow;
+}
+
+function meetingWindowMinutes(at, members) {
+  const key = `${Math.floor(at / 60000)}|${members.map(member => `${member.zone}:${JSON.stringify(member.schedule)}`).join('|')}`;
+  if (meetingWindowCache.key === key) return meetingWindowCache.minutes;
+  const first = meetingQuality(at, members, 15);
+  if (first === null || !members.length) {
+    meetingWindowCache = {key, minutes:0};
+    return 0;
+  }
+  let minutes = 0;
+  for (; minutes < 24 * 60; minutes += 15) {
+    const quality = meetingQuality(at + minutes * 60000, members, 15);
+    if (quality === null || (first === 0 && quality !== 0)) break;
+  }
+  if (minutes < 24 * 60) {
+    for (let minute = Math.max(0, minutes - 15); minute < minutes; minute++) {
+      const quality = meetingQuality(at + minute * 60000, members, 1);
+      if (quality === null || (first === 0 && quality !== 0)) {
+        minutes = minute;
+        break;
+      }
+    }
+  }
+  meetingWindowCache = {key, minutes};
+  return minutes;
+}
+
+function meetingDurationText(minutes) {
+  const hours = Math.floor(minutes / 60), rest = minutes % 60;
+  if (lang() !== 'ru') return [hours ? `${hours} h` : '', rest ? `${rest} min` : ''].filter(Boolean).join(' ');
+  const word = hours % 10 === 1 && hours % 100 !== 11 ? 'час' : hours % 10 >= 2 && hours % 10 <= 4 && (hours % 100 < 12 || hours % 100 > 14) ? 'часа' : 'часов';
+  return [hours ? `${hours} ${word}` : '', rest ? `${rest} мин` : ''].filter(Boolean).join(' ');
 }
 
 function findMeetingTimes(members, now = Date.now()) {
@@ -549,9 +590,11 @@ function meetingStatusText() {
   const count = meetingMembers().length;
   if (count < 2) return lang() === 'ru' ? 'Выберите минимум два времени' : 'Choose at least two clocks';
   if (!meetingResult) return lang() === 'ru' ? 'Нет общего времени в ближайшие 24 ч' : 'No shared time in the next 24 h';
-  const quality = meetingShowingEarlier ? meetingEarlier : meetingResult;
-  const prefix = quality?.yellow ? (lang() === 'ru' ? 'Можно связаться' : 'Okay to contact') : (lang() === 'ru' ? 'Все в рабочее время' : 'All within working hours');
-  return `${prefix} · ${timeAt(new Date(referenceTimestamp()), baseZone())} · ${meetingLengthMinutes} ${lang() === 'ru' ? 'мин' : 'min'}`;
+  const at = referenceTimestamp(), members = meetingMembers();
+  const quality = meetingQuality(at, members, 15), minutes = meetingWindowMinutes(at, members);
+  if (!minutes) return lang() === 'ru' ? 'В выбранное время общего окна нет' : 'No shared window at this time';
+  const prefix = quality ? (lang() === 'ru' ? 'Можно связаться' : 'Okay to contact') : (lang() === 'ru' ? 'Все в рабочее время' : 'All within working hours');
+  return `${prefix} · ${timeAt(new Date(at), baseZone())} · ${meetingDurationText(minutes)}`;
 }
 
 function updateMeetingUI() {
@@ -559,7 +602,7 @@ function updateMeetingUI() {
   const button = $('#meetingToggle');
   if (button) { button.classList.toggle('active', meetingMode); button.setAttribute('aria-pressed', String(meetingMode)); }
   const copy = $('#meetingCopy');
-  if (copy) copy.disabled = !meetingMode || meetingMembers().length < 2;
+  if (copy) copy.disabled = copyTimeMembers().length === 0;
   const status = $('#meetingStatus');
   if (status) {
     status.hidden = !meetingMode;
@@ -575,10 +618,11 @@ function updateMeetingUI() {
   $$('.city-card').forEach(card => card.classList.toggle('meeting-selected', meetingSelected.has(card.dataset.zone)));
   const rail = $('#meetingRange');
   if (rail) {
-    rail.hidden = !meetingMode || !meetingResult;
+    const minutes = meetingMode && meetingResult ? meetingWindowMinutes(referenceTimestamp(), meetingMembers()) : 0;
+    rail.hidden = !minutes;
     if (!rail.hidden) {
       rail.style.left = `${sliderPosition(offset, $('#sliderArea').clientWidth)}px`;
-      rail.style.width = `${Math.max(3, $('#sliderArea').clientWidth - 20) * (meetingLengthMinutes / 60) / 24}px`;
+      rail.style.width = `${Math.max(3, $('#sliderArea').clientWidth - 20) * (minutes / 60) / 24}px`;
     }
   }
 }
@@ -607,7 +651,7 @@ function toggleMeetingMember(key) {
   recalculateMeeting();
 }
 
-function meetingCopyText(at = referenceTimestamp(), members = meetingMembers()) {
+function meetingCopyText(at = referenceTimestamp(), members = copyTimeMembers()) {
   const date = new Date(at);
   return members.map(member => {
     const name = member.key === baseScheduleKey
@@ -779,7 +823,7 @@ function render() {
       <div class="marks"><span id="originLabel">${timelineCaption(0)}</span>${[6,12,18,24].map(hours => `<span data-timeline-hour="${hours}">${timelineCaption(hours)}</span>`).join('')}</div>
      </section>
      <section class="${quickClass}" id="quickSection">
-       <div class="timeline-actions"><span class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</span><div class="meeting-actions"><button class="meeting-toggle" id="meetingToggle" type="button" aria-pressed="${meetingMode}">${lang() === 'ru' ? 'Удобно всем' : 'Good for all'}</button><button class="meeting-copy" id="meetingCopy" type="button" aria-label="${lang() === 'ru' ? 'Скопировать время созвона' : 'Copy call times'}" title="${lang() === 'ru' ? 'Скопировать время созвона' : 'Copy call times'}" disabled>${copyIcon}</button></div></div>
+       <div class="timeline-actions"><span class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</span><div class="meeting-actions"><button class="meeting-toggle" id="meetingToggle" type="button" aria-pressed="${meetingMode}">${lang() === 'ru' ? 'Удобно всем' : 'Good for all'}</button><button class="meeting-copy" id="meetingCopy" type="button" aria-label="${lang() === 'ru' ? 'Скопировать время городов' : 'Copy city times'}" title="${lang() === 'ru' ? 'Скопировать время городов' : 'Copy city times'}">${copyIcon}</button></div></div>
        <div class="meeting-status" id="meetingStatus" role="status" hidden></div>
        <div class="quick">${config.settings.reminder_intervals.map((minutes, index) =>
         `<button class="chip" draggable="true" data-preset="${index}" data-lead="${minutes}" title="${lang() === 'ru' ? 'Прокрутка: изменить интервал' : 'Scroll to adjust interval'}"><span class="chip-caption">${intervalCaption(minutes)}</span><span class="grip">⋮</span></button>`).join('')}</div>
@@ -1023,7 +1067,7 @@ function bindMain() {
   };
   $('#meetingToggle').onclick = toggleMeeting;
   $('#meetingCopy').onclick = () => {
-    if (!meetingMode || meetingMembers().length < 2) return;
+    if (!copyTimeMembers().length) return;
     send(`copyText\n${meetingCopyText()}`);
   };
   updateSliderVisual(offset);
@@ -1399,7 +1443,7 @@ function featureGuideItems() {
     ['availability','Понять, когда звонить','Посмотрите цветную полосу на карточке города. Значок рядом показывает день или ночь.','Зелёный — рабочее время. Жёлтый — звонить можно. Тёмный — не беспокоить.'],
     ['schedule','Имя и график','Нажмите карточку города → «Имя и график».','Задайте имя и часы связи для этого города.'],
     ['meeting','Найти время для созвона','Нажмите будильник у шкалы, затем «Удобно всем». Выберите города; верхние часы добавьте отдельно.','Виджет покажет удобное время. Если появится «Раньше», проверьте более ранний вариант.'],
-    ['meetingCopy','Отправить время созвона','Выберите участников и нажмите значок копирования рядом с «Удобно всем».','Вставьте в чат дату и местное время каждого участника.'],
+    ['meetingCopy','Отправить время городов','Передвиньте ползунок к нужному часу и нажмите значок копирования. В режиме «Удобно всем» сначала выберите участников.','Вставьте в чат даты и местное время городов.'],
     ['reminderNow','Напомнить через несколько минут','Нажмите будильник у шкалы. Выберите карточку с положительным числом минут, затем город или верхние часы.','Напоминание сработает через выбранное число минут.'],
     ['reminderFuture','Напомнить от выбранного времени','Передвиньте ползунок к нужному часу. Выберите карточку с минутами и нажмите город.','Минус — раньше, плюс — позже выбранного часа.'],
     ['reminderScroll','Изменить минуты колёсиком','Прокрутите колесо над карточкой с минутами.','Минуты изменятся сразу и сохранятся для следующего напоминания.'],
@@ -1417,7 +1461,7 @@ function featureGuideItems() {
     ['availability','Know when to call','Check the colored band on a city card. The nearby icon shows day or night.','Green means work time. Yellow means you can call. Dark means do not disturb.'],
     ['schedule','Name and schedule','Click a city card → “Name and schedule”.','Set a name and contact hours for that city.'],
     ['meeting','Find a time to call','Press the alarm by the time scale, then “Good for all”. Select cities; add the top clock separately.','The widget shows a good time. If “Earlier” appears, check the earlier option.'],
-    ['meetingCopy','Share call times','Select participants, then press the copy icon beside “Good for all”.','Paste each person’s date and local time into your group chat.'],
+    ['meetingCopy','Share city times','Move the slider to the time you want and press the copy icon. In “Good for all”, select participants first.','Paste each city’s date and local time into your group chat.'],
     ['reminderNow','Remind me in a few minutes','Press the alarm by the time scale. Select a card with a positive number of minutes, then a city or the top clock.','The reminder rings after the selected number of minutes.'],
     ['reminderFuture','Remind me from a selected time','Move the slider to the time you want. Select a minutes card, then a city.','Minus means before that time. Plus means after it.'],
     ['reminderScroll','Change minutes with the wheel','Scroll over a minutes card.','The number changes at once and stays set for your next reminder.'],

@@ -83,7 +83,7 @@ button{color:inherit}
 .meeting-outline{display:none;position:absolute;inset:0;z-index:5;width:100%;height:100%;overflow:visible;pointer-events:none}
 .meeting-mode .clock:not(.meeting-selected)>.meeting-outline,.meeting-mode .city-card:not(.meeting-selected)>.meeting-outline{display:block}
 .meeting-outline rect{fill:none;stroke:var(--accent);stroke-opacity:.68;stroke-width:1.5;stroke-linecap:round;stroke-dasharray:1 7;x:1px;y:1px;width:calc(100% - 2px);height:calc(100% - 2px);rx:8px;ry:8px;animation:meeting-outline 900ms linear infinite}
-.meeting-mode .clock.meeting-selected,.meeting-mode .city-card.meeting-selected{border:2px solid var(--accent);animation:none}
+.meeting-mode .clock.meeting-selected,.meeting-mode .city-card.meeting-selected{box-shadow:0 0 0 2px var(--accent);animation:none}
 .meeting-mode .card-actions-wrap{display:none}
 .meeting-mode .city-summary>.delete{display:none}
 @keyframes meeting-outline{to{stroke-dashoffset:-8}}
