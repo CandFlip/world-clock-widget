@@ -1,4 +1,4 @@
-## v1.1.143 — больше места для нужного времени
+## v1.1.144 — больше места для нужного времени
 
 World Clock Widget помогает следить за временем в разных городах и договариваться о звонках без пересчёта часовых поясов.
 
@@ -14,4 +14,4 @@ World Clock Widget помогает следить за временем в ра
 - **Windows 10/11:** скачайте EXE ниже и запустите установщик.
 - **macOS 13+:** скачайте DMG ниже и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [инструкцией Apple](https://support.apple.com/102445).
 
-[Все возможности](https://github.com/CandFlip/world-clock-widget/blob/v1.1.143/docs/FEATURES.md) · [История изменений](https://github.com/CandFlip/world-clock-widget/blob/v1.1.143/CHANGELOG.md)
+[Все возможности](https://github.com/CandFlip/world-clock-widget/blob/v1.1.144/docs/FEATURES.md) · [История изменений](https://github.com/CandFlip/world-clock-widget/blob/v1.1.144/CHANGELOG.md)
