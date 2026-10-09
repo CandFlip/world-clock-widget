@@ -68,6 +68,29 @@ async function connect() {
         render();
       `});
       await new Promise(resolve => setTimeout(resolve, 350));
+      if (process.env.LAYOUT_SCREENSHOT_DIR && width === 900 && height === 550) {
+        const wide = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'wide.png'), Buffer.from(wide.data, 'base64'));
+      }
+      if (process.env.LAYOUT_SCREENSHOT_DIR && width === 430 && height === 720) {
+        fs.mkdirSync(process.env.LAYOUT_SCREENSHOT_DIR, {recursive:true});
+        const shot = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'meeting.png'), Buffer.from(shot.data, 'base64'));
+        await send('Runtime.evaluate', {expression:'meetingMode=false; offset=0; quickAtNowOpen=false; render();'});
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const closed = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'closed.png'), Buffer.from(closed.data, 'base64'));
+        await send('Runtime.evaluate', {expression:'quickAtNowOpen=true; render();'});
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const open = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'open.png'), Buffer.from(open.data, 'base64'));
+        await send('Runtime.evaluate', {expression:'openSettings();'});
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const settings = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'settings.png'), Buffer.from(settings.data, 'base64'));
+        await send('Runtime.evaluate', {expression:'offset=1; meetingMode=true; render();'});
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
       const expression = `(() => {
         const rect = selector => document.querySelector(selector)?.getBoundingClientRect();
         const city = document.querySelector('.cities');
@@ -78,11 +101,21 @@ async function connect() {
         const toggle = rect('#meetingToggle');
         const copy = rect('#meetingCopy');
         const chip = rect('.quick .chip');
+        const marks = rect('.marks span');
         const actionGap = copy.left - toggle.right;
         const groupGap = chip.top - toggle.bottom;
         meetingMode = false;
+        offset = 0;
+        quickAtNowOpen = true;
         render();
         const normalGroupGap = rect('.quick .chip').top - rect('#meetingToggle').bottom;
+        const nowLabelLeft = rect('.shift-label').left;
+        const hero = rect('.hero');
+        const label = rect('.shift-label');
+        const rail = rect('.slider-rail');
+        const quickTitle = rect('.quick-title');
+        const cityTitle = rect('.cities-title');
+        const firstCity = rect('.cities .card');
         const textWalker = document.createTreeWalker(document.querySelector('.shell'), NodeFilter.SHOW_TEXT);
         const fontSizes = new Set();
         for(let node=textWalker.nextNode();node;node=textWalker.nextNode()) {
@@ -94,6 +127,12 @@ async function connect() {
         return {width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,
           cityHeight:cityRect?.height,visibleCards,
           actionGap,groupGap,normalGroupGap,deleteCenter:(del.top + del.bottom)/2,contentCenter,
+          heroToLabel:label.top-hero.bottom,labelToRail:rail.top-label.bottom,
+          heroBottom:hero.bottom,labelTop:label.top,sliderTop:rect('.slider').top,sliderMargin:getComputedStyle(document.querySelector('.slider')).marginTop,
+          railToQuick:quickTitle.top-marks.bottom,
+          quickToCities:cityTitle.top-rect('.quick .chip').bottom,
+          cityTitleToCard:firstCity.top-cityTitle.bottom,
+          labelLeft:label.left,nowLabelLeft,railLeft:rail.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,
           fontSizes:[...fontSizes].sort((a,b)=>parseFloat(a)-parseFloat(b)),
           cityHeading:document.querySelector('.cities-title')?.textContent,
           headingFont:getComputedStyle(document.querySelector('.cities-title')).fontSize,
@@ -116,8 +155,15 @@ async function connect() {
       assert.equal(layout.headingFont, layout.reminderHeadingFont);
       assert.ok(layout.groupGap >= layout.actionGap * 2, `quick action hierarchy at ${width}x${height}`);
       assert.ok(layout.normalGroupGap >= layout.actionGap * 2, `quick disclosure hierarchy at ${width}x${height}`);
+      assert.ok(layout.heroToLabel > layout.labelToRail, `slider label groups with the rail at ${width}x${height}`);
+      assert.ok(layout.railToQuick >= 20, `slider labels and quick actions need separate space at ${width}x${height}`);
+      assert.ok(Math.abs(layout.nowLabelLeft - layout.railLeft) <= 1, `Now label is not aligned to the rail at ${width}x${height}`);
+      assert.ok(Math.abs(layout.quickTitleLeft - layout.railLeft) <= 1, `quick heading is not aligned to the rail at ${width}x${height}`);
+      assert.ok(layout.cityTitleToCard <= 8, `city heading is too far from its cards at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteCenter - layout.contentCenter) <= 2, `delete button alignment at ${width}x${height}`);
       if (width < 760 && height >= 520) {
+        assert.ok(layout.quickToCities >= layout.cityTitleToCard * 2, `city section grouping at ${width}x${height}`);
+        assert.ok(Math.abs(layout.cityTitleLeft - layout.railLeft) <= 1, `city heading grid at ${width}x${height}`);
         assert.ok(Math.abs(layout.nameTop - layout.timeTop) <= 1, `city name/time misaligned at ${width}x${height}`);
         assert.ok(layout.visibleCards >= (height >= 700 ? 3 : 2), `too few cities at ${width}x${height}`);
       }

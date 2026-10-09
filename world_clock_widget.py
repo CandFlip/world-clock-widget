@@ -39,7 +39,7 @@ except ImportError:
 
 
 APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.140"
+APP_VERSION = "v1.1.141"
 APP_DIR_NAME = "WorldClockWidget"
 ROADMAP_URL = "https://world-clock-next.decent-rat-2368.chatgpt.site"
 MIN_WIDGET_HEIGHT = 640
