@@ -107,13 +107,8 @@ async function connect() {
         await send('Runtime.evaluate', {expression:'offset=1; meetingMode=true; render();'});
         await new Promise(resolve => setTimeout(resolve, 350));
       }
-      const expression = `(() => {
+      const expression = `(async () => {
         const rect = selector => document.querySelector(selector)?.getBoundingClientRect();
-        const city = document.querySelector('.cities');
-        const cityRect = city?.getBoundingClientRect();
-        const cards = [...document.querySelectorAll('.cities .card')];
-        const visibleCards = cards.filter(card => card.getBoundingClientRect().bottom <= cityRect.bottom + 1).length;
-        const cityOverflow = getComputedStyle(city).overflowY;
         const toggle = rect('#meetingToggle');
         const copy = rect('#meetingCopy');
         const chip = rect('.quick .chip');
@@ -136,6 +131,11 @@ async function connect() {
         sampleStatus.textContent = 'Через 2 ч 46 мин · Вчера';
         const longStatusFits = sampleStatus.scrollWidth <= sampleStatus.clientWidth + 1;
         render();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const cityRect = document.querySelector('.cities')?.getBoundingClientRect();
+        const cards = [...document.querySelectorAll('.cities .card')];
+        const visibleCards = cards.filter(card => card.getBoundingClientRect().bottom <= cityRect.bottom + 1).length;
+        const cityOverflow = getComputedStyle(document.querySelector('.cities')).overflowY;
         const hero = rect('.hero');
         const label = rect('.shift-label');
         const rail = rect('.slider-rail');
@@ -177,7 +177,7 @@ async function connect() {
           shellOverflow:getComputedStyle(document.querySelector('.shell')).overflowY,
           cityOverflow};
       })()`;
-      const evaluated = await send('Runtime.evaluate', {expression, returnByValue:true});
+      const evaluated = await send('Runtime.evaluate', {expression, returnByValue:true, awaitPromise:true});
       if (evaluated.exceptionDetails) throw new Error(evaluated.exceptionDetails.text);
       const layout = evaluated.result.value;
       console.log(`${width}x${height}: ${JSON.stringify(layout)}`);

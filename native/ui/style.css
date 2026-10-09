@@ -420,9 +420,6 @@ button{color:inherit}
   .cities-title{margin-top:var(--space-3)}
 }
 }
-@media(max-width:759px) and (min-height:520px) and (max-height:700px){
-  .hero{height:min(var(--hero-size,150px),128px)!important}
-}
 .alarm-detail{max-width:520px;margin:0 auto;text-align:center;padding:12px 0}
 .alarm-detail h3{font-size:var(--type-subtitle);overflow-wrap:anywhere;margin:0 0 14px}
 .alarm-detail-time{font-size:var(--type-title);font-weight:750;font-variant-numeric:tabular-nums}
