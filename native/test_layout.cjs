@@ -6,8 +6,11 @@ const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
 
-const browser = process.env.CHROME_PATH || 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+const browser = process.env.CHROME_PATH || (process.platform === 'darwin'
+  ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  : 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe');
 if (!fs.existsSync(browser)) {
+  if (process.env.LAYOUT_REQUIRE_CHROME === '1') throw new Error(`Chrome is required for layout checks: ${browser}`);
   console.log('Chromium layout checks skipped: Chrome is not installed.');
   process.exit(0);
 }

@@ -33,6 +33,20 @@ jobs:
       - name: Check shared scheduling and meeting behavior
         run: node native/test_ui_logic.cjs
 
+      - name: Check macOS layout and capture previews
+        env:
+          LAYOUT_REQUIRE_CHROME: '1'
+          LAYOUT_SCREENSHOT_DIR: ${{ runner.temp }}/world-clock-layout
+        run: node native/test_layout.cjs
+
+      - name: Upload macOS layout previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldClockWidget-macOS-layout-${{ github.run_id }}
+          path: ${{ runner.temp }}/world-clock-layout/*.png
+          if-no-files-found: warn
+
       - name: Check release description
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
