@@ -153,7 +153,7 @@ async function connect() {
           railToQuick:quickTitle.top-marks.bottom,
           quickToCities:cityTitle.top-rect('.quick .chip').bottom,
           cityTitleToCard:firstCity.top-cityTitle.bottom,
-          labelLeft:label.left,nowLabelLeft,railLeft:rail.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,
+          labelLeft:label.left,nowLabelLeft,railLeft:rail.left,heroLeft:hero.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,addLeft:rect('.add').left,
           statusWidths,shiftedStatusWidths,longStatusFits,
           deleteTop:del.top,deleteBottom:del.bottom,deleteRight:del.right,
           summaryTop:summary.top,summaryRight:summary.right,
@@ -182,8 +182,8 @@ async function connect() {
       assert.ok(layout.normalGroupGap >= layout.actionGap * 2, `quick disclosure hierarchy at ${width}x${height}`);
       assert.ok(layout.heroToLabel > layout.labelToRail, `slider label groups with the rail at ${width}x${height}`);
       assert.ok(layout.railToQuick >= 20, `slider labels and quick actions need separate space at ${width}x${height}`);
-      assert.ok(Math.abs(layout.nowLabelLeft - layout.railLeft) <= 1, `Now label is not aligned to the rail at ${width}x${height}`);
-      assert.ok(Math.abs(layout.quickTitleLeft - layout.railLeft) <= 1, `quick heading is not aligned to the rail at ${width}x${height}`);
+      assert.ok(Math.abs(layout.nowLabelLeft - layout.heroLeft) <= 1, `Now label is not aligned to the main blocks at ${width}x${height}`);
+      assert.ok(Math.abs(layout.quickTitleLeft - layout.heroLeft) <= 1, `quick heading is not aligned to the main blocks at ${width}x${height}`);
       assert.ok(layout.cityTitleToCard <= 8, `city heading is too far from its cards at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteTop - layout.summaryTop) <= 1, `delete button top gap at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteBottom - layout.bandTop) <= 1, `delete button must stop at color band at ${width}x${height}`);
@@ -193,7 +193,7 @@ async function connect() {
       assert.ok(layout.longStatusFits, `short day-shift status should be fully visible at ${width}x${height}`);
       if (width < 760 && height >= 520) {
         assert.ok(layout.quickToCities >= layout.cityTitleToCard * 2, `city section grouping at ${width}x${height}`);
-        assert.ok(Math.abs(layout.cityTitleLeft - layout.railLeft) <= 1, `city heading grid at ${width}x${height}`);
+        assert.ok(Math.abs(layout.cityTitleLeft - layout.addLeft) <= 1, `city heading grid at ${width}x${height}`);
         assert.ok(Math.abs(layout.nameTop - layout.timeTop) <= 1, `city name/time misaligned at ${width}x${height}`);
         assert.ok(layout.visibleCards >= (height >= 700 ? 3 : 2), `too few cities at ${width}x${height}`);
       }

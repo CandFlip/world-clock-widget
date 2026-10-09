@@ -43,7 +43,7 @@ button{color:inherit}
 
 .slider{--slider-x:10px;--track-inset:10px;height:90px;position:relative;flex:none;margin-top:16px;touch-action:none}
 .shift-label{position:absolute;top:8px;left:var(--slider-x);z-index:2;max-width:80px;color:var(--muted);font-size:var(--type-caption);line-height:16px;white-space:nowrap;transform:translateX(-50%);pointer-events:none}
-.shift-label.start{transform:none}.shift-label.end{transform:translateX(-100%)}
+.shift-label.start{left:0;transform:none}.shift-label.end{transform:translateX(-100%)}
 .quick-toggle{position:absolute;top:5px;right:0;z-index:5;display:flex;align-items:center;justify-content:center;gap:2px;width:40px;height:28px;padding:0;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
 .quick-toggle:hover,.quick-toggle:focus-visible{border-color:var(--border);background:var(--hover);color:var(--text);outline:none}
 .quick-toggle.away-from-now{visibility:hidden;pointer-events:none}
@@ -66,7 +66,7 @@ button{color:inherit}
 .quick-section{max-height:0;opacity:0;overflow:hidden;flex:none;transition:max-height 140ms ease,opacity 100ms ease,margin 140ms ease;margin-top:0}
 .quick-section.open{max-height:150px;opacity:1;margin-top:16px;overflow:visible}
 .timeline-actions{height:25px;min-height:25px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
-.timeline-actions .quick-title{margin:0 10px;font-size:var(--type-caption);white-space:nowrap}
+.timeline-actions .quick-title{margin:0;font-size:var(--type-caption);white-space:nowrap}
 .meeting-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
 .meeting-toggle,.meeting-copy{height:23px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--muted);cursor:pointer}
 .meeting-toggle{padding:0 8px;font-size:var(--type-caption);font-weight:650;white-space:nowrap}
@@ -89,7 +89,7 @@ button{color:inherit}
 .meeting-mode .city-summary{grid-template-columns:minmax(0,1fr) fit-content(48%)}
 @keyframes meeting-outline{to{stroke-dashoffset:-8}}
 @media(prefers-reduced-motion:reduce){.quick-chevron-glyph{transition:none}.meeting-outline rect{animation:none}}
-.quick-title,.cities-title{font-weight:700;color:var(--muted);font-size:var(--type-caption);margin:0 10px 8px}
+.quick-title,.cities-title{font-weight:700;color:var(--muted);font-size:var(--type-caption);margin:0 0 8px}
 .quick{display:flex;gap:8px;min-width:0;overflow-x:auto;scrollbar-width:thin;padding-bottom:3px}
 .quick>.chip{flex:1 0 100px}
 .windows-icon{width:13px;height:13px;vertical-align:-1px;flex:none}
@@ -338,7 +338,7 @@ button{color:inherit}
  .marks{top:58px}
  .quick-section.open{margin-top:8px}
  .city-section{display:flex;flex-direction:column;grid-column:2;grid-row:2;min-height:0;overflow:hidden}
- .cities-title{margin:0 10px 4px}
+ .cities-title{margin:0 0 4px}
  .cities{flex:1;min-height:0;overflow-y:auto;padding:2px 2px 6px}
  .cities .card{min-height:64px;align-self:flex-start}
  .add{height:40px;min-height:40px;margin-top:8px}
