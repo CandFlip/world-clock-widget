@@ -57,7 +57,7 @@ async function connect() {
     connection = await connect();
     const {send} = connection;
     const url = pathToFileURL(path.join(__dirname, 'ui', 'index.html')).href + '?preview&offset=1';
-    for (const [width, height] of [[430, 720], [360, 640], [430, 500], [900, 550]]) {
+    for (const [width, height] of [[360, 640], [390, 720], [430, 720], [430, 500], [900, 550]]) {
       await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor:1, mobile:false});
       await send('Page.navigate', {url});
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -68,6 +68,15 @@ async function connect() {
         render();
       `});
       await new Promise(resolve => setTimeout(resolve, 350));
+      if (process.env.LAYOUT_SCREENSHOT_DIR && width === 360 && height === 640) {
+        await send('Runtime.evaluate', {expression:'meetingMode=false; offset=0; quickAtNowOpen=true; render();'});
+        await new Promise(resolve => setTimeout(resolve, 350));
+        const narrow = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+        fs.mkdirSync(process.env.LAYOUT_SCREENSHOT_DIR, {recursive:true});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'narrow.png'), Buffer.from(narrow.data, 'base64'));
+        await send('Runtime.evaluate', {expression:'offset=1; meetingMode=true; render();'});
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
       if (process.env.LAYOUT_SCREENSHOT_DIR && width === 900 && height === 550) {
         const wide = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
         fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'wide.png'), Buffer.from(wide.data, 'base64'));
@@ -110,6 +119,16 @@ async function connect() {
         render();
         const normalGroupGap = rect('.quick .chip').top - rect('#meetingToggle').bottom;
         const nowLabelLeft = rect('.shift-label').left;
+        const statusWidths = [...document.querySelectorAll('.city-card .until')].map(el => ({text:el.textContent,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth}));
+        offset = 3;
+        render();
+        const shiftedStatusWidths = [...document.querySelectorAll('.city-card .until')].map(el => ({text:el.textContent,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth}));
+        offset = 0;
+        render();
+        const sampleStatus = document.querySelector('.city-card .until');
+        sampleStatus.textContent = 'Через 2 ч 46 мин · Вчера';
+        const longStatusFits = sampleStatus.scrollWidth <= sampleStatus.clientWidth + 1;
+        render();
         const hero = rect('.hero');
         const label = rect('.shift-label');
         const rail = rect('.slider-rail');
@@ -123,6 +142,8 @@ async function connect() {
             fontSizes.add(getComputedStyle(node.parentElement).fontSize);
         }
         const del = rect('.city-summary>.delete');
+        const summary = rect('.city-summary');
+        const band = rect('.city-summary .temporal-band');
         const contentCenter = (rect('.city-name').top + rect('.offset').bottom) / 2;
         return {width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,
           cityHeight:cityRect?.height,visibleCards,
@@ -133,6 +154,10 @@ async function connect() {
           quickToCities:cityTitle.top-rect('.quick .chip').bottom,
           cityTitleToCard:firstCity.top-cityTitle.bottom,
           labelLeft:label.left,nowLabelLeft,railLeft:rail.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,
+          statusWidths,shiftedStatusWidths,longStatusFits,
+          deleteTop:del.top,deleteBottom:del.bottom,deleteRight:del.right,
+          summaryTop:summary.top,summaryRight:summary.right,
+          bandTop:band.top,bandLeft:band.left,bandRight:band.right,summaryLeft:summary.left,
           fontSizes:[...fontSizes].sort((a,b)=>parseFloat(a)-parseFloat(b)),
           cityHeading:document.querySelector('.cities-title')?.textContent,
           headingFont:getComputedStyle(document.querySelector('.cities-title')).fontSize,
@@ -160,7 +185,12 @@ async function connect() {
       assert.ok(Math.abs(layout.nowLabelLeft - layout.railLeft) <= 1, `Now label is not aligned to the rail at ${width}x${height}`);
       assert.ok(Math.abs(layout.quickTitleLeft - layout.railLeft) <= 1, `quick heading is not aligned to the rail at ${width}x${height}`);
       assert.ok(layout.cityTitleToCard <= 8, `city heading is too far from its cards at ${width}x${height}`);
-      assert.ok(Math.abs(layout.deleteCenter - layout.contentCenter) <= 2, `delete button alignment at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteTop - layout.summaryTop) <= 1, `delete button top gap at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteBottom - layout.bandTop) <= 1, `delete button must stop at color band at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteRight - layout.summaryRight) <= 1, `delete button right gap at ${width}x${height}`);
+      assert.ok(Math.abs(layout.bandLeft - layout.summaryLeft) <= 1 && Math.abs(layout.bandRight - layout.summaryRight) <= 1,
+        `color band must span the card at ${width}x${height}`);
+      assert.ok(layout.longStatusFits, `short day-shift status should be fully visible at ${width}x${height}`);
       if (width < 760 && height >= 520) {
         assert.ok(layout.quickToCities >= layout.cityTitleToCard * 2, `city section grouping at ${width}x${height}`);
         assert.ok(Math.abs(layout.cityTitleLeft - layout.railLeft) <= 1, `city heading grid at ${width}x${height}`);
