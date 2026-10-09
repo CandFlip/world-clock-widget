@@ -1,5 +1,5 @@
 @font-face{font-family:Inter;src:url('Inter-Variable.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
-:root{--bg:#0b0e14;--surface:#161b22;--hover:#1c222b;--border:#30363d;--text:#f0f6fc;--muted:#8b949e;--accent:#7c5cfc;--danger:#f85149;--badge:#211b46;--availability-working:#438b67;--availability-okay:#9a7c42;--availability-dnd:#4a5060;--solar-daylight:#d7b960;--solar-twilight:#7d7099;--solar-night:#28344c;--marker:#fff;color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif}
+:root{--bg:#0b0e14;--surface:#161b22;--hover:#1c222b;--border:#30363d;--text:#f0f6fc;--muted:#8b949e;--accent:#7c5cfc;--danger:#f85149;--badge:#211b46;--availability-working:#438b67;--availability-okay:#9a7c42;--availability-dnd:#4a5060;--solar-daylight:#d7b960;--solar-twilight:#7d7099;--solar-night:#28344c;--marker:#fff;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--type-caption:12px;--type-body:14px;--type-subtitle:16px;--type-title:32px;color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif}
 *{box-sizing:border-box}
 html,body,#app{height:100%;margin:0;overflow:hidden;background:transparent}
 body{color:var(--text);font-size:14px;line-height:1.25;user-select:none}
@@ -370,6 +370,55 @@ button{color:inherit}
 .hero{height:var(--hero-size,150px)!important;min-height:0;max-height:none;transition:height 220ms cubic-bezier(.25,.1,.25,1)}
 .hero .clock,.hero .saved-panel{height:100%}
 .clock .date{margin-top:4px}
+/* Compact desktop rhythm follows Fluent 2's 4px spacing ramp and type roles. */
+@media(max-width:759px){
+.shell{padding:var(--space-3)}
+.header{height:36px}
+.header h1{font-size:var(--type-subtitle);line-height:22px}
+.hero{gap:var(--space-2);margin-top:var(--space-3)}
+.base-summary{padding:var(--space-2)}
+.base-summary>.base-solar{top:var(--space-2);right:var(--space-2)}
+.source,.date,.saved-heading{font-size:var(--type-caption);line-height:16px}
+.source{height:16px}
+.saved-top{font-size:var(--type-caption)}
+.saved-bottom{font-size:11px}
+.clock-time{font-size:var(--type-title);line-height:40px;margin-top:0;letter-spacing:-1px}
+.clock.manual-base .clock-time{margin-top:16px}
+.clock-city{font-size:var(--type-caption);line-height:16px;margin-top:0}
+.clock .date{margin-top:var(--space-1)}
+.saved-panel{padding:var(--space-2)}
+.hero-resizer{height:var(--space-2)}
+.slider{height:76px}
+.shift-label{font-size:var(--type-caption)}
+.marks{top:54px;font-size:var(--type-body);line-height:20px}
+.marks .timeline-minutes{font-size:10px}
+.quick-section.open{margin-top:var(--space-1)}
+.timeline-actions{height:24px;min-height:24px;margin-bottom:var(--space-1)}
+.timeline-actions .quick-title,.cities-title{font-size:var(--type-caption);line-height:16px}
+.meeting-status{min-height:16px;font-size:var(--type-caption);line-height:16px}
+.meeting-toggle,.meeting-status button,.selection-status{font-size:var(--type-caption)}
+.quick{gap:var(--space-2);padding-bottom:2px}
+.quick>.chip{height:36px}
+.selection-status{height:20px}
+.selection-status:empty{height:0}
+.cities-title{margin-top:var(--space-2);margin-bottom:var(--space-2)}
+.card{min-height:68px;margin-bottom:var(--space-2)}
+.city-summary{min-height:66px;grid-template-columns:minmax(0,1fr) 104px;padding-right:44px}
+.city-main{padding:var(--space-2) var(--space-3);align-self:start}
+.city-name,.city-time{font-size:var(--type-subtitle);line-height:22px}
+.region,.offset,.until{font-size:var(--type-caption);line-height:16px}
+.offset,.until{margin-top:0}
+.city-clock{width:104px;justify-content:flex-start;padding:var(--space-2) var(--space-2) 0}
+.city-context{bottom:var(--space-2)}
+.city-summary>.delete{right:var(--space-2);width:32px;height:32px}
+.add{height:36px;margin-top:var(--space-1)}
+.footer{height:28px;padding-top:var(--space-1)}
+@media(max-height:800px){
+  .hero{margin-top:var(--space-2)}
+  .slider{height:72px}
+  .cities-title{margin-top:var(--space-1)}
+}
+}
 .alarm-detail{max-width:520px;margin:0 auto;text-align:center;padding:12px 0}
 .alarm-detail h3{font-size:20px;overflow-wrap:anywhere;margin:0 0 14px}
 .alarm-detail-time{font-size:48px;font-weight:750;font-variant-numeric:tabular-nums}

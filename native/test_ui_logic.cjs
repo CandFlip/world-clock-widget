@@ -130,6 +130,10 @@ assert.equal((css.match(/\.card-actions button\{/g) || []).length, 1);
 assert.equal(css.includes('.base-expanded'), false);
 assert.equal(css.includes('.city-expanded'), false);
 assert.ok(css.includes('@media(prefers-reduced-motion:reduce)'));
+assert.ok(css.includes('@media(max-width:759px){'));
+assert.ok(css.includes('--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px'));
+assert.ok(css.includes('.city-name,.city-time{font-size:var(--type-subtitle);line-height:22px}'));
+assert.ok(css.includes('.selection-status:empty{height:0}'));
 assert.equal(run("t('alarmAction').endsWith('…') || t('changeCity').endsWith('…') || t('contactHours').endsWith('…')"), false);
 assert.equal(run("solarStateAt(new Date('2026-06-21T03:00:00Z'), 35.6762, 139.6503)"), 'daylight');
 assert.equal(run("solarStateAt(new Date('2026-06-21T15:00:00Z'), 35.6762, 139.6503)"), 'night');
@@ -213,7 +217,8 @@ console.log('Native UI logic checks passed: time zones, DST, zero offset, interv
 run("window.innerHeight = 800; config.settings.hero_height = 300");
 assert.equal(run('heroHeight()'), 300);
 assert.equal(run('heroHeight(900)'), 450);
-assert.equal(run('heroHeight(20)'), 136);
+assert.equal(run('heroHeight(20)'), 112);
+assert.equal(run('heroHeight(undefined)'), 300);
 run(`(() => {
   const originalQuery = document.querySelector;
   const originalStyle = window.getComputedStyle;
@@ -242,6 +247,7 @@ run(`(() => {
 })()`);
 assert.equal(run('heroSizingResult.opened["--hero-size"]'), '244px');
 assert.equal(run('heroSizingResult.closed["--hero-size"]'), '143px');
+assert.ok(run("syncHeroHeight.toString().includes('compactLimit')"));
 assert.equal(run('Object.hasOwn(heroSizingResult.opened,"--hero-min-height")'), false);
 run("Date.now = () => 1800000000000");
 assert.equal(run('reminderRemaining({alarm: 1800000061})'), '1:01');
@@ -359,7 +365,7 @@ run(`
   let quickVisible = false, toggleHidden = false, expandedValue = '';
   document.body = {classList:{toggle(){}}};
   document.querySelector = selector => ({
-    '#quickSection': {classList:{toggle:(_name,value) => quickVisible=value}},
+    '#quickSection': {classList:{contains:() => quickVisible,toggle:(_name,value) => quickVisible=value}},
     '#quickToggle': {classList:{toggle:(_name,value) => toggleHidden=value},setAttribute:(_name,value) => expandedValue=value},
   })[selector] || null;
   offset=0; quickAtNowOpen=false; pendingLead=null;

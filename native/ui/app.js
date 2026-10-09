@@ -978,7 +978,7 @@ function renderAlarms() {
 }
 
 function heroHeight(value = config.settings.hero_height) {
-  return clamp(Number(value) || 150, 136, Math.max(136, window.innerHeight - 350));
+  return clamp(Number(value) || 124, 112, Math.max(112, window.innerHeight - 350));
 }
 
 // Measure the natural summary and the full action row, never the animating parent height.
@@ -1001,7 +1001,10 @@ function syncHeroHeight() {
   }
   minimum = Math.ceil(minimum);
   const manual = Number(config.settings.hero_height);
-  const height = Math.max(minimum, manual > 0 ? heroHeight(manual) : 0);
+  const requested = manual > 0 ? heroHeight(manual) : heroHeight();
+  const quickOpen = $('#quickSection')?.classList.contains('open');
+  const compactLimit = window.innerHeight <= 800 && quickOpen && !expandedBase ? 124 : Infinity;
+  const height = Math.max(minimum, Math.min(requested, compactLimit));
   hero.style.setProperty('--hero-size',`${height}px`);
   $('#heroResizer')?.setAttribute('aria-valuenow',height);
   $('#heroResizer')?.setAttribute('aria-valuemin',minimum);
@@ -1163,7 +1166,11 @@ function toggleQuickAtNow() {
 }
 
 function updateQuickVisibility() {
-  $('#quickSection')?.classList.toggle('open', offset > 0 || quickAtNowOpen || meetingMode);
+  const quickSection = $('#quickSection');
+  const wasOpen = quickSection?.classList.contains('open');
+  const isOpen = offset > 0 || quickAtNowOpen || meetingMode;
+  quickSection?.classList.toggle('open', isOpen);
+  if(wasOpen !== isOpen) syncHeroHeight();
   const button = $('#quickToggle');
   if (!button) return;
   button.classList.toggle('away-from-now', offset > 0);
@@ -2217,7 +2224,7 @@ if (!host && new URLSearchParams(location.search).has('preview')) {
   if (['dark','light','system'].includes(previewParams.get('theme'))) config.settings.theme = previewParams.get('theme');
   if (previewParams.has('context')) config.cityContext['Europe/Moscow'] = {label:'Антон',availabilityOverride:{okayStart:'10:00',workingStart:'12:00',workingEnd:'20:00',dndStart:'01:00'}};
   normalize();
-  activeHotkey = {modifiers: event.data.hotkeyModifiers, key: event.data.hotkeyKey};
+  activeHotkey = defaultHotkeyForPlatform();
   render();
   if (previewParams.has('expand')) { expandedCityKey = config.timezones[0]; renderCities(); }
   if (previewParams.has('newalarm')) newAlarmForCity(config.timezones[0]);
