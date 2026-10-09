@@ -335,6 +335,16 @@ function displayDate(date, zone) {
   }).format(date);
 }
 
+function copyDate(date, zone) {
+  const parts = zonedParts(date, zone);
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const ru = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+  const en = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  const index = weekdays.indexOf(parts.weekday);
+  const weekday = index < 0 ? parts.weekday.slice(0, 2) : (lang() === 'ru' ? ru : en)[index];
+  return `${weekday}, ${parts.day}.${parts.month}.${parts.year}`;
+}
+
 function baseZone() {
   return config.settings.top_clock_mode === 'auto'
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -657,7 +667,7 @@ function meetingCopyText(at = referenceTimestamp(), members = copyTimeMembers())
     const name = member.key === baseScheduleKey
       ? `${lang() === 'ru' ? 'Моё время' : 'My time'} (${config.settings.top_clock_mode === 'auto' ? systemCities() : cityName(config.settings.manual_top_timezone)})`
       : `${cityContext(member.key).label ? `${cityContext(member.key).label} · ` : ''}${cityName(member.key)}`;
-    return `${name} — ${displayDate(date, member.zone)}, ${timeAt(date, member.zone)}`;
+    return `${copyDate(date, member.zone)} · ${timeAt(date, member.zone)} — ${name}`;
   }).join('\n');
 }
 
