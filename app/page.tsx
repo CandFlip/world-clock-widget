@@ -18,7 +18,7 @@ type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<s
 type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [], ownSuggestions: [] };
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.136/WorldClockWidget-Setup-v1.1.136.exe';
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.144/WorldClockWidget-Setup-v1.1.144.exe';
 export default function Home() {
   const [lang, setLang] = useState<'ru' | 'en'>('ru');
   const [data, setData] = useState<Roadmap>(defaults);
@@ -58,7 +58,7 @@ export default function Home() {
     localStorage.setItem('wc-lang', value);
     document.documentElement.setAttribute('lang', value);
   };
-  const version = data.settings.download_version || 'v1.1.136';
+  const version = data.settings.download_version || 'v1.1.144';
   const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   const macDownload = `https://github.com/CandFlip/world-clock-widget/releases/download/${version}/WorldClockWidget-macOS-${version}.dmg`;
   function trackDownload(platform: 'windows' | 'mac') {
