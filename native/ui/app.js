@@ -241,7 +241,7 @@ for (const city of catalog) {
 
 const strings = {
   ru: {
-    title: 'Мировое время', cities: 'ГОРОДА', add: 'Добавить город', reminders: 'Напоминания', none: 'Пока нет',
+    title: 'Мировое время', cities: 'Города', add: 'Добавить город', reminders: 'Напоминания', none: 'Пока нет',
     settings: 'Настройки', theme: 'Тема', systemTheme: 'Системная', dark: 'Тёмная', light: 'Светлая', language: 'Язык', base: 'Базовый город',
     timeFormat: 'Формат времени', systemFormat: 'Системный', hour24: '24-часовой', hour12: '12-часовой',
     typicalSchedule: 'Общий график', citySettings: 'Имена и графики городов', defaultSchedule: 'График по умолчанию', addedCities: 'ДОБАВЛЕННЫЕ ГОРОДА', baseTimeSection: 'БАЗОВОЕ ВРЕМЯ', nameAndSchedule: 'Имя и график',
@@ -256,7 +256,7 @@ const strings = {
     whatsNext: 'Что дальше?',
   },
   en: {
-    title: 'World time', cities: 'CITIES', add: 'Add city', reminders: 'Reminders', none: 'None yet',
+    title: 'World time', cities: 'Cities', add: 'Add city', reminders: 'Reminders', none: 'None yet',
     settings: 'Settings', theme: 'Theme', systemTheme: 'System', dark: 'Dark', light: 'Light', language: 'Language', base: 'Base city',
     timeFormat: 'Time format', systemFormat: 'System', hour24: '24-hour', hour12: '12-hour',
     typicalSchedule: 'Shared schedule', citySettings: 'City names and schedules', defaultSchedule: 'Default schedule', addedCities: 'ADDED CITIES', baseTimeSection: 'BASE TIME', nameAndSchedule: 'Name and schedule',

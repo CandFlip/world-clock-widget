@@ -73,21 +73,50 @@ async function connect() {
         const city = document.querySelector('.cities');
         const cityRect = city?.getBoundingClientRect();
         const cards = [...document.querySelectorAll('.cities .card')];
+        const visibleCards = cards.filter(card => card.getBoundingClientRect().bottom <= cityRect.bottom + 1).length;
+        const cityOverflow = getComputedStyle(city).overflowY;
+        const toggle = rect('#meetingToggle');
+        const copy = rect('#meetingCopy');
+        const chip = rect('.quick .chip');
+        const actionGap = copy.left - toggle.right;
+        const groupGap = chip.top - toggle.bottom;
+        meetingMode = false;
+        render();
+        const normalGroupGap = rect('.quick .chip').top - rect('#meetingToggle').bottom;
+        const textWalker = document.createTreeWalker(document.querySelector('.shell'), NodeFilter.SHOW_TEXT);
+        const fontSizes = new Set();
+        for(let node=textWalker.nextNode();node;node=textWalker.nextNode()) {
+          if(node.textContent.trim() && node.parentElement?.getClientRects().length)
+            fontSizes.add(getComputedStyle(node.parentElement).fontSize);
+        }
+        const del = rect('.city-summary>.delete');
+        const contentCenter = (rect('.city-name').top + rect('.offset').bottom) / 2;
         return {width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,
-          cityHeight:cityRect?.height,visibleCards:cards.filter(card => card.getBoundingClientRect().bottom <= cityRect.bottom + 1).length,
+          cityHeight:cityRect?.height,visibleCards,
+          actionGap,groupGap,normalGroupGap,deleteCenter:(del.top + del.bottom)/2,contentCenter,
+          fontSizes:[...fontSizes].sort((a,b)=>parseFloat(a)-parseFloat(b)),
+          cityHeading:document.querySelector('.cities-title')?.textContent,
+          headingFont:getComputedStyle(document.querySelector('.cities-title')).fontSize,
+          reminderHeadingFont:getComputedStyle(document.querySelector('.quick-title')).fontSize,
           nameTop:rect('.city-name')?.top,timeTop:rect('.city-time')?.top,
           heroColumns:getComputedStyle(document.querySelector('.hero')).gridTemplateColumns,
           heroWidth:rect('.hero')?.width,heroHeight:rect('.hero')?.height,summaryHeight:document.querySelector('.base-summary')?.scrollHeight,clockWidth:rect('.clock')?.width,savedWidth:rect('.saved-panel')?.width,
           clockText:document.querySelector('.clock-time')?.textContent,clockTextWidth:rect('.clock-time')?.width,clockTextScroll:document.querySelector('.clock-time')?.scrollWidth,
           wide: getComputedStyle(document.querySelector('.main-controls')).display,
           shellOverflow:getComputedStyle(document.querySelector('.shell')).overflowY,
-          cityOverflow:getComputedStyle(city).overflowY};
+          cityOverflow};
       })()`;
       const evaluated = await send('Runtime.evaluate', {expression, returnByValue:true});
       if (evaluated.exceptionDetails) throw new Error(evaluated.exceptionDetails.text);
       const layout = evaluated.result.value;
       console.log(`${width}x${height}: ${JSON.stringify(layout)}`);
       assert.equal(layout.scrollWidth, width, `horizontal overflow at ${width}x${height}`);
+      assert.deepEqual(layout.fontSizes, ['10px','12px','14px','16px','32px']);
+      assert.equal(layout.cityHeading, 'Города');
+      assert.equal(layout.headingFont, layout.reminderHeadingFont);
+      assert.ok(layout.groupGap >= layout.actionGap * 2, `quick action hierarchy at ${width}x${height}`);
+      assert.ok(layout.normalGroupGap >= layout.actionGap * 2, `quick disclosure hierarchy at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteCenter - layout.contentCenter) <= 2, `delete button alignment at ${width}x${height}`);
       if (width < 760 && height >= 520) {
         assert.ok(Math.abs(layout.nameTop - layout.timeTop) <= 1, `city name/time misaligned at ${width}x${height}`);
         assert.ok(layout.visibleCards >= (height >= 700 ? 3 : 2), `too few cities at ${width}x${height}`);
