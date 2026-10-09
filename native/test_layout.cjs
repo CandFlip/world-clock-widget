@@ -112,7 +112,6 @@ async function connect() {
         const toggle = rect('#meetingToggle');
         const copy = rect('#meetingCopy');
         const chip = rect('.quick .chip');
-        const marks = rect('.marks span');
         const actionGap = copy.left - toggle.right;
         const groupGap = chip.top - toggle.bottom;
         meetingMode = false;
@@ -139,6 +138,7 @@ async function connect() {
         const hero = rect('.hero');
         const label = rect('.shift-label');
         const rail = rect('.slider-rail');
+        const marks = rect('.marks span');
         const quickTitle = rect('.quick-title');
         const cityTitle = rect('.cities-title');
         const firstCity = rect('.cities .card');
