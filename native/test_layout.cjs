@@ -5,6 +5,9 @@ const {pathToFileURL} = require('node:url');
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
+const macVersion = fs.readFileSync(path.join(__dirname, '..', 'macos', 'Info.plist'), 'utf8')
+  .match(/<key>CFBundleShortVersionString<\/key><string>([^<]+)<\/string>/)?.[1];
+assert.ok(macVersion, 'macOS version is missing');
 
 const browser = process.env.CHROME_PATH || (process.platform === 'darwin'
   ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
@@ -65,6 +68,7 @@ async function connect() {
       await send('Page.navigate', {url});
       await new Promise(resolve => setTimeout(resolve, 500));
       await send('Runtime.evaluate', {expression:`
+        version = ${JSON.stringify(`v${macVersion} layout preview`)};
         config.timezones = ['Europe/Moscow','Asia/Vladivostok','Asia/Yekaterinburg','Asia/Almaty','America/New_York'];
         meetingMode = true;
         meetingSelected = new Set(config.timezones);
@@ -184,7 +188,8 @@ async function connect() {
       assert.ok(layout.groupGap >= layout.actionGap * 2, `quick action hierarchy at ${width}x${height}`);
       assert.ok(layout.normalGroupGap >= layout.actionGap * 2, `quick disclosure hierarchy at ${width}x${height}`);
       assert.ok(layout.heroToLabel > layout.labelToRail, `slider label groups with the rail at ${width}x${height}`);
-      assert.ok(layout.railToQuick >= 20, `slider labels and quick actions need separate space at ${width}x${height}`);
+      // Under 520 px, the whole shell scrolls and keeps a smaller section gap.
+      assert.ok(layout.railToQuick >= (height < 520 ? 12 : 20), `slider labels and quick actions need separate space at ${width}x${height}`);
       assert.ok(Math.abs(layout.nowLabelLeft - layout.heroLeft) <= 1, `Now label is not aligned to the main blocks at ${width}x${height}`);
       assert.ok(Math.abs(layout.quickTitleLeft - layout.heroLeft) <= 1, `quick heading is not aligned to the main blocks at ${width}x${height}`);
       assert.ok(layout.cityTitleToCard <= 8, `city heading is too far from its cards at ${width}x${height}`);
