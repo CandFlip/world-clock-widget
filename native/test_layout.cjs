@@ -239,10 +239,19 @@ async function connect() {
         if (!switchNode) throw Error('Expected both meeting options');
         const before = getComputedStyle(switchNode.querySelector('.period-thumb')).transform;
         switchNode.click();
-        await new Promise(r => setTimeout(r, 100));
-        const during = getComputedStyle(document.querySelector('.period-thumb')).transform;
-        await new Promise(r => setTimeout(r, 350));
-        const end = getComputedStyle(document.querySelector('.period-thumb')).transform;
+        const thumb = document.querySelector('.period-thumb');
+        getComputedStyle(thumb).transform;
+        const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const transition = thumb.getAnimations().find(animation => animation.transitionProperty === 'transform');
+        if (!reducedMotion && !transition) throw Error('Expected a transform transition for the switch');
+        if (transition) {
+          transition.pause();
+          await transition.ready;
+          transition.currentTime = Number(transition.effect.getTiming().duration) / 2;
+        }
+        const during = getComputedStyle(thumb).transform;
+        if (transition) transition.finish();
+        const end = getComputedStyle(thumb).transform;
         const sunBounds = document.querySelector('.period-switch span:first-of-type svg g').getBBox();
         const horizonGroup = document.querySelector('.period-switch span:last-of-type svg g');
         const horizonBounds = horizonGroup.getBBox();
@@ -252,7 +261,7 @@ async function connect() {
           statusFits:status.scrollWidth <= status.clientWidth + 1,
           sameRow:Math.abs(status.getBoundingClientRect().top - header.getBoundingClientRect().top) < 3,
           checked:document.querySelector('#meetingEarlier').getAttribute('aria-checked'),
-          yellow:status.classList.contains('period-yellow'), before, during, end,
+          yellow:status.classList.contains('period-yellow'), before, during, end, reducedMotion,
           startAbsent:!status.querySelector('.meeting-start'),
           buttonGap:document.querySelector('.meeting-actions').getBoundingClientRect().left - status.getBoundingClientRect().right,
           neutralIcon:getComputedStyle(status.querySelector('.meeting-period-icon')).color === getComputedStyle(document.querySelector('.city-card .solar-glyph')).color,
@@ -287,8 +296,10 @@ async function connect() {
       assert.ok(meeting.autoYellow, 'moving into contact hours should select the yellow switch state');
       assert.equal(meeting.noWindow, 'Нет окна');
       assert.ok(meeting.noWindowMuted, 'no-window text should use the neutral icon color');
-      assert.notEqual(meeting.during, meeting.before, 'switch should start animating');
-      assert.notEqual(meeting.during, meeting.end, 'switch should animate through intermediate positions');
+      if (!meeting.reducedMotion) {
+        assert.notEqual(meeting.during, meeting.before, 'switch should start animating');
+        assert.notEqual(meeting.during, meeting.end, 'switch should animate through intermediate positions');
+      }
       if (process.env.LAYOUT_SCREENSHOT_DIR) {
         const shot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
         fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, `period-${width}-${height}.png`), Buffer.from(shot.data,'base64'));
