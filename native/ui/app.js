@@ -685,10 +685,32 @@ function updateMeetingUI() {
     const minutes = meetingMode && meetingResult ? meetingWindowMinutes(referenceTimestamp(), meetingMembers()) : 0;
     rail.hidden = !minutes;
     if (!rail.hidden) {
+      rail.style.background = meetingRangeGradient(referenceTimestamp(), meetingMembers(), minutes);
       rail.style.left = `${sliderPosition(offset, $('#sliderArea').clientWidth)}px`;
       rail.style.width = `${Math.max(3, $('#sliderArea').clientWidth - 20) * (minutes / 60) / 24}px`;
     }
   }
+}
+
+let meetingRangeCache = {key:'', gradient:''};
+function meetingRangeGradient(at, members, minutes) {
+  if (!minutes || !members.length) return 'none';
+  const key = `${Math.floor(at / 60000)}|${minutes}|${members.map(member => `${member.zone}:${JSON.stringify(member.schedule)}`).join('|')}`;
+  if (meetingRangeCache.key === key) return meetingRangeCache.gradient;
+  const stops = [];
+  let start = 0, previous;
+  for (let minute = 0; minute <= minutes; minute++) {
+    const quality = minute < minutes ? meetingQuality(at + minute * 60000, members, 1) : undefined;
+    const color = quality === undefined ? undefined : quality === null ? 'transparent' : quality === 0 ? 'var(--availability-working)' : 'var(--availability-okay)';
+    if (minute && color !== previous) {
+      stops.push(`${previous} ${start * 100 / minutes}% ${minute * 100 / minutes}%`);
+      start = minute;
+    }
+    previous = color;
+  }
+  const gradient = `linear-gradient(to right,${stops.join(',')})`;
+  meetingRangeCache = {key, gradient};
+  return gradient;
 }
 
 function recalculateMeeting() {
@@ -1550,7 +1572,7 @@ function featureGuideItems() {
     "meeting",
     "Найти время для созвона",
     "Нажмите значок будильника справа над шкалой, затем «Удобно всем». Города из списка уже участвуют в подборе. Нажимайте их карточки, чтобы исключать или возвращать участников. Чтобы учесть своё время, нажмите карточку с большими часами вверху.",
-    "Виджет выберет общее время на ближайшие 24 часа. Рядом с кнопкой появится длительность окна. Зелёное солнце выбирает лучшее время; жёлтое солнце с горизонтом — более раннее допустимое, если оно есть. Ползунок тоже меняет выбор. «Нет окна» означает, что в выбранный момент общего времени нет. Нажмите «Удобно всем» ещё раз, чтобы выйти."
+    "Виджет выберет общее время на ближайшие 24 часа. Рядом с кнопкой появится длительность окна. Зелёное солнце выбирает лучшее время; жёлтое солнце с горизонтом — более раннее допустимое, если оно есть. Ползунок тоже меняет выбор. Участок шкалы справа от него показывает общее окно: зелёный — у всех рабочие часы, жёлтый — хотя бы у одного допустимое время связи. «Нет окна» означает, что в выбранный момент общего времени нет. Нажмите «Удобно всем» ещё раз, чтобы выйти."
   ],
   [
     "meetingCopy",
@@ -1653,7 +1675,7 @@ function featureGuideItems() {
     "meeting",
     "Find a time to call",
     "Press the alarm icon above the right end of the scale, then “Good for all”. Listed cities are included automatically. Click their cards to exclude or include them. To include your own time, click the large clock card at the top.",
-    "The widget finds a shared time within the next 24 hours and shows its duration beside the button. A green sun chooses the best time; a yellow sun on the horizon chooses an earlier acceptable time when available. Moving the slider also changes this choice. “No window” means no shared time at that moment. Press “Good for all” again to exit."
+    "The widget finds a shared time within the next 24 hours and shows its duration beside the button. A green sun chooses the best time; a yellow sun on the horizon chooses an earlier acceptable time when available. Moving the slider also changes this choice. The shared window to its right is green when everyone is working and yellow when someone is in acceptable contact hours. “No window” means no shared time at that moment. Press “Good for all” again to exit."
   ],
   [
     "meetingCopy",

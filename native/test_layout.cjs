@@ -288,6 +288,7 @@ async function connect() {
         setOffset(meetingOffsetAt(meetingResult.at));
         result.autoGreen = !meetingShowingEarlier && document.querySelector('#meetingEarlier').getAttribute('aria-checked') === 'false';
         setOffset(meetingOffsetAt(meetingEarlier.at));
+        result.rangeGradient = getComputedStyle(document.querySelector('#meetingRange')).backgroundImage;
         result.autoYellow = meetingShowingEarlier && document.querySelector('#meetingEarlier').getAttribute('aria-checked') === 'true';
         setOffset(16);
         const message = status.querySelector('.meeting-message');
@@ -329,6 +330,9 @@ async function connect() {
       assert.equal(meeting.checked, 'true');
       assert.ok(meeting.yellow);
       assert.ok(meeting.autoGreen, 'moving into work hours should select the green switch state');
+      assert.match(meeting.rangeGradient, /linear-gradient/);
+      assert.ok(meeting.rangeGradient.includes('rgb(67, 139, 103)') || meeting.rangeGradient.includes('rgb(93, 159, 123)'), 'shared window must contain the work-hour color');
+      assert.ok(meeting.rangeGradient.includes('rgb(154, 124, 66)') || meeting.rangeGradient.includes('rgb(180, 148, 80)'), 'shared window must contain the acceptable-hour color');
       assert.ok(meeting.autoYellow, 'moving into contact hours should select the yellow switch state');
       assert.equal(meeting.noWindow, 'Нет окна');
       assert.ok(meeting.noWindowMuted, 'no-window text should use the neutral icon color');

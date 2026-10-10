@@ -500,3 +500,13 @@ run('platform="macos"; scheduleBackgroundTick()');
 assert.equal(context.window.__wakeMessages.length, 2);
 assert.equal(context.window.__wakeMessages.at(-1), 'scheduleTick\n60000');
 console.log('Background wake scheduling preserves due checks on Windows and macOS.');
+
+// Shared window colors must describe every participant and exact schedule boundaries.
+const rangeMembers = "[{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'09:00',workingEnd:'12:00',dndStart:'13:00'}}]";
+assert.equal(run(`meetingRangeGradient(Date.parse('2026-10-09T08:00:00Z'), ${rangeMembers}, 300)`), 'linear-gradient(to right,var(--availability-okay) 0% 20%,var(--availability-working) 20% 80%,var(--availability-okay) 80% 100%)');
+assert.equal(run(`meetingRangeGradient(Date.parse('2026-10-09T09:00:00Z'), ${rangeMembers}, 180)`), 'linear-gradient(to right,var(--availability-working) 0% 100%)');
+assert.equal(run(`meetingRangeGradient(Date.parse('2026-10-09T12:00:00Z'), ${rangeMembers}, 60)`), 'linear-gradient(to right,var(--availability-okay) 0% 100%)');
+assert.equal(run("meetingRangeGradient(0, [], 0)"), 'none');
+assert.equal(run("meetingRangeGradient(Date.parse('2026-10-09T09:00:00Z'), [{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'09:00',workingEnd:'12:00',dndStart:'13:00'}},{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'10:00',workingEnd:'12:00',dndStart:'13:00'}}], 120)"), 'linear-gradient(to right,var(--availability-okay) 0% 50%,var(--availability-working) 50% 100%)');
+assert.equal(run("meetingRangeGradient(Date.parse('2026-10-09T09:00:00Z'), [{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'09:00',workingEnd:'09:07',dndStart:'13:00'}}], 14)"), 'linear-gradient(to right,var(--availability-working) 0% 50%,var(--availability-okay) 50% 100%)');
+console.log('Meeting window colors passed: mixed periods, all participants, exact minute boundaries and empty windows.');

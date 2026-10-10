@@ -4,10 +4,10 @@
 
 World Clock Widget показывает местное время ваших коллег, клиентов и близких, помогает выбрать удобный момент для звонка и напоминает о нём. Всё важное — в небольшом окне на рабочем столе.
 
-### Скачать v1.1.158
+### Скачать v1.1.159
 
-- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.158/WorldClockWidget-Setup-v1.1.158.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
-- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.158/WorldClockWidget-macOS-v1.1.158.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
+- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.159/WorldClockWidget-Setup-v1.1.159.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
+- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.159/WorldClockWidget-macOS-v1.1.159.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
 
 ## Что можно делать
 
@@ -21,12 +21,12 @@ World Clock Widget показывает местное время ваших к�
 
 ## Последнее обновление
 
-В v1.1.158 длительность и переключатель плавно появляются из-под «Удобно всем», а карточки городов расширяются одновременно со скрытием корзины. Настройки и обзор возможностей используют общие отступы и размеры текста. Все встроенные подсказки переписаны: от выбора участников созвона до напоминаний на точное время. Изменения доступны на Windows и Mac.
+В v1.1.159 общее окно справа от ползунка «Удобно всем» раскрашено по графикам участников. Зелёные участки означают, что у всех рабочие часы; жёлтые — связаться можно, но хотя бы один участник вне рабочих часов. Так удобство всего окна видно прямо на шкале. Доступно на Windows и Mac.
 
-[Что нового в v1.1.158 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.158) · [История изменений →](CHANGELOG.md)
+[Что нового в v1.1.159 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.159) · [История изменений →](CHANGELOG.md)
 
 ---
 
-[Исходный код v1.1.158](https://github.com/CandFlip/world-clock-widget/tree/v1.1.158) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
+[Исходный код v1.1.159](https://github.com/CandFlip/world-clock-widget/tree/v1.1.159) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
 
 Каталог крупных городов основан на данных [GeoNames](https://www.geonames.org/) с указанием источника по лицензии CC BY 4.0.
