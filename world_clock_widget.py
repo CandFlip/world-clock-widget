@@ -39,7 +39,7 @@ except ImportError:
 
 
 APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.144"
+APP_VERSION = "v1.1.157"
 APP_DIR_NAME = "WorldClockWidget"
 ROADMAP_URL = "https://world-clock-next.decent-rat-2368.chatgpt.site"
 MIN_WIDGET_HEIGHT = 640
@@ -868,8 +868,8 @@ def format_time_until(target: datetime, now: datetime, language: str = "ru") -> 
         return "Now" if language == "en" else "Сейчас"
     if abs(seconds) < 60:
         if language == "en":
-            return "In < 1 min" if seconds > 0 else "< 1 min ago"
-        return "Через < 1 мин" if seconds > 0 else "< 1 мин назад"
+            return "+ < 1 min" if seconds > 0 else "< 1 min ago"
+        return "+ < 1 мин" if seconds > 0 else "< 1 мин назад"
     # Round up future durations so the label never reports zero minutes early.
     minutes = math.ceil(seconds / 60) if seconds > 0 else int(-seconds // 60)
     hours, minutes = divmod(minutes, 60)
@@ -880,8 +880,8 @@ def format_time_until(target: datetime, now: datetime, language: str = "ru") -> 
         parts.append(f"{minutes} min" if language == "en" else f"{minutes} мин")
     duration = " ".join(parts)
     if language == "en":
-        return f"In {duration}" if seconds > 0 else f"{duration} ago"
-    return f"Через {duration}" if seconds > 0 else f"{duration} назад"
+        return f"+ {duration}" if seconds > 0 else f"{duration} ago"
+    return f"+ {duration}" if seconds > 0 else f"{duration} назад"
 
 
 def get_available_tz_names() -> set[str]:

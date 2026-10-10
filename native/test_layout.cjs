@@ -63,7 +63,7 @@ async function connect() {
     connection = await connect();
     const {send} = connection;
     const url = pathToFileURL(path.join(__dirname, 'ui', 'index.html')).href + '?preview&offset=1';
-    for (const [width, height] of [[360, 640], [390, 720], [430, 720], [430, 500], [900, 550]]) {
+    for (const [width, height] of [[360, 640], [390, 720], [430, 720], [430, 500], [900, 550], [1200,800]]) {
       await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor:1, mobile:false});
       await send('Page.navigate', {url});
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -151,9 +151,15 @@ async function connect() {
         const del = rect('.city-summary>.delete');
         const summary = rect('.city-summary');
         const band = rect('.city-summary .temporal-band');
+        const icon = rect('.city-context');
+        const cityName = rect('.city-name');
+        const cityClockValue = rect('.city-time');
+        const cityDelete = rect('.city-summary>.delete');
+        const baseTextLeft = rect('.base-summary').left + parseFloat(getComputedStyle(document.querySelector('.base-summary')).paddingLeft);
+        const baseTextRight = parseFloat(getComputedStyle(document.querySelector('.base-summary')).paddingRight);
         const contentCenter = (rect('.city-name').top + rect('.offset').bottom) / 2;
         return {width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,
-          cityHeight:cityRect?.height,visibleCards,
+          cityHeight:cityRect?.height,cityTop:cityRect?.top,cardBounds:cards.map(card=>({top:card.getBoundingClientRect().top,bottom:card.getBoundingClientRect().bottom,height:card.getBoundingClientRect().height})),visibleCards,
           actionGap,groupGap,normalGroupGap,deleteCenter:(del.top + del.bottom)/2,contentCenter,
           heroToLabel:label.top-hero.bottom,labelToRail:rail.top-label.bottom,
           heroBottom:hero.bottom,labelTop:label.top,sliderTop:rect('.slider').top,sliderMargin:getComputedStyle(document.querySelector('.slider')).marginTop,
@@ -163,8 +169,11 @@ async function connect() {
           labelLeft:label.left,nowLabelLeft,railLeft:rail.left,heroLeft:hero.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,addLeft:rect('.add').left,
           statusWidths,shiftedStatusWidths,longStatusFits,
           deleteTop:del.top,deleteBottom:del.bottom,deleteRight:del.right,
-          summaryTop:summary.top,summaryRight:summary.right,
-          bandTop:band.top,bandLeft:band.left,bandRight:band.right,summaryLeft:summary.left,
+          summaryTop:summary.top,summaryBottom:summary.bottom,summaryRight:summary.right,
+          bandTop:band.top,bandBottom:band.bottom,iconTop:icon.top,iconBottom:icon.bottom,
+          bandLeft:band.left,bandRight:band.right,summaryLeft:summary.left,
+          cityTextInset:cityName.left-summary.left,baseTextInset:baseTextLeft-rect('.base-summary').left,
+          deleteTextGap:cityDelete.left-cityClockValue.right,baseTextRight,
           fontSizes:[...fontSizes].sort((a,b)=>parseFloat(a)-parseFloat(b)),
           cityHeading:document.querySelector('.cities-title')?.textContent,
           headingFont:getComputedStyle(document.querySelector('.cities-title')).fontSize,
@@ -194,8 +203,12 @@ async function connect() {
       assert.ok(Math.abs(layout.quickTitleLeft - layout.heroLeft) <= 1, `quick heading is not aligned to the main blocks at ${width}x${height}`);
       assert.ok(layout.cityTitleToCard <= 8, `city heading is too far from its cards at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteTop - layout.summaryTop) <= 1, `delete button top gap at ${width}x${height}`);
-      assert.ok(Math.abs(layout.deleteBottom - layout.bandTop) <= 1, `delete button must stop at color band at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteBottom - layout.bandTop) <= 1, `delete button stops at the bottom color band at ${width}x${height}`);
+      assert.ok(Math.abs(layout.bandBottom - layout.summaryBottom) <= 1, `color band should sit at city-card bottom at ${width}x${height}`);
+      assert.ok(layout.iconBottom <= layout.bandTop + 1, `city icon remains above the bottom timeline at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteRight - layout.summaryRight) <= 1, `delete button right gap at ${width}x${height}`);
+      assert.ok(Math.abs(layout.cityTextInset - layout.baseTextInset) <= 1, `city and base left text insets should match at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteTextGap - layout.baseTextRight) <= 1, `city time should match base-card right inset at ${width}x${height}`);
       assert.ok(Math.abs(layout.bandLeft - layout.summaryLeft) <= 1 && Math.abs(layout.bandRight - layout.summaryRight) <= 1,
         `color band must span the card at ${width}x${height}`);
       assert.ok(layout.longStatusFits, `short day-shift status should be fully visible at ${width}x${height}`);
@@ -208,6 +221,78 @@ async function connect() {
       if (height < 520) assert.equal(layout.shellOverflow, 'auto');
       if (width >= 800 && height <= 600) assert.equal(layout.wide, 'flex');
       console.log(`${width}x${height}: ${layout.visibleCards} complete cities, list ${layout.cityHeight}px`);
+      const meetingCheck = await send('Runtime.evaluate', {expression:`(async () => {
+        const RealDate = Date;
+        const fixed = RealDate.parse('2026-10-10T05:45:00Z');
+        window.Date = class extends RealDate { constructor(...args) { super(...(args.length ? args : [fixed])); } static now() { return fixed; } };
+        config.settings.top_clock_mode = 'manual';
+        config.settings.manual_top_timezone = 'Europe/Moscow';
+        config.timezones = ['Europe/Moscow','Asia/Bangkok'];
+        config.cityContext = {'Asia/Bangkok':{availabilityOverride:{okayStart:'07:00',workingStart:'14:00',workingEnd:'18:00',dndStart:'22:00'}}};
+        meetingMode = true;
+        meetingSelected = new Set(config.timezones);
+        document.querySelector('#modal').innerHTML = '';
+        render(); recalculateMeeting();
+        const status = document.querySelector('#meetingStatus');
+        const header = status.parentElement;
+        const switchNode = document.querySelector('#meetingEarlier');
+        if (!switchNode) throw Error('Expected both meeting options');
+        const before = getComputedStyle(switchNode.querySelector('.period-thumb')).transform;
+        switchNode.click();
+        await new Promise(r => setTimeout(r, 100));
+        const during = getComputedStyle(document.querySelector('.period-thumb')).transform;
+        await new Promise(r => setTimeout(r, 350));
+        const end = getComputedStyle(document.querySelector('.period-thumb')).transform;
+        const sunBounds = document.querySelector('.period-switch span:first-of-type svg g').getBBox();
+        const horizonGroup = document.querySelector('.period-switch span:last-of-type svg g');
+        const horizonBounds = horizonGroup.getBBox();
+        const result = {
+          iconBoundsAligned:Math.abs(sunBounds.y-horizonBounds.y)<.01 && Math.abs(sunBounds.height-horizonBounds.height)<.01,
+          visibleSunFraction:horizonGroup.firstElementChild.getBBox().height / 8,
+          statusFits:status.scrollWidth <= status.clientWidth + 1,
+          sameRow:Math.abs(status.getBoundingClientRect().top - header.getBoundingClientRect().top) < 3,
+          checked:document.querySelector('#meetingEarlier').getAttribute('aria-checked'),
+          yellow:status.classList.contains('period-yellow'), before, during, end,
+          startAbsent:!status.querySelector('.meeting-start'),
+          buttonGap:document.querySelector('.meeting-actions').getBoundingClientRect().left - status.getBoundingClientRect().right,
+          neutralIcon:getComputedStyle(status.querySelector('.meeting-period-icon')).color === getComputedStyle(document.querySelector('.city-card .solar-glyph')).color,
+          durationColor:getComputedStyle(document.querySelector('.meeting-duration')).color,
+          yellowColor:getComputedStyle(document.documentElement).getPropertyValue('--availability-okay').trim()
+        };
+        setOffset(meetingOffsetAt(meetingResult.at));
+        result.autoGreen = !meetingShowingEarlier && document.querySelector('#meetingEarlier').getAttribute('aria-checked') === 'false';
+        setOffset(meetingOffsetAt(meetingEarlier.at));
+        result.autoYellow = meetingShowingEarlier && document.querySelector('#meetingEarlier').getAttribute('aria-checked') === 'true';
+        setOffset(16);
+        const message = status.querySelector('.meeting-message');
+        result.noWindow = message?.textContent;
+        result.noWindowMuted = !!message && getComputedStyle(message).color === getComputedStyle(document.querySelector('.city-card .solar-glyph')).color;
+        setOffset(meetingOffsetAt(meetingEarlier.at));
+        window.Date = RealDate;
+        return result;
+      })()`,returnByValue:true,awaitPromise:true});
+      if (meetingCheck.exceptionDetails) throw Error(JSON.stringify(meetingCheck.exceptionDetails));
+      const meeting = meetingCheck.result.value;
+      console.log(`${width}x${height} meeting: ${JSON.stringify(meeting)}`);
+      assert.ok(meeting.statusFits, 'meeting controls should fit without clipping');
+      assert.ok(meeting.sameRow, 'meeting controls should stay in the heading row');
+      assert.ok(meeting.startAbsent, 'start time should only appear in the base clock');
+      assert.ok(meeting.neutralIcon, 'period icon should use the neutral city icon color');
+      assert.ok(meeting.iconBoundsAligned, 'sun and sunrise should have the same vertical bounds');
+      assert.ok(Math.abs(meeting.visibleSunFraction - .975) < .01, 'horizon should be lowered by 15% of the glyph height');
+      assert.ok(Math.abs(meeting.buttonGap - 4) < 1, 'meeting group should stay beside Good for all when widened');
+      assert.equal(meeting.checked, 'true');
+      assert.ok(meeting.yellow);
+      assert.ok(meeting.autoGreen, 'moving into work hours should select the green switch state');
+      assert.ok(meeting.autoYellow, 'moving into contact hours should select the yellow switch state');
+      assert.equal(meeting.noWindow, 'Нет окна');
+      assert.ok(meeting.noWindowMuted, 'no-window text should use the neutral icon color');
+      assert.notEqual(meeting.during, meeting.before, 'switch should start animating');
+      assert.notEqual(meeting.during, meeting.end, 'switch should animate through intermediate positions');
+      if (process.env.LAYOUT_SCREENSHOT_DIR) {
+        const shot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, `period-${width}-${height}.png`), Buffer.from(shot.data,'base64'));
+      }
     }
   } finally {
     try { await connection?.send('Browser.close'); } catch {}

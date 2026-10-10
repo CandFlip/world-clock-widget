@@ -67,9 +67,9 @@ button{color:inherit}
 .quick-section.open{max-height:150px;opacity:1;margin-top:16px;overflow:visible}
 .timeline-actions{height:25px;min-height:25px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .timeline-actions .quick-title{margin:0;font-size:var(--type-caption);white-space:nowrap}
-.meeting-actions{display:flex;align-items:center;gap:6px;margin-left:auto}
+.meeting-actions{display:flex;align-items:center;gap:4px;margin-left:0;flex:none}
 .meeting-toggle,.meeting-copy{height:23px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--muted);cursor:pointer}
-.meeting-toggle{padding:0 8px;font-size:var(--type-caption);font-weight:650;white-space:nowrap}
+.meeting-toggle{padding:0 5px;font-size:var(--type-caption);font-weight:650;white-space:nowrap}
 .meeting-copy{width:25px;padding:3px;display:flex;align-items:center;justify-content:center}
 .meeting-copy svg{width:15px;height:15px}
 .meeting-toggle:hover,.meeting-copy:hover:not(:disabled),.meeting-toggle.active{border-color:var(--accent);color:var(--text)}
@@ -79,6 +79,25 @@ button{color:inherit}
 .meeting-status[hidden]{display:none}
 .meeting-status span{overflow:hidden;text-overflow:ellipsis}
 .meeting-status button{flex:none;padding:1px 3px;border:0;background:transparent;color:var(--accent);cursor:pointer;font-size:var(--type-caption)}
+.timeline-actions{gap:4px}
+.timeline-actions .quick-title{flex:none}
+.timeline-actions .meeting-status{min-width:0;min-height:0;gap:4px;margin-left:auto;overflow:hidden;--period-color:var(--availability-working);color:var(--period-color)}
+.meeting-status.period-yellow{--period-color:var(--availability-okay)}
+.meeting-status .meeting-duration{flex:none;overflow:visible;font-variant-numeric:tabular-nums}
+.meeting-status .meeting-message{color:var(--muted)}
+.meeting-period-icon{display:flex;flex:none;width:15px;height:18px;align-items:center;color:var(--muted)}
+.meeting-period-icon svg,.solar-glyph svg{width:100%;height:100%;display:block}
+.meeting-status .period-switch{position:relative;isolation:isolate;display:flex;align-items:center;justify-content:space-around;width:42px;height:24px;padding:2px;border-radius:14px;background:color-mix(in srgb,var(--availability-working) 22%,var(--surface));color:var(--muted);transition:background 280ms ease;overflow:visible}
+.period-switch .period-thumb{position:absolute;z-index:-1;left:2px;top:2px;width:19px;height:20px;border-radius:50%;background:var(--availability-working);box-shadow:0 1px 3px #0003;transition:transform 320ms cubic-bezier(.22,.8,.28,1),background 280ms ease}
+.period-switch span{width:15px;height:15px;display:flex;transition:color 250ms ease,transform 320ms ease}
+.period-switch svg{width:15px;height:15px}
+.period-switch span:first-of-type{color:#fff;transform:rotate(0deg)}
+.period-switch.earlier{background:color-mix(in srgb,var(--availability-okay) 22%,var(--surface))}
+.period-switch.earlier .period-thumb{transform:translateX(19px);background:var(--availability-okay)}
+.period-switch.earlier span:first-of-type{color:var(--muted);transform:rotate(-35deg)}
+.period-switch.earlier span:last-of-type{color:#fff}
+.period-switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.period-switch,.period-switch .period-thumb,.period-switch span{transition:none}}
 .meeting-mode .clock,.meeting-mode .city-card{cursor:pointer;border-color:transparent}
 .meeting-outline{display:none;position:absolute;inset:0;z-index:5;width:100%;height:100%;overflow:visible;pointer-events:none}
 .meeting-mode .clock:not(.meeting-selected)>.meeting-outline,.meeting-mode .city-card:not(.meeting-selected)>.meeting-outline{display:block}
@@ -116,7 +135,7 @@ button{color:inherit}
 .city-name{font-size:var(--type-subtitle);line-height:22px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .region,.offset,.until{color:var(--muted);font-size:var(--type-caption);line-height:16px}
 .offset{margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.city-clock{min-width:0;display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-end;padding:8px 4px 0;gap:0;overflow:hidden}
+.city-clock{min-width:0;display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-end;padding:8px 12px 0;gap:0;overflow:hidden}
 .city-time{width:100%;display:flex;align-items:baseline;justify-content:flex-end;font-size:var(--type-subtitle);line-height:22px;font-weight:750;text-align:right;white-space:nowrap}
 .city-context{position:absolute;z-index:3;left:50%;bottom:8px;display:inline-flex;align-items:center;color:var(--muted);white-space:nowrap;transform:translateX(-50%);transition:opacity 120ms ease}
 .solar-glyph{display:inline-block;width:16px;color:var(--muted);font-size:var(--type-subtitle);line-height:1;text-align:center}
@@ -405,11 +424,11 @@ button{color:inherit}
 .cities-title{margin-top:var(--space-3);margin-bottom:var(--space-1)}
 .card{min-height:64px;margin-bottom:var(--space-2)}
 .city-summary{min-height:62px;grid-template-columns:minmax(0,1fr) fit-content(50%) 36px}
-.city-main{padding:var(--space-2) var(--space-3);align-self:start}
+.city-main{padding:var(--space-2) var(--space-2);align-self:start}
 .city-name,.city-time{font-size:var(--type-subtitle);line-height:22px}
 .region,.offset,.until{font-size:var(--type-caption);line-height:16px}
 .offset,.until{margin-top:0}
-.city-clock{justify-content:flex-start;padding:var(--space-2) var(--space-1) 0}
+.city-clock{justify-content:flex-start;padding:var(--space-2) var(--space-2) 0}
 .city-context{bottom:var(--space-2)}
 .city-summary>.delete{width:36px}
 .add{height:36px;margin-top:var(--space-1)}

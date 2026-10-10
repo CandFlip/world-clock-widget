@@ -5,6 +5,19 @@ const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const checkUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9A7 7 0 0 1 18 6.8L20 12M4 12l2 5.2A7 7 0 0 0 18.2 15"/></svg>`;
 const downloadUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/></svg>`;
 const meetingOutlineSvg = `<svg class="meeting-outline" aria-hidden="true" focusable="false"><rect x="1" y="1" width="100%" height="100%" rx="8" ry="8"/></svg>`;
+function sunGlyph(horizon = false) {
+  const radius = 4;
+  const upperRays = '<path d="M12 2v3M5 5l2 2M17 7l2-2"/>';
+  const sideRays = '<path d="M2 12h3M19 12h3"/>';
+  // Lower the horizon by 15% of the glyph's 20-unit height; keep the sun and water fixed.
+  const waterline = 12 + radius * .2 + (22 - 2) * .15;
+  const halfChord = Math.sqrt(radius * radius - (waterline - 12) ** 2);
+  const disc = horizon ? `<path d="M${12-halfChord} ${waterline}a${radius} ${radius} 0 1 1 ${halfChord*2} 0"/>` : `<circle cx="12" cy="12" r="${radius}"/>`;
+  const lower = horizon ? `<path d="M2 ${waterline}h20M5 22h14"/>` : '<path d="M12 19v3M17 17l2 2M5 19l2-2"/>';
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><g>${disc}${upperRays}${sideRays}${lower}</g></svg>`;
+}
+const sunIcon = sunGlyph();
+const horizonIcon = sunGlyph(true);
 const host = window.chrome?.webview;
 const send = message => host?.postMessage(message);
 const $ = selector => document.querySelector(selector);
@@ -398,7 +411,7 @@ function until(target, now = Date.now()) {
   const future = difference > 0;
   let minutes = future ? Math.ceil(difference / 60000) : Math.floor(Math.abs(difference) / 60000);
   if (!minutes) return future
-    ? (lang() === 'ru' ? 'Через < 1 мин' : 'In < 1 min')
+    ? (lang() === 'ru' ? '+ < 1 мин' : '+ < 1 min')
     : (lang() === 'ru' ? '< 1 мин назад' : '< 1 min ago');
   const hours = Math.floor(minutes / 60);
   minutes %= 60;
@@ -406,8 +419,8 @@ function until(target, now = Date.now()) {
     hours && (lang() === 'ru' ? `${hours} ч` : `${hours} h`),
     minutes && (lang() === 'ru' ? `${minutes} мин` : `${minutes} min`),
   ].filter(Boolean).join(' ');
-  if (lang() === 'ru') return future ? `Через ${duration}` : `${duration} назад`;
-  return future ? `In ${duration}` : `${duration} ago`;
+  if (lang() === 'ru') return future ? `+ ${duration}` : `${duration} назад`;
+  return future ? `+ ${duration}` : `${duration} ago`;
 }
 
 function intervalValue(value) {
@@ -602,9 +615,15 @@ function meetingStatusText() {
   if (!meetingResult) return lang() === 'ru' ? 'Нет общего времени в ближайшие 24 ч' : 'No shared time in the next 24 h';
   const at = referenceTimestamp(), members = meetingMembers();
   const quality = meetingQuality(at, members, 15), minutes = meetingWindowMinutes(at, members);
-  if (!minutes) return lang() === 'ru' ? 'В выбранное время общего окна нет' : 'No shared window at this time';
+  if (!minutes) return lang() === 'ru' ? 'Нет окна' : 'No window';
   const prefix = quality ? (lang() === 'ru' ? 'Можно связаться' : 'Okay to contact') : (lang() === 'ru' ? 'Все в рабочее время' : 'All within working hours');
   return `${prefix} · ${timeAt(new Date(at), baseZone())} · ${meetingDurationText(minutes)}`;
+}
+
+function syncMeetingChoiceToOffset() {
+  if (!meetingMode || !meetingEarlier || !meetingResult) return;
+  const quality = meetingQuality(referenceTimestamp(), meetingMembers(), 15);
+  if (quality !== null) meetingShowingEarlier = quality > 0;
 }
 
 function updateMeetingUI() {
@@ -616,13 +635,44 @@ function updateMeetingUI() {
   const status = $('#meetingStatus');
   if (status) {
     status.hidden = !meetingMode;
-    if (meetingMode) status.innerHTML = `<span>${esc(meetingStatusText())}</span>${config.timezones.some(key => !meetingSelected.has(key)) ? `<button id="meetingAll" type="button">${lang() === 'ru' ? 'Все' : 'All'}</button>` : ''}${meetingEarlier ? `<button id="meetingEarlier" type="button">${meetingShowingEarlier ? (lang() === 'ru' ? 'Лучшее' : 'Best') : (lang() === 'ru' ? 'Раньше' : 'Earlier')}</button>` : ''}`;
-    $('#meetingAll')?.addEventListener('click', () => { meetingSelected = new Set(config.timezones); recalculateMeeting(); });
-    $('#meetingEarlier')?.addEventListener('click', () => {
+    if (meetingMode) {
+      const at = referenceTimestamp(), members = meetingMembers();
+      const minutes = meetingResult && members.length >= 2 ? meetingWindowMinutes(at, members) : 0;
+      const yellow = !!meetingQuality(at, members, 15);
+      const markup = `${minutes ? `<span class="meeting-period-icon">${yellow ? horizonIcon : sunIcon}</span><span class="meeting-duration">${esc(meetingDurationText(minutes))}</span>` : `<span class="meeting-message">${esc(meetingStatusText())}</span>`}${meetingEarlier ? `<button id="meetingEarlier" class="period-switch" type="button" role="switch"><i class="period-thumb"></i><span>${sunIcon}</span><span>${horizonIcon}</span></button>` : ''}${config.timezones.some(key => !meetingSelected.has(key)) ? `<button id="meetingAll" type="button">${lang() === 'ru' ? 'Все' : 'All'}</button>` : ''}`;
+      // Keep the switch node alive while only the selected state changes, so its thumb can animate.
+      if (status.dataset.markup !== markup) {
+        const previous = $('#meetingEarlier');
+        const focused = previous && document.activeElement === previous;
+        status.innerHTML = markup;
+        if (previous && $('#meetingEarlier')) $('#meetingEarlier').replaceWith(previous);
+        if (focused) previous.focus({preventScroll:true});
+        status.dataset.markup = markup;
+      }
+      status.classList.toggle('period-yellow', yellow);
+      status.title = meetingStatusText();
+      const periodSwitch = $('#meetingEarlier');
+      if (periodSwitch) {
+        periodSwitch.getBoundingClientRect();
+        periodSwitch.classList.toggle('earlier', meetingShowingEarlier);
+        periodSwitch.setAttribute('aria-checked', String(meetingShowingEarlier));
+        periodSwitch.setAttribute('aria-label', lang() === 'ru' ? 'Более раннее время' : 'Earlier time');
+        periodSwitch.title = meetingShowingEarlier ? (lang() === 'ru' ? 'Выбрать лучшее время' : 'Choose the best time') : (lang() === 'ru' ? 'Выбрать более раннее время' : 'Choose an earlier time');
+      }
+      const duration = status.querySelector('.meeting-duration');
+      if (duration) duration.textContent = meetingDurationText(minutes);
+      if (duration && status.scrollWidth > status.clientWidth + 1) {
+        duration.textContent = lang() === 'ru' ? meetingDurationText(minutes).replace(/час(?:а|ов)?/g, 'ч').replace('мин', 'м') : meetingDurationText(minutes).replace('min', 'm');
+      }
+    }
+    const all = $('#meetingAll');
+    if (all) all.onclick = () => { meetingSelected = new Set(config.timezones); recalculateMeeting(); };
+    const periodSwitch = $('#meetingEarlier');
+    if (periodSwitch) periodSwitch.onclick = () => {
       meetingShowingEarlier = !meetingShowingEarlier;
       setOffset(meetingOffsetAt((meetingShowingEarlier ? meetingEarlier : meetingResult).at));
       updateMeetingUI();
-    });
+    };
   }
   $('#baseClock')?.classList.toggle('meeting-selected', meetingSelected.has(baseScheduleKey));
   $$('.city-card').forEach(card => card.classList.toggle('meeting-selected', meetingSelected.has(card.dataset.zone)));
@@ -724,7 +774,8 @@ function contextAccessibility(context) {
   return `${t(context.availability)}; ${t(context.solar)}`;
 }
 
-function solarGlyph(state) { return state === 'daylight' ? '☀' : state === 'twilight' ? '◐' : '☾'; }
+function solarGlyph(state) { return state === 'daylight' ? sunIcon : state === 'twilight' ? horizonIcon : '☾'; }
+function availabilityGlyph(state) { return solarGlyph(state === 'working' ? 'daylight' : state === 'okay' ? 'twilight' : 'night'); }
 
 function temporalBandHtml(selected, key) {
   const context = temporalContext(selected, key);
@@ -799,7 +850,8 @@ function render() {
   const source = config.settings.top_clock_mode === 'auto' ? `<div class="source">${t('system')}</div>` : '';
   const city = config.settings.top_clock_mode === 'auto' ? systemCities() : cityName(config.settings.manual_top_timezone);
   const baseSolar = temporalContext(selected, baseSolarKey()).solar;
-  const baseSolarLabel = t(baseSolar);
+  const baseAvailability = availabilityAt(baseSchedule(), localMinute(selected, baseZone()));
+  const baseSolarLabel = `${t(baseAvailability)}; ${t(baseSolar)}`;
   const shift = shiftCaption(offset);
   const quickClass = offset > 0 || quickAtNowOpen || meetingMode ? 'quick-section open' : 'quick-section';
 
@@ -813,7 +865,7 @@ function render() {
     <section class="hero" style="height:${heroHeight()}px">
        <article class="clock panel ${config.settings.top_clock_mode === 'manual' ? 'manual-base ' : ''}${expandedBase ? 'expanded' : ''}" id="baseClock" data-zone="${esc(zone)}" aria-expanded="${expandedBase}">
         <div class="base-summary">
-          <span class="base-solar solar-glyph" role="img" aria-label="${esc(baseSolarLabel)}">${solarGlyph(baseSolar)}</span>
+          <span class="base-solar solar-glyph" role="img" aria-label="${esc(baseSolarLabel)}">${availabilityGlyph(baseAvailability)}</span>
           ${source}<div class="clock-time">${timeAt(selected, zone)}</div>
           <div class="clock-city">${esc(city)}</div><div class="date">${displayDate(selected, zone)}</div><div class="base-reminders" id="baseReminders"></div>
         </div>
@@ -833,8 +885,7 @@ function render() {
       <div class="marks"><span id="originLabel">${timelineCaption(0)}</span>${[6,12,18,24].map(hours => `<span data-timeline-hour="${hours}">${timelineCaption(hours)}</span>`).join('')}</div>
      </section>
      <section class="${quickClass}" id="quickSection">
-       <div class="timeline-actions"><span class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</span><div class="meeting-actions"><button class="meeting-toggle" id="meetingToggle" type="button" aria-pressed="${meetingMode}">${lang() === 'ru' ? 'Удобно всем' : 'Good for all'}</button><button class="meeting-copy" id="meetingCopy" type="button" aria-label="${lang() === 'ru' ? 'Скопировать время городов' : 'Copy city times'}" title="${lang() === 'ru' ? 'Скопировать время городов' : 'Copy city times'}">${copyIcon}</button></div></div>
-       <div class="meeting-status" id="meetingStatus" role="status" hidden></div>
+       <div class="timeline-actions"><span class="quick-title">${lang() === 'ru' ? 'Напоминание' : 'Reminder'}</span><div class="meeting-status" id="meetingStatus" hidden></div><div class="meeting-actions"><button class="meeting-toggle" id="meetingToggle" type="button" aria-pressed="${meetingMode}">${lang() === 'ru' ? 'Удобно всем' : 'Good for all'}</button><button class="meeting-copy" id="meetingCopy" type="button" aria-label="${lang() === 'ru' ? 'Скопировать время городов' : 'Copy city times'}" title="${lang() === 'ru' ? 'Скопировать время городов' : 'Copy city times'}">${copyIcon}</button></div></div>
        <div class="quick">${config.settings.reminder_intervals.map((minutes, index) =>
         `<button class="chip" draggable="true" data-preset="${index}" data-lead="${minutes}" title="${lang() === 'ru' ? 'Прокрутка: изменить интервал' : 'Scroll to adjust interval'}"><span class="chip-caption">${intervalCaption(minutes)}</span><span class="grip">⋮</span></button>`).join('')}</div>
       <div class="selection-status" id="selectionStatus"></div>
@@ -872,7 +923,7 @@ function renderCities() {
         <div class="city-main"><div class="city-name">${label(key)}</div><div class="offset">${delta >= 0 ? '+' : ''}${delta} ${lang() === 'ru' ? 'ч.' : 'h'} ${t('from')}</div><div class="city-reminders"></div></div>
         <div class="city-clock"><div class="city-time"><span class="clock-value">${timeAt(selected, zone)}</span></div><div class="until">${remaining}${extra ? ` · ${esc(extra)}` : ''}</div></div>
         <button class="delete" data-delete="${index}" aria-label="${lang() === 'ru' ? 'Удалить город' : 'Delete city'}">${trashIcon}</button>
-        <span class="city-context"><span class="solar-glyph context-token" tabindex="0" aria-label="${esc(contextAccessibility(context))}" data-tooltip="${esc(contextAccessibility(context))}">${solarGlyph(context.solar)}</span></span>
+        <span class="city-context"><span class="solar-glyph context-token" tabindex="0" aria-label="${esc(contextAccessibility(context))}" data-tooltip="${esc(contextAccessibility(context))}">${availabilityGlyph(context.availability)}</span></span>
         ${temporalBandHtml(selected, key)}
       </div>
        <div class="card-actions-wrap" aria-hidden="${!expanded}"><div class="card-actions"><button data-city-action="alarm">${t('alarmAction')}</button><button data-city-action="base">${t('makeBase')}</button><button data-city-action="replace">${t('changeCity')}</button><button data-city-action="schedule">${t('nameAndSchedule')}</button></div></div>
@@ -1133,6 +1184,7 @@ function bindMain() {
 function setOffset(value) {
   offset = clamp(Math.round(value * 4) / 4, 0, 24);
   if (pendingLead !== null) pendingLead = null;
+  syncMeetingChoiceToOffset();
   updateQuickVisibility();
   updateDynamic();
   if (meetingMode) updateMeetingUI();
@@ -1185,10 +1237,11 @@ function updateDynamic() {
   clock.textContent = timeAt(selected, zone);
   $('.date').textContent = displayDate(selected, zone);
   const baseSolar = temporalContext(selected, baseSolarKey()).solar;
+  const baseAvailability = availabilityAt(baseSchedule(), localMinute(selected, baseZone()));
   const baseSolarNode = $('.base-solar');
   if (baseSolarNode) {
-    const label = t(baseSolar);
-    baseSolarNode.textContent = solarGlyph(baseSolar);
+    const label = `${t(baseAvailability)}; ${t(baseSolar)}`;
+    baseSolarNode.innerHTML = availabilityGlyph(baseAvailability);
     baseSolarNode.setAttribute('aria-label', label);
   }
   const shift = shiftCaption(offset);
@@ -1208,7 +1261,7 @@ function updateDynamic() {
     card.querySelector('.clock-value').textContent = timeAt(selected, cityZone);
     const contextNode = card.querySelector('.city-context');
     const solarNode = contextNode.querySelector('.solar-glyph');
-    solarNode.textContent = solarGlyph(context.solar);
+    solarNode.innerHTML = availabilityGlyph(context.availability);
     solarNode.setAttribute('aria-label', contextAccessibility(context));
     solarNode.dataset.tooltip = contextAccessibility(context);
     card.querySelector('.offset').textContent = `${delta >= 0 ? '+' : ''}${delta} ${lang() === 'ru' ? 'ч.' : 'h'} ${t('from')}`;
@@ -1456,10 +1509,10 @@ function featureGuideItems() {
     ['timeline','Посмотреть другое время','Передвиньте ползунок или прокрутите колесо над шкалой. Правый клик вернёт «Сейчас».','Сравните время и часы связи во всех городах.'],
     ['cities','Добавить город','Нажмите «+ Добавить город» и найдите город.','Его местное время появится в списке.'],
     ['cityActions','Изменить список городов','Нажмите карточку города. Правый клик сразу откроет её действия.','Замените город, сделайте его базовым или перетащите карточку на другое место.'],
-    ['baseCity','Базовый город','Откройте «Базовый город» в настройках.','Выберите время Windows или другой город для верхних часов.'],
-    ['availability','Понять, когда звонить','Посмотрите цветную полосу на карточке города. Значок рядом показывает день или ночь.','Зелёный — рабочее время. Жёлтый — звонить можно. Тёмный — не беспокоить.'],
+    ['baseCity','Базовый город','Откройте «Базовый город» в настройках.','Выберите системное время или другой город для верхних часов.'],
+    ['availability','Понять, когда звонить','Посмотрите цветную полосу и значок над белой отметкой на карточке города.','Солнце — рабочее время, полусолнце — связаться можно, луна — не беспокоить. Цвета полосы показывают те же периоды.'],
     ['schedule','Имя и график','Нажмите карточку города → «Имя и график».','Задайте имя и часы связи для этого города.'],
-    ['meeting','Найти время для созвона','Нажмите будильник у шкалы, затем «Удобно всем». Выберите города; верхние часы добавьте отдельно.','Виджет покажет удобное время. Если появится «Раньше», проверьте более ранний вариант.'],
+    ['meeting','Найти время для созвона','Нажмите будильник у шкалы, затем «Удобно всем». Выберите города; верхние часы добавьте отдельно.','Рядом с кнопкой видны длительность и переключатель: зелёное солнце — лучшее время, жёлтое полусолнце — более раннее. При движении ползунка переключатель следует за выбранной зоной.'],
     ['meetingCopy','Отправить время городов','Передвиньте ползунок к нужному часу и нажмите значок копирования. В режиме «Удобно всем» сначала выберите участников.','Вставьте в чат даты и местное время городов.'],
     ['reminderNow','Напомнить через несколько минут','Нажмите будильник у шкалы. Выберите карточку с положительным числом минут, затем город или верхние часы.','Напоминание сработает через выбранное число минут.'],
     ['reminderFuture','Напомнить от выбранного времени','Передвиньте ползунок к нужному часу. Выберите карточку с минутами и нажмите город.','Минус — раньше, плюс — позже выбранного часа.'],
@@ -1474,10 +1527,10 @@ function featureGuideItems() {
     ['timeline','View another time','Move the slider or scroll over the time scale. Right-click to return to Now.','Compare the time and contact hours in every city.'],
     ['cities','Add a city','Press “+ Add city” and search.','See its local time in the list.'],
     ['cityActions','Change your city list','Click a city card. Right-click to open its actions directly.','Replace a city, make it the base city, or drag its card to a new position.'],
-    ['baseCity','Base city','Open “Base city” in settings.','Use Windows time or choose another city for the top clock.'],
-    ['availability','Know when to call','Check the colored band on a city card. The nearby icon shows day or night.','Green means work time. Yellow means you can call. Dark means do not disturb.'],
+    ['baseCity','Base city','Open “Base city” in settings.','Use system time or choose another city for the top clock.'],
+    ['availability','Know when to call','Check the colored band and the icon above the white marker on a city card.','The sun means work time, the half-sun means contact is okay, and the moon means do not disturb. The band colors show the same periods.'],
     ['schedule','Name and schedule','Click a city card → “Name and schedule”.','Set a name and contact hours for that city.'],
-    ['meeting','Find a time to call','Press the alarm by the time scale, then “Good for all”. Select cities; add the top clock separately.','The widget shows a good time. If “Earlier” appears, check the earlier option.'],
+    ['meeting','Find a time to call','Press the alarm by the time scale, then “Good for all”. Select cities; add the top clock separately.','The duration and switch appear beside the button: a green sun for the best time, a yellow half-sun for an earlier time. Moving the slider keeps the switch in sync with the selected zone.'],
     ['meetingCopy','Share city times','Move the slider to the time you want and press the copy icon. In “Good for all”, select participants first.','Paste each city’s date and local time into your group chat.'],
     ['reminderNow','Remind me in a few minutes','Press the alarm by the time scale. Select a card with a positive number of minutes, then a city or the top clock.','The reminder rings after the selected number of minutes.'],
     ['reminderFuture','Remind me from a selected time','Move the slider to the time you want. Select a minutes card, then a city.','Minus means before that time. Plus means after it.'],
