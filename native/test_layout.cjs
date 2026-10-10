@@ -62,6 +62,7 @@ async function connect() {
   try {
     connection = await connect();
     const {send} = connection;
+    if (process.env.LAYOUT_REDUCED_MOTION === '1') await send('Emulation.setEmulatedMedia', {features:[{name:'prefers-reduced-motion',value:'reduce'}]});
     const url = pathToFileURL(path.join(__dirname, 'ui', 'index.html')).href + '?preview&offset=1';
     for (const [width, height] of [[360, 640], [390, 720], [430, 720], [430, 500], [900, 550], [1200,800]]) {
       await send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor:1, mobile:false});
@@ -70,7 +71,7 @@ async function connect() {
       await send('Runtime.evaluate', {expression:`
         version = ${JSON.stringify(`v${macVersion} layout preview`)};
         config.timezones = ['Europe/Moscow','Asia/Vladivostok','Asia/Yekaterinburg','Asia/Almaty','America/New_York'];
-        meetingMode = true;
+        meetingMode = false;
         meetingSelected = new Set(config.timezones);
         render();
       `});
@@ -229,19 +230,35 @@ async function connect() {
         config.settings.manual_top_timezone = 'Europe/Moscow';
         config.timezones = ['Europe/Moscow','Asia/Bangkok'];
         config.cityContext = {'Asia/Bangkok':{availabilityOverride:{okayStart:'07:00',workingStart:'14:00',workingEnd:'18:00',dndStart:'22:00'}}};
-        meetingMode = true;
+        meetingMode = false;
         meetingSelected = new Set(config.timezones);
         document.querySelector('#modal').innerHTML = '';
-        render(); recalculateMeeting();
+        render();
+        const summary = document.querySelector('.city-summary');
+        const remove = summary.querySelector('.delete');
+        const initialColumns = getComputedStyle(summary).gridTemplateColumns;
+        toggleMeeting();
         const status = document.querySelector('#meetingStatus');
         const header = status.parentElement;
+        const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        getComputedStyle(summary).gridTemplateColumns;
+        getComputedStyle(remove).opacity;
+        getComputedStyle(status).opacity;
+        const motions = [...summary.getAnimations(), ...remove.getAnimations(), ...status.getAnimations()];
+        for (const motion of motions) { motion.pause(); await motion.ready; motion.currentTime = Number(motion.effect.getTiming().duration) / 2; }
+        const middleColumns = getComputedStyle(summary).gridTemplateColumns;
+        const middleDeleteOpacity = Number(getComputedStyle(remove).opacity);
+        const middleRevealOpacity = Number(getComputedStyle(status).opacity);
+        const durations = motions.map(motion => Number(motion.effect.getTiming().duration));
+        for (const motion of motions) motion.finish();
+        const finalColumns = getComputedStyle(summary).gridTemplateColumns;
+        const reveal = {initialColumns,middleColumns,finalColumns,middleDeleteOpacity,middleRevealOpacity,durations,inert:remove.inert,hiddenOpacity:getComputedStyle(remove).opacity};
         const switchNode = document.querySelector('#meetingEarlier');
         if (!switchNode) throw Error('Expected both meeting options');
         const before = getComputedStyle(switchNode.querySelector('.period-thumb')).transform;
         switchNode.click();
         const thumb = document.querySelector('.period-thumb');
         getComputedStyle(thumb).transform;
-        const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
         const transition = thumb.getAnimations().find(animation => animation.transitionProperty === 'transform');
         if (!reducedMotion && !transition) throw Error('Expected a transform transition for the switch');
         if (transition) {
@@ -261,7 +278,7 @@ async function connect() {
           statusFits:status.scrollWidth <= status.clientWidth + 1,
           sameRow:Math.abs(status.getBoundingClientRect().top - header.getBoundingClientRect().top) < 3,
           checked:document.querySelector('#meetingEarlier').getAttribute('aria-checked'),
-          yellow:status.classList.contains('period-yellow'), before, during, end, reducedMotion,
+          yellow:status.classList.contains('period-yellow'), before, during, end, reducedMotion, reveal,
           startAbsent:!status.querySelector('.meeting-start'),
           buttonGap:document.querySelector('.meeting-actions').getBoundingClientRect().left - status.getBoundingClientRect().right,
           neutralIcon:getComputedStyle(status.querySelector('.meeting-period-icon')).color === getComputedStyle(document.querySelector('.city-card .solar-glyph')).color,
@@ -277,12 +294,31 @@ async function connect() {
         result.noWindow = message?.textContent;
         result.noWindowMuted = !!message && getComputedStyle(message).color === getComputedStyle(document.querySelector('.city-card .solar-glyph')).color;
         setOffset(meetingOffsetAt(meetingEarlier.at));
+        toggleMeeting();
+        getComputedStyle(summary).gridTemplateColumns;
+        const exitMotions = [...summary.getAnimations(), ...remove.getAnimations()];
+        for (const motion of exitMotions) motion.finish();
+        result.exitDeleteRestored = !remove.inert && getComputedStyle(remove).opacity === '1' && getComputedStyle(remove).visibility === 'visible';
+        result.exitColumnRestored = getComputedStyle(summary).gridTemplateColumns.endsWith('36px');
+        toggleMeeting();
+        for (const node of [summary,remove,status]) for (const motion of node.getAnimations()) motion.finish();
         window.Date = RealDate;
         return result;
       })()`,returnByValue:true,awaitPromise:true});
       if (meetingCheck.exceptionDetails) throw Error(JSON.stringify(meetingCheck.exceptionDetails));
       const meeting = meetingCheck.result.value;
       console.log(`${width}x${height} meeting: ${JSON.stringify(meeting)}`);
+      assert.ok(meeting.exitDeleteRestored && meeting.exitColumnRestored, 'exiting meeting mode must restore the delete control and its column');
+      assert.ok(meeting.reveal.inert, 'meeting delete must not accept keyboard input');
+      assert.equal(meeting.reveal.hiddenOpacity, '0');
+      if (!meeting.reducedMotion) {
+        const reveal = meeting.reveal;
+        assert.ok(reveal.middleDeleteOpacity > 0 && reveal.middleDeleteOpacity < 1, 'delete must fade through an intermediate state');
+        assert.ok(reveal.middleRevealOpacity > 0 && reveal.middleRevealOpacity < 1, 'meeting controls must fade through an intermediate state');
+        assert.notEqual(reveal.middleColumns, reveal.initialColumns, 'city content must expand during the fade');
+        assert.notEqual(reveal.middleColumns, reveal.finalColumns, 'city content must not jump directly to full width');
+        assert.ok(reveal.durations.length >= 3 && reveal.durations.filter(duration => duration > 0).every(duration => duration === 220), 'reveal, deletion and expansion must use the same duration');
+      }
       assert.ok(meeting.statusFits, 'meeting controls should fit without clipping');
       assert.ok(meeting.sameRow, 'meeting controls should stay in the heading row');
       assert.ok(meeting.startAbsent, 'start time should only appear in the base clock');
@@ -300,6 +336,27 @@ async function connect() {
         assert.notEqual(meeting.during, meeting.before, 'switch should start animating');
         assert.notEqual(meeting.during, meeting.end, 'switch should animate through intermediate positions');
       }
+      const screensCheck = await send('Runtime.evaluate', {expression:`(() => {
+        const box = selector => document.querySelector(selector).getBoundingClientRect();
+        const frame = box('.shell');
+        const headerHeight = box('.header').height;
+        const inset = getComputedStyle(document.querySelector('.base-summary')).paddingLeft;
+        openSettings();
+        const settings = {frameLeft:box('.modal-root').left,headerHeight:box('.modal-head').height,inset:getComputedStyle(document.querySelector('.row')).paddingLeft,titleSize:getComputedStyle(document.querySelector('.modal-head h2')).fontSize};
+        openFeatureGuide();
+        const help = {inset:getComputedStyle(document.querySelector('.feature-card')).paddingLeft,body:document.querySelector('.feature-guide').textContent};
+        closeModal();
+        return {frameLeft:frame.left,headerHeight,inset,settings,help};
+      })()`, returnByValue:true});
+      if (screensCheck.exceptionDetails) throw Error(JSON.stringify(screensCheck.exceptionDetails));
+      const screens = screensCheck.result.value;
+      assert.equal(screens.settings.frameLeft, screens.frameLeft);
+      assert.equal(screens.settings.headerHeight, screens.headerHeight);
+      assert.equal(screens.settings.inset, screens.inset);
+      assert.equal(screens.help.inset, screens.inset);
+      assert.equal(screens.settings.titleSize, '16px');
+      assert.match(screens.help.body, /Чтобы учесть своё время/);
+      assert.doesNotMatch(screens.help.body, /верхние часы добавьте отдельно/);
       if (process.env.LAYOUT_SCREENSHOT_DIR) {
         const shot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
         fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, `period-${width}-${height}.png`), Buffer.from(shot.data,'base64'));

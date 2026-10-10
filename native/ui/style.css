@@ -1,5 +1,5 @@
 @font-face{font-family:Inter;src:url('Inter-Variable.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
-:root{--bg:#0b0e14;--surface:#161b22;--hover:#1c222b;--border:#30363d;--text:#f0f6fc;--muted:#8b949e;--accent:#7c5cfc;--danger:#f85149;--badge:#211b46;--availability-working:#438b67;--availability-okay:#9a7c42;--availability-dnd:#4a5060;--solar-daylight:#d7b960;--solar-twilight:#7d7099;--solar-night:#28344c;--marker:#fff;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--type-micro:10px;--type-caption:12px;--type-body:14px;--type-subtitle:16px;--type-title:32px;color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif}
+:root{--bg:#0b0e14;--surface:#161b22;--hover:#1c222b;--border:#30363d;--text:#f0f6fc;--muted:#8b949e;--accent:#7c5cfc;--danger:#f85149;--badge:#211b46;--availability-working:#438b67;--availability-okay:#9a7c42;--availability-dnd:#4a5060;--solar-daylight:#d7b960;--solar-twilight:#7d7099;--solar-night:#28344c;--marker:#fff;--motion-duration:220ms;--motion-ease:cubic-bezier(.25,.1,.25,1);--panel-inset:12px;--window-inset:18px;--header-height:40px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--type-micro:10px;--type-caption:12px;--type-body:14px;--type-subtitle:16px;--type-title:32px;color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif}
 *{box-sizing:border-box}
 html,body,#app{height:100%;margin:0;overflow:hidden;background:transparent}
 body{color:var(--text);font-size:var(--type-body);line-height:1.25;user-select:none}
@@ -104,8 +104,8 @@ button{color:inherit}
 .meeting-outline rect{fill:none;stroke:var(--accent);stroke-opacity:.68;stroke-width:1.5;stroke-linecap:round;stroke-dasharray:1 7;x:1px;y:1px;width:calc(100% - 2px);height:calc(100% - 2px);rx:8px;ry:8px;animation:meeting-outline 900ms linear infinite}
 .meeting-mode .clock.meeting-selected,.meeting-mode .city-card.meeting-selected{box-shadow:0 0 0 2px var(--accent);animation:none}
 .meeting-mode .card-actions-wrap{display:none}
-.meeting-mode .city-summary>.delete{display:none}
-.meeting-mode .city-summary{grid-template-columns:minmax(0,1fr) fit-content(50%)}
+.meeting-mode .city-summary>.delete{opacity:0;visibility:hidden;pointer-events:none}
+.meeting-mode .city-summary{grid-template-columns:minmax(0,1fr) fit-content(50%) 0px}
 @keyframes meeting-outline{to{stroke-dashoffset:-8}}
 @media(prefers-reduced-motion:reduce){.quick-chevron-glyph{transition:none}.meeting-outline rect{animation:none}}
 .quick-title,.cities-title{font-weight:700;color:var(--muted);font-size:var(--type-caption);margin:0 0 8px}
@@ -493,3 +493,38 @@ button{color:inherit}
 .city-card{overflow:hidden}
 
 .phone-card{display:grid;gap:12px;padding:4px 0}.phone-status{display:flex;align-items:center;gap:8px;font-weight:700}.phone-status-dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}.phone-status.connected .phone-status-dot{background:#30b56b;box-shadow:0 0 0 4px rgba(48,181,107,.14)}.phone-actions{display:grid;gap:8px}.pair-qr{width:min(220px,80%);aspect-ratio:1;margin:4px auto;background:#fff;border-radius:12px;padding:10px}.pair-code{text-align:center;color:var(--muted);font-size:var(--type-caption)}.sync-note{font-size:var(--type-caption);color:var(--muted);line-height:1.45}.sync-error{color:var(--danger);font-size:var(--type-caption)}.sync-pending{display:inline-block;width:7px;height:7px;border-radius:50%;background:#dca93a;margin-left:5px}
+
+/* Shared screen rhythm and motion, including compact settings and help. */
+.shell,.modal-root{padding:var(--window-inset)}
+.header,.modal-head{height:var(--header-height);min-height:var(--header-height)}
+.header h1,.modal-head h2{font-size:var(--type-subtitle);line-height:22px;font-weight:750}
+.modal-head{gap:var(--space-3)}
+.modal-body{padding-top:var(--space-3)}
+.base-summary,.saved-panel{padding:var(--panel-inset)}
+.base-summary>.base-solar{top:var(--panel-inset);right:var(--panel-inset)}
+.city-main{padding:var(--space-2) var(--panel-inset)}
+.city-clock{padding:var(--space-2) var(--panel-inset) 0}
+.row{padding-inline:var(--panel-inset);gap:var(--space-2);font-size:var(--type-body);line-height:20px}
+.search{padding-inline:var(--panel-inset)}
+.result{padding-left:var(--panel-inset);margin-bottom:var(--space-2);font-size:var(--type-body)}
+.feature-group summary,.feature-card{padding:var(--space-3) var(--panel-inset)}
+.feature-guide{gap:var(--space-3);padding-bottom:var(--space-4)}
+.feature-guide p,.feature-tour-card p,.settings-help,.sync-note{font-size:var(--type-caption);line-height:1.5}
+.feature-guide p{margin-top:var(--space-2)}
+.section{margin:var(--space-4) 0 var(--space-2)}
+.edit-city{margin:var(--space-1) 0 var(--space-3)}
+.group{margin-bottom:var(--space-3)}
+.card-actions{--card-actions-padding:var(--panel-inset)}
+.sound-row{padding:var(--space-1) var(--panel-inset);gap:var(--space-1)}
+.sound-select{padding-inline:0;font-size:var(--type-body)}
+.hotkey-active,.hotkey-preview{padding:var(--space-2) var(--panel-inset)}
+.quick-section{transition:max-height var(--motion-duration) var(--motion-ease),opacity var(--motion-duration) ease,margin var(--motion-duration) var(--motion-ease)}
+.timeline-actions{isolation:isolate}
+.meeting-actions{position:relative;z-index:1;background:var(--bg)}
+.meeting-mode .meeting-status{animation:meeting-reveal var(--motion-duration) var(--motion-ease) both}
+@keyframes meeting-reveal{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.city-summary{transition:grid-template-columns var(--motion-duration) var(--motion-ease)}
+.city-summary>.delete{width:100%;min-width:0;overflow:hidden;transition:opacity var(--motion-duration) ease,visibility 0s,color 160ms ease,background-color 160ms ease}
+.meeting-mode .city-summary>.delete{transition:opacity var(--motion-duration) ease,visibility 0s var(--motion-duration)}
+@media(max-width:759px){:root{--panel-inset:8px;--window-inset:12px;--header-height:36px}}
+@media(prefers-reduced-motion:reduce){.quick-section,.city-summary,.city-summary>.delete{transition:none}.meeting-mode .meeting-status{animation:none}.meeting-outline rect{animation:none}}
