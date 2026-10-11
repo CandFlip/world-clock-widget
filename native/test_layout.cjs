@@ -77,7 +77,8 @@ async function connect() {
       `});
       await new Promise(resolve => setTimeout(resolve, 350));
       const infoCheck = await send('Runtime.evaluate', {expression:`(() => {
-        const fits = node => { const r=node.getBoundingClientRect(); return r.left>=8 && r.top>=8 && r.right<=innerWidth-8 && r.bottom<=innerHeight-8; };
+        const failures=[]; let label='tooltip';
+        const fits = node => { const r=node.getBoundingClientRect(); const ok=r.left>=8 && r.top>=8 && r.right<=innerWidth-8 && r.bottom<=innerHeight-8; if(!ok) failures.push({label,rect:r.toJSON(),viewport:[innerWidth,innerHeight]}); return ok; };
         const button=document.querySelector('#updateButton');
         let pass=true;
         for (const text of ['Скачать обновление v1.1.168','Download update v1.1.168','ДлинноеСообщение'.repeat(100)]) {
@@ -101,9 +102,11 @@ async function connect() {
         for (const language of ['ru','en']) {
           config.settings.language=language;
           for (const item of featureGuideItems()) {
+            label=language+':'+item[0];
             showFeatureInApp(item[0]);
             const card=document.querySelector('.feature-tour-card');
-            pass &&= !!card && fits(card);
+            if(!card) failures.push({label,missing:true});
+            pass = (!!card && fits(card)) && pass;
             stopFeatureTour(); closeModal();
           }
         }
@@ -116,10 +119,10 @@ async function connect() {
         toast('ДлинноеСообщение'.repeat(200));
         pass &&= fits(document.querySelector('#toast'));
         document.querySelector('#toast').classList.remove('show');
-        return pass;
+        return {pass,failures};
       })()`,returnByValue:true});
       if (infoCheck.exceptionDetails) throw Error(JSON.stringify(infoCheck.exceptionDetails));
-      assert.equal(infoCheck.result.value,true, 'information bubbles must fit the viewport');
+      assert.equal(infoCheck.result.value.pass,true, 'information bubbles must fit the viewport: '+JSON.stringify(infoCheck.result.value.failures));
       const reminderCheck = await send('Runtime.evaluate', {expression:`(() => {
         const previous = structuredClone(reminders), oldOffset=offset;
         offset=0; render();
