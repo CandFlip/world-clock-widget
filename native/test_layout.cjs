@@ -93,7 +93,10 @@ async function connect() {
         probe.style.cssText='position:fixed;width:16px;height:16px'; document.body.appendChild(probe);
         for (const [x,y] of [[0,0],[innerWidth-16,0],[0,innerHeight-16],[innerWidth-16,innerHeight-16]]) {
           probe.style.left=x+'px'; probe.style.top=y+'px'; probe.focus(); showContextTooltip(probe);
-          pass &&= fits(document.querySelector('#contextTooltip'));
+          const fractionalTip=document.querySelector('#contextTooltip');
+          fractionalTip.style.width='85.328125px'; fractionalTip.style.height='27.328125px';
+          placeInfoTooltip(fractionalTip,probe);
+          pass &&= fits(fractionalTip);
           bindReminderTooltip(probe,[reminders.entries[0]]); probe.onfocus();
           pass &&= fits(document.querySelector('#reminderTooltip')); hideReminderTooltip();
         }

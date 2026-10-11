@@ -2395,7 +2395,7 @@ function checkDue() {
 // Place body-level information bubbles inside the WebView, including edge anchors.
 function placeInfoTooltip(popup, anchor) {
   const rect = anchor.getBoundingClientRect();
-  const width = popup.offsetWidth, height = popup.offsetHeight;
+  const {width, height} = popup.getBoundingClientRect();
   popup.style.left = `${clamp(rect.left + rect.width / 2 - width / 2, 8, Math.max(8, innerWidth - width - 8))}px`;
   const above = rect.top - height - 7;
   const top = above >= 8 ? above : rect.bottom + 7;
