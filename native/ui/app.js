@@ -1,6 +1,6 @@
 const trashIcon = `<svg class="trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><g class="trash-lid"><path d="M4 6h16M9 6V4h6v2"/></g><path d="M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>`;
 const quickAlarmIcon = `<svg class="quick-alarm-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M5.5 3.5 2.5 6.5M18.5 3.5l3 3M7 20l-1.5 2M17 20l1.5 2"/></svg>`;
-const cityReminderIcon = `<svg class="city-reminder-glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>`;
+const cityReminderIcon = `<svg class="city-reminder-glyph" viewBox="0 0 14 14" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" aria-hidden="true" focusable="false"><path class="alarm-bells" d="M.5 3A2.5 2.5 0 0 1 3 .5L4 1.5 1.5 4ZM11 .5A2.5 2.5 0 0 1 13.5 3L12.5 4 10 1.5Z"/><circle cx="7" cy="8" r="5.5"/><path class="alarm-hands" d="M7 4V8H11" fill="none" stroke="#0b0e14" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const quickChevronIcon = `<svg class="quick-chevron-glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 6 5 5 5-5"/></svg>`;
 const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg>`;
 const checkUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9A7 7 0 0 1 18 6.8L20 12M4 12l2 5.2A7 7 0 0 0 18.2 15"/></svg>`;
@@ -895,6 +895,7 @@ function scheduleBackgroundTick() {
 }
 
 function render() {
+  hideContextTooltip();
   hideReminderTooltip();
   liveOffset = null;
   normalize();
@@ -1551,6 +1552,7 @@ function createReminder(zone, lead, city, options = {}) {
 }
 
 function modal(title, body, onBack = closeModal) {
+  hideContextTooltip();
   hideReminderTooltip();
   if (capturingHotkey) send('endHotkeyCapture');
   detailId = null; capturingHotkey = false; closeNamePopover();
@@ -1610,7 +1612,7 @@ function featureGuideItems() {
   [
     "meeting",
     "Найти время для созвона",
-    "Нажмите значок будильника справа над шкалой, затем «Удобно всем». Города из списка уже участвуют в подборе. Нажимайте их карточки, чтобы исключать или возвращать участников. Чтобы учесть своё время, нажмите карточку с большими часами вверху.",
+    "Нажмите значок напоминания справа над шкалой, затем «Удобно всем». Города из списка уже участвуют в подборе. Нажимайте их карточки, чтобы исключать или возвращать участников. Чтобы учесть своё время, нажмите карточку с большими часами вверху.",
     "Виджет выберет общее время на ближайшие 24 часа. Рядом с кнопкой появится длительность окна. Зелёное солнце выбирает лучшее время; жёлтое солнце с горизонтом — более раннее допустимое, если оно есть. Ползунок тоже меняет выбор. Участок шкалы справа от него показывает общее окно: зелёный — у всех рабочие часы, жёлтый — хотя бы у одного допустимое время связи. «Нет окна» означает, что в выбранный момент общего времени нет. Нажмите «Удобно всем» ещё раз, чтобы выйти."
   ],
   [
@@ -1622,7 +1624,7 @@ function featureGuideItems() {
   [
     "reminderNow",
     "Напомнить через несколько минут",
-    "Нажмите будильник справа над шкалой. Нажмите карточку с «+» и числом минут, затем карточку нужного города или большие часы вверху.",
+    "Нажмите значок напоминания справа над шкалой. Нажмите карточку с «+» и числом минут, затем карточку нужного города или большие часы вверху.",
     "Напоминание сработает через указанное число минут от текущего момента."
   ],
   [
@@ -1635,7 +1637,7 @@ function featureGuideItems() {
     "reminderScroll",
     "Изменить быстрый интервал",
     "Наведите указатель на карточку с минутами под шкалой и прокрутите колесо мыши.",
-    "Число минут изменится и сохранится. Затем нажмите эту карточку и выберите город для напоминания."
+    "Прокрутка вверх увеличивает интервал, вниз — уменьшает, включая отрицательные значения и переход через ноль. Значение сохранится; нажмите карточку и выберите город."
   ],
   [
     "reminderDrag",
@@ -1648,6 +1650,12 @@ function featureGuideItems() {
     "Указать точную дату и время",
     "Нажмите карточку города или большие часы → «Напоминание». Выберите дату и время в открывшемся окне, затем сохраните.",
     "Время задаётся по часам выбранного города. По желанию добавьте название, ежедневный повтор и отдельный звук."
+  ],
+  [
+    "reminderTrack",
+    "Прочитать напоминания на шкале",
+    "Значок напоминания стоит прямо на шкале города в момент срабатывания. Наведите курсор, чтобы увидеть время и название; нажмите, чтобы открыть список напоминаний этого города.",
+    "Близкие значки объединяются со счётчиком: подсказка перечисляет все напоминания группы. Числа на концах шкалы показывают напоминания за её левой или правой границей; их подсказки тоже содержат список. Белая отметка под солнцем или луной показывает выбранное время."
   ],
   [
     "reminderManage",
@@ -1671,7 +1679,7 @@ function featureGuideItems() {
     "updates",
     "Проверить обновления",
     "Нажмите значок обновления рядом с номером версии внизу окна. Сам номер версии открывает этот обзор возможностей.",
-    "Если доступна новая версия, виджет предложит скачать её установщик."
+    "Если доступна новая версия, виджет предложит скачать её. В Windows установщик запускается после проверки контрольной суммы; на Mac откроется загрузка DMG в браузере."
   ]
 ] : [
   [
@@ -1713,7 +1721,7 @@ function featureGuideItems() {
   [
     "meeting",
     "Find a time to call",
-    "Press the alarm icon above the right end of the scale, then “Good for all”. Listed cities are included automatically. Click their cards to exclude or include them. To include your own time, click the large clock card at the top.",
+    "Press the reminder icon above the right end of the scale, then “Good for all”. Listed cities are included automatically. Click their cards to exclude or include them. To include your own time, click the large clock card at the top.",
     "The widget finds a shared time within the next 24 hours and shows its duration beside the button. A green sun chooses the best time; a yellow sun on the horizon chooses an earlier acceptable time when available. Moving the slider also changes this choice. The shared window to its right is green when everyone is working and yellow when someone is in acceptable contact hours. “No window” means no shared time at that moment. Press “Good for all” again to exit."
   ],
   [
@@ -1725,7 +1733,7 @@ function featureGuideItems() {
   [
     "reminderNow",
     "Remind me in a few minutes",
-    "Press the alarm above the right end of the scale. Click a card with “+” and a number of minutes, then a city card or the large clock.",
+    "Press the reminder icon above the right end of the scale. Click a card with “+” and a number of minutes, then a city card or the large clock.",
     "The reminder rings that many minutes from now."
   ],
   [
@@ -1738,7 +1746,7 @@ function featureGuideItems() {
     "reminderScroll",
     "Change a quick interval",
     "Hover over a minutes card below the scale and scroll the mouse wheel.",
-    "The number changes and is saved. Click that card, then choose a city for the reminder."
+    "Scroll up to increase the interval, down to decrease it, including negative values and crossing zero. The value is saved; click the card, then choose a city."
   ],
   [
     "reminderDrag",
@@ -1751,6 +1759,12 @@ function featureGuideItems() {
     "Choose an exact date and time",
     "Click a city card or the large clock → “Reminder”. Choose a date and time, then save.",
     "The time uses the selected city’s clock. Optionally add a title, daily repeat, or separate sound."
+  ],
+  [
+    "reminderTrack",
+    "Read reminders on the timeline",
+    "A reminder icon sits on the city timeline at its scheduled time. Hover to see its time and title; click to open that city’s reminder list.",
+    "Nearby icons merge with a count; the tooltip lists every reminder in the group. Counts at the ends show reminders before or after the visible range and also have list tooltips. The white marker below the sun or moon shows the selected time."
   ],
   [
     "reminderManage",
@@ -1774,7 +1788,7 @@ function featureGuideItems() {
     "updates",
     "Check for updates",
     "Press the update icon beside the version at the bottom. Clicking the version itself opens this feature guide.",
-    "When a new version is available, the widget offers its installer."
+    "When a new version is available, the widget offers a download. Windows verifies the installer checksum before starting it; Mac opens the DMG download in your browser."
   ]
 ];
 }
@@ -1785,12 +1799,12 @@ function openFeatureGuide() {
   const groups = ru ? [
     ['Время и города', ['timeline','cities','cityActions','baseCity','availability','schedule']],
     ['Созвоны', ['meeting','meetingCopy']],
-    ['Напоминания', ['reminderNow','reminderFuture','reminderScroll','reminderDrag','reminderExact','reminderManage','reminderPrefs']],
+    ['Напоминания', ['reminderNow','reminderFuture','reminderScroll','reminderDrag','reminderExact','reminderTrack','reminderManage','reminderPrefs']],
     ['Виджет', ['settings','updates']]
   ] : [
     ['Time and cities', ['timeline','cities','cityActions','baseCity','availability','schedule']],
     ['Calls', ['meeting','meetingCopy']],
-    ['Reminders', ['reminderNow','reminderFuture','reminderScroll','reminderDrag','reminderExact','reminderManage','reminderPrefs']],
+    ['Reminders', ['reminderNow','reminderFuture','reminderScroll','reminderDrag','reminderExact','reminderTrack','reminderManage','reminderPrefs']],
     ['Widget', ['settings','updates']]
   ];
   const items = new Map(featureGuideItems().map(item => [item[0], item]));
@@ -1826,6 +1840,7 @@ function showFeatureInApp(id) {
     if (config.timezones.length) { expandedCityKey = config.timezones[0]; applyExpandedCityState(); selector = '[data-city-action=alarm]'; }
     else { expandedBase = true; applyExpandedBaseState(); selector = '[data-base-action=alarm]'; }
   }
+  else if (id === 'reminderTrack') selector = config.timezones.length ? '.city-card .city-alarm-track' : '#baseClock';
   else if (id === 'reminderManage') selector = reminders.entries.length ? '.saved-card' : '#savedHeading';
   else if (id === 'reminderPrefs') { openSettings(); selector = '#intervals'; }
   else if (id === 'settings') { openSettings(); selector = '#theme'; }
@@ -2376,6 +2391,59 @@ function checkDue() {
     alertId = null; saveReminders(); closeModal(); renderAlarms();
   };
 }
+
+// Place body-level information bubbles inside the WebView, including edge anchors.
+function placeInfoTooltip(popup, anchor) {
+  const rect = anchor.getBoundingClientRect();
+  const width = popup.offsetWidth, height = popup.offsetHeight;
+  popup.style.left = `${clamp(rect.left + rect.width / 2 - width / 2, 8, Math.max(8, innerWidth - width - 8))}px`;
+  const above = rect.top - height - 7;
+  const top = above >= 8 ? above : rect.bottom + 7;
+  popup.style.top = `${clamp(top, 8, Math.max(8, innerHeight - height - 8))}px`;
+}
+
+function hideContextTooltip() {
+  const popup = document.querySelector('#contextTooltip');
+  if (!popup) return;
+  document.querySelectorAll('[aria-describedby="contextTooltip"]').forEach(node => node.removeAttribute('aria-describedby'));
+  popup.remove?.();
+}
+
+function showContextTooltip(anchor) {
+  hideContextTooltip();
+  if (!anchor?.dataset.tooltip) return;
+  const popup = document.createElement('div');
+  popup.id = 'contextTooltip'; popup.className = 'context-tooltip';
+  popup.setAttribute('role', 'tooltip');
+  popup.textContent = anchor.dataset.tooltip;
+  document.body.appendChild(popup);
+  anchor.setAttribute('aria-describedby', popup.id);
+  placeInfoTooltip(popup, anchor);
+}
+
+document.addEventListener('pointerover', event => {
+  const anchor = event.target.closest?.('.context-token[data-tooltip]');
+  if (anchor && !anchor.contains(event.relatedTarget)) showContextTooltip(anchor);
+});
+document.addEventListener('focusin', event => {
+  const anchor = event.target.closest?.('.context-token[data-tooltip]');
+  if (anchor) showContextTooltip(anchor);
+});
+document.addEventListener('pointerout', event => {
+  const anchor = event.target.closest?.('.context-token[data-tooltip]');
+  if (anchor && !anchor.contains(event.relatedTarget)) hideContextTooltip();
+});
+document.addEventListener('focusout', hideContextTooltip);
+document.addEventListener('scroll', hideContextTooltip, true);
+window.addEventListener?.('resize', () => {
+  hideContextTooltip(); hideReminderTooltip();
+  const popup = document.querySelector('.name-popover');
+  if (popup) {
+    const rect = popup.getBoundingClientRect();
+    popup.style.left = `${clamp(rect.left, 8, Math.max(8, innerWidth - popup.offsetWidth - 8))}px`;
+    popup.style.top = `${clamp(rect.top, 8, Math.max(8, innerHeight - popup.offsetHeight - 8))}px`;
+  }
+});
 
 function toast(message) {
   const element = $('#toast');

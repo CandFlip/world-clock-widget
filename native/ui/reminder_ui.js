@@ -56,31 +56,17 @@ function cityAlarmLayout(entries, zone, selected, width) {
     else if (position > 100) right.push(entry);
     else marks.push({entry, position, x:position * width / 100});
   }
-  const badgeWidth = entries => Math.max(16, String(entries.length).length*6+6);
-  const min = left.length ? 8+badgeWidth(left)+10 : 10;
-  const max = Math.max(min, width-(right.length ? 8+badgeWidth(right)+10 : 10));
-  const centre = width / 2;
-  // Reserve the sun's hit area; all nearby alarms share one displaced button.
-  const buttonX = x => {
-    x = clamp(x, min, max);
-    if (Math.abs(x - centre) < 18.8) {
-      const left=centre-18.8, right=centre+18.8;
-      x = x < centre && left >= min || right > max ? left : right;
-      x = clamp(x,min,max);
-    }
-    return x;
-  };
-  const groups = [];
+  // Merge runs of 12px icons with less than 2px edge-to-edge clearance.
+  // Keep the representative at the earliest actual alarm, without sun avoidance.
+  const groups = [], iconWidth = 12, minimumGap = 2;
+  let previous;
   for (const mark of marks.sort((a,b) => a.x-b.x)) {
-    const x = buttonX(mark.x);
-    let group = groups.find(group => Math.abs(group.x-x) < 18);
-    // Prefer a small icon displacement over merging alarms hours apart.
-    if (group && Math.abs(group.rawX-mark.x) >= 18 && group.x+18 <= max) {
-      groups.push({x:group.x+18, rawX:mark.x, entries:[mark.entry]});
-      continue;
+    let group = groups[groups.length-1];
+    if (!group || mark.x-previous.x >= iconWidth + minimumGap - 1e-7) {
+      group = {x:mark.x, rawX:mark.x, entries:[]}; groups.push(group);
     }
-    if (!group) { group = {x, rawX:mark.x, entries:[]}; groups.push(group); }
     group.entries.push(mark.entry);
+    previous = mark;
   }
   return {marks, groups, left, right};
 }
@@ -94,7 +80,8 @@ function reminderInfoLabel(entry) {
 }
 
 function reminderTooltipText(entries) {
-  return entries.map(entry => `${reminderInfoLabel(entry)}${entry.title ? ` · ${entry.title}` : ''}`).join('\n');
+  const heading = entries.length > 1 ? (lang() === 'ru' ? `Напоминаний: ${entries.length}` : `Reminders: ${entries.length}`) + '\n' : '';
+  return heading + entries.map(entry => `${reminderInfoLabel(entry)}${entry.title ? ` · ${entry.title}` : ''}`).join('\n');
 }
 
 function hideReminderTooltip() { document.querySelector('#reminderTooltip')?.remove?.(); }
@@ -108,9 +95,7 @@ function bindReminderTooltip(button, entries) {
     popup.textContent = reminderTooltipText(entries);
     document.body.appendChild(popup);
     button.setAttribute('aria-describedby', popup.id);
-    const rect = button.getBoundingClientRect();
-    popup.style.left = `${clamp(rect.left + rect.width/2 - popup.offsetWidth/2, 8, window.innerWidth-popup.offsetWidth-8)}px`;
-    popup.style.top = `${Math.max(8, rect.top-popup.offsetHeight-8)}px`;
+    placeInfoTooltip(popup, button);
   };
   button.onmouseleave = button.onblur = () => { hideReminderTooltip(); button.removeAttribute('aria-describedby'); };
 }
@@ -145,26 +130,16 @@ function renderCityAlarmTrack(card, entries) {
     }));
     cityAlarmResizeObserver.observe(root);
   }
-  // The 9.6px dial preserves the 4px gap above the timeline.
+  // Filled clock faces sit at the exact time, centred on the 7px band.
   const layout = cityAlarmLayout(entries, zoneOf(card.dataset.zone), new Date(referenceTimestamp()), width);
   const allIds = entries.map(entry => entry.id);
-  const markup = layout.marks.map(mark => {
-    const group=layout.groups.find(group=>group.entries.includes(mark.entry));
-    const link=`<i class="city-alarm-link" style="left:${Math.min(group.x,mark.x)}px;width:${Math.abs(group.x-mark.x)}px"></i>`;
-    return `${link}<i class="city-alarm-tick" style="left:${mark.position}%"></i>`;
-  }).join('') +
+  const markup =
     layout.groups.map((group,index) => `<button class="city-alarm-pin" data-alarm-group="${index}" style="left:${group.x}px" aria-label="${esc(reminderTooltipText(group.entries))}">${cityReminderIcon}${group.entries.length > 1 ? `<small>${group.entries.length}</small>` : ''}</button>`).join('') +
     ['left','right'].map(side => layout[side].length ? `<button class="city-alarm-edge city-alarm-${side}" data-alarm-side="${side}" aria-label="${esc(`${lang()==='ru' ? (side==='left'?'Напоминания слева от шкалы':'Напоминания справа от шкалы') : (side==='left'?'Reminders before the visible range':'Reminders after the visible range')}: ${layout[side].length}. ${reminderTooltipText(layout[side])}`)}">${layout[side].length}</button>` : '').join('');
   // Keep hover and keyboard focus stable while the clock ticks.
   const signature=JSON.stringify([entries,entries.map(reminderInfoLabel),layout.groups.map(group=>group.entries.map(entry=>entry.id)),layout.left.map(entry=>entry.id),layout.right.map(entry=>entry.id),lang()]);
   if (root.alarmTrackSignature === signature) {
-    const ticks=root.querySelectorAll('.city-alarm-tick'), links=root.querySelectorAll('.city-alarm-link'), pins=root.querySelectorAll('.city-alarm-pin');
-    layout.marks.forEach((mark,index)=>{
-      const group=layout.groups.find(group=>group.entries.includes(mark.entry));
-      ticks[index].style.left=`${mark.position}%`;
-      links[index].style.left=`${Math.min(group.x,mark.x)}px`;
-      links[index].style.width=`${Math.abs(group.x-mark.x)}px`;
-    });
+    const pins=root.querySelectorAll('.city-alarm-pin');
     layout.groups.forEach((group,index)=>{pins[index].style.left=`${group.x}px`;});
     return;
   }

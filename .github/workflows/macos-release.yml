@@ -1,4 +1,4 @@
-name: Build and publish macOS beta
+name: Build cross-platform release draft
 
 on:
   workflow_dispatch:
@@ -74,4 +74,5 @@ jobs:
             release/WorldClockWidget-macOS-*.dmg
             release/WorldClockWidget-Setup-${{ github.ref_name }}.exe
           fail_on_unmatched_files: true
-          make_latest: true
+          draft: true
+          make_latest: false

@@ -11,19 +11,30 @@ vm.runInContext(fs.readFileSync(__dirname + '/ui/reminder_ui.js', 'utf8'), conte
 vm.runInContext(fs.readFileSync(__dirname + '/ui/app.js', 'utf8'), context);
 const run = script => vm.runInContext(script, context);
 run("config.settings.time_format='24'");
-// One-minute / five-minute alarms share a hit target away from the sun.
+// Overlapping icons cluster, with a 2px edge gap; the sun never displaces them.
 run(`const alarmNow = new Date('2026-10-11T06:00:00Z');
  const nearbyAlarms = [1,5,10,180].map((minutes,i) => ({id:'near'+i,alarm:alarmNow.getTime()/1000+minutes*60,state:'pending',zone:'Asia/Vladivostok'}));
  const tomorrowAlarm = {id:'tomorrow',alarm:alarmNow.getTime()/1000+86400,state:'pending',zone:'Asia/Vladivostok'};
  const alarmLayout = cityAlarmLayout([...nearbyAlarms,tomorrowAlarm], 'Asia/Vladivostok', alarmNow, 320, alarmNow);`);
-assert.ok(run('alarmLayout.groups[0].entries.length') >= 3);
+assert.equal(run('alarmLayout.groups.length'),2);
+assert.equal(run('alarmLayout.groups[0].entries.length'),3);
+assert.ok(run('alarmLayout.groups.every(group => group.x===group.rawX)'));
+assert.equal(run("cityAlarmLayout([{alarm:alarmNow.getTime()/1000}], 'Asia/Vladivostok',alarmNow,320).groups[0].x"),160);
+assert.deepEqual(Array.from(run('edgeLayoutPositions = cityAlarmLayout([-12,12].map(h=>({alarm:alarmNow.getTime()/1000+h*3600})),"Asia/Vladivostok",alarmNow,320).groups.map(g=>g.x)')), [0,320]);
+assert.equal(run("cityAlarmLayout([nearbyAlarms[0],{...nearbyAlarms[0],id:'same-time'}], 'Asia/Vladivostok',alarmNow,320).groups[0].entries.length"),2);
+// Boundary, dense chains, resizing and full group tooltip.
+run(`const thresholdAlarms = [0,13.99,27.98,41.98].map((x,i)=>({id:'threshold'+i,alarm:alarmNow.getTime()/1000+(x-50)*864,zone:'Asia/Vladivostok'}));`);
+assert.deepEqual(Array.from(run("cityAlarmLayout(thresholdAlarms,'Asia/Vladivostok',alarmNow,100).groups.map(g=>g.entries.length)")),[3,1]);
+assert.deepEqual(Array.from(run("cityAlarmLayout(thresholdAlarms,'Asia/Vladivostok',alarmNow,200).groups.map(g=>g.entries.length)")),[1,1,1,1]);
+assert.match(run('reminderTooltipText(nearbyAlarms.slice(0,3))'),/^Напоминаний: 3\n/);
+assert.ok(run('nearbyAlarms.slice(0,3).every(e=>reminderTooltipText(nearbyAlarms.slice(0,3)).includes(timeAt(new Date(e.alarm*1000),e.zone)))'));
 assert.equal(run('alarmLayout.right[0].id'),'tomorrow');
-assert.ok(run('alarmLayout.groups.every(group => Math.abs(group.x-160)>=18)'));
+
 assert.ok(Math.abs(run('alarmLayout.marks[0].position')-(50+1/14.4))<1e-10);
 assert.ok(Math.abs(run('alarmLayout.marks[1].position')-(50+5/14.4))<1e-10);
 assert.equal(run("cityAlarmLayout([tomorrowAlarm], 'Asia/Vladivostok', new Date(tomorrowAlarm.alarm*1000),320,alarmNow).marks.length"),1);
 assert.equal(run("cityAlarmLayout([{alarm:Date.parse('2026-10-11T16:00:00Z')/1000}], 'Asia/Vladivostok', alarmNow,320,alarmNow).marks.length"),1);
-assert.ok(run("reminderTooltipText(nearbyAlarms.slice(0,2)).includes('Сегодня')"));
+assert.ok(run("reminderTooltipText(nearbyAlarms.slice(0,2).map(entry => ({...entry,alarm:Date.now()/1000}))).includes('Сегодня')"));
 run(`const edgeAlarms=[-13,-12,0,12,13].map((hour,i)=>({id:'edge'+i,alarm:alarmNow.getTime()/1000+hour*3600})); const edgeLayout=cityAlarmLayout(edgeAlarms,'Asia/Vladivostok',alarmNow,320);`);
 assert.equal(run('edgeLayout.left.length'),1);
 assert.equal(run('edgeLayout.right.length'),1);
@@ -156,7 +167,6 @@ assert.ok(css.includes('.temporal-marker{position:absolute;z-index:2;top:0;botto
 assert.ok(css.includes('left:calc(-50% - var(--temporal-marker))'));
 assert.ok(css.includes('.temporal-band{position:absolute;z-index:2;left:0;right:0'));
 assert.ok(css.includes('.city-context{position:absolute;z-index:3;left:50%;bottom:8px'));
-assert.ok(css.includes('.context-token:hover::after,.context-token:focus-visible::after'));
 assert.ok(css.includes('grid-template-rows:0fr'));
 assert.ok(css.includes('.expanded>.card-actions-wrap{grid-template-rows:1fr'));
 assert.ok(css.includes('.card-actions{--card-actions-padding:10px'));
@@ -460,10 +470,9 @@ assert.equal(run("newerVersion('v1.1.128', 'v1.1.129')"), false);
 assert.equal(run("newerVersion('invalid', 'v1.1.129')"), false);
 assert.match(appSource, /id="versionButton"/);
 assert.match(appSource, /id="updateButton"/);
-assert.match(css, /\.update-button::after\{white-space:nowrap/);
 console.log('Feature entry and icon update control checks passed.');
-assert.equal(run('featureGuideItems().length'), 17);
-assert.equal(run('new Set(featureGuideItems().map(item => item[0])).size'), 17);
+assert.equal(run('featureGuideItems().length'), 18);
+assert.equal(run('new Set(featureGuideItems().map(item => item[0])).size'), 18);
 assert.ok(run("featureGuideItems().some(item => item[0] === 'reminderNow')"));
 assert.ok(run("featureGuideItems().some(item => item[0] === 'reminderFuture')"));
 assert.ok(run("featureGuideItems().some(item => item[0] === 'reminderDrag')"));
@@ -473,7 +482,7 @@ run('modal=(title,body)=>{window.featureGuideBody=body}');
 run('openFeatureGuide()');
 assert.match(context.window.featureGuideBody, /<details class="feature-group"/);
 assert.match(context.window.featureGuideBody, /Показать в интерфейсе/);
-assert.equal((context.window.featureGuideBody.match(/data-feature=/g) || []).length, 17);
+assert.equal((context.window.featureGuideBody.match(/data-feature=/g) || []).length, 18);
 assert.doesNotMatch(context.window.featureGuideBody, /feature-preview/);
 assert.doesNotMatch(css, /\.feature-preview/);
 assert.doesNotMatch(context.window.featureGuideBody, /feature-intro[^>]*style=.*border/);
