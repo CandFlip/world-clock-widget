@@ -244,7 +244,7 @@ assert.equal(run('capturedBaseAlarm.zone'), 'America/New_York');
 assert.equal(run('capturedBaseAlarm.source_city_id'), 'America/New_York');
 run("config.timezones=['A','B']; config.cityContext={A:{availabilityOverride:{okayStart:'10:00',workingStart:'12:00',workingEnd:'20:00',dndStart:'01:00'}}}");
 assert.equal(run("replaceCityAt(0,'C')"), true);
-assert.equal(run("config.timezones.join()"), 'C,B');
+assert.equal(run("config.timezones.map(catalogKey).join()"), 'C,B');
 assert.equal(run("Boolean(config.cityContext.A)"), false);
 assert.equal(run("replaceCityAt(0,'B')"), true);
 assert.equal(run("catalogKey(config.timezones[0])"), 'B');
@@ -566,3 +566,9 @@ assert.equal(run('scheduleFor(config.timezones[0]).workingStart'),'11:00');
 const persistedKeys=run('JSON.stringify(config.timezones)'); run('normalize()'); assert.equal(run('JSON.stringify(config.timezones)'),persistedKeys);
 run('config.timezones.shift(); normalize()'); assert.equal(run('cityReminders(config.timezones[0]).length'),0);
 console.log('Duplicate city records: isolated alarms/names/contact hours, restart, reorder, removal, legacy migration and stable IDs passed.');
+
+run(`const retired=config.timezones[0]; const fresh=createCityKey(retired); config.timezones.push(fresh);`);
+assert.notEqual(run('retired'),run('fresh'));
+assert.equal(run('catalogKey(retired)'),run('catalogKey(fresh)'));
+assert.equal(run('cityReminders(fresh).length'),0);
+console.log('Re-adding a removed city creates a fresh record and never inherits its former alarms.');

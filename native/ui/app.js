@@ -308,8 +308,12 @@ function item(key) {
   };
 }
 
+function createCityKey(key) {
+  return `${catalogKey(key)}~~${crypto.randomUUID()}`;
+}
+
 function uniqueCityKey(key, used = config.timezones) {
-  return used.includes(key) ? `${catalogKey(key)}~~${crypto.randomUUID()}` : key;
+  return used.includes(key) ? createCityKey(key) : key;
 }
 
 function cityCaption(key) {
@@ -1484,7 +1488,7 @@ function closeExpandedCardsOutside(target) {
 function replaceCityAt(index, key) {
   if (!config.timezones[index]) return false;
   if (catalogKey(config.timezones[index]) === catalogKey(key)) return true;
-  key = uniqueCityKey(key);
+  key = createCityKey(key);
   const oldKey = config.timezones[index];
   config.timezones[index] = key;
   if (oldKey !== key) delete config.cityContext[oldKey];
@@ -2322,7 +2326,7 @@ function renderResults(mode, query) {
       expandedBase = false;
     } else if (replaceIndex >= 0 && config.timezones[replaceIndex]) {
       replaceCityAt(replaceIndex, key);
-    } else config.timezones.push(uniqueCityKey(key));
+    } else config.timezones.push(createCityKey(key));
     saveConfig(); render(); mode === 'base-settings' ? openSettings() : closeModal();
   });
   $$('[data-star]').forEach(button => button.onclick = () => {
