@@ -128,7 +128,7 @@ async function connect() {
       assert.equal(infoCheck.result.value.pass,true, 'information bubbles must fit the viewport: '+JSON.stringify(infoCheck.result.value.failures));
       const reminderCheck = await send('Runtime.evaluate', {expression:`(() => {
         const previous = structuredClone(reminders), oldOffset=offset;
-        offset=0; render();
+        offset=0; expandedCityKey=null; expandedBase=false; render();
         const card=document.querySelector('.city-card'), key=card.dataset.zone;
         const height=card.getBoundingClientRect().height;
         const now=Date.now()/1000;
@@ -208,7 +208,7 @@ async function connect() {
       assert.equal(reminderResult.untilVisible,true);
       assert.ok(Math.abs(reminderResult.dialHeight-12)<.1);
       assert.ok(Math.abs(reminderResult.dialWidth-12)<.1);
-      assert.equal(reminderResult.heightStable,true);
+      assert.equal(reminderResult.heightStable,true, 'adding/removing reminders must not change a collapsed city-card height: '+JSON.stringify(reminderResult));
       assert.equal(reminderResult.future,'2');
       assert.equal(reminderResult.tooltipFits,true);
       assert.match(reminderResult.tooltip,/Test 0/);
