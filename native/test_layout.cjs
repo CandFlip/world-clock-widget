@@ -168,8 +168,12 @@ async function connect() {
         fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'reminder-track.png'), Buffer.from(shot.data,'base64'));
         const pointerTarget = await send('Runtime.evaluate', {expression:`(() => {const r=document.querySelector('.city-alarm-pin').getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2};})()`,returnByValue:true});
         await send('Input.dispatchMouseEvent', {type:'mouseMoved',...pointerTarget.result.value});
-        await new Promise(resolve => setTimeout(resolve, 160));
-        const hoverCheck = await send('Runtime.evaluate', {expression:`(() => {const pin=document.querySelector('.city-alarm-pin'), probe=document.createElement('span'); probe.style.color='var(--accent)'; document.body.appendChild(probe); const result={purple:getComputedStyle(pin).color===getComputedStyle(probe).color,unframed:getComputedStyle(pin).backgroundColor==='rgba(0, 0, 0, 0)' && getComputedStyle(pin).borderTopWidth==='0px',popup:!!document.querySelector('#reminderTooltip')}; probe.remove(); return result;})()`,returnByValue:true});
+        let hoverCheck;
+        for(let frame=0;frame<30;frame++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        hoverCheck = await send('Runtime.evaluate', {expression:`(() => {const pin=document.querySelector('.city-alarm-pin'), probe=document.createElement('span'); probe.style.color='var(--accent)'; document.body.appendChild(probe); const result={purple:getComputedStyle(pin).color===getComputedStyle(probe).color,unframed:getComputedStyle(pin).backgroundColor==='rgba(0, 0, 0, 0)' && getComputedStyle(pin).borderTopWidth==='0px',popup:!!document.querySelector('#reminderTooltip')}; probe.remove(); return result;})()`,returnByValue:true});
+        if(hoverCheck.result.value?.purple && hoverCheck.result.value?.popup) break;
+        }
         assert.deepEqual(hoverCheck.result.value,{purple:true,unframed:true,popup:true});
         const tooltipShot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
         fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'reminder-tooltip.png'), Buffer.from(tooltipShot.data,'base64'));
