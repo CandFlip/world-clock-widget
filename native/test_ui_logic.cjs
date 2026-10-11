@@ -11,6 +11,25 @@ vm.runInContext(fs.readFileSync(__dirname + '/ui/reminder_ui.js', 'utf8'), conte
 vm.runInContext(fs.readFileSync(__dirname + '/ui/app.js', 'utf8'), context);
 const run = script => vm.runInContext(script, context);
 run("config.settings.time_format='24'");
+// One-minute / five-minute alarms share a hit target away from the sun.
+run(`const alarmNow = new Date('2026-10-11T06:00:00Z');
+ const nearbyAlarms = [1,5,10,180].map((minutes,i) => ({id:'near'+i,alarm:alarmNow.getTime()/1000+minutes*60,state:'pending',zone:'Asia/Vladivostok'}));
+ const tomorrowAlarm = {id:'tomorrow',alarm:alarmNow.getTime()/1000+86400,state:'pending',zone:'Asia/Vladivostok'};
+ const alarmLayout = cityAlarmLayout([...nearbyAlarms,tomorrowAlarm], 'Asia/Vladivostok', alarmNow, 320, alarmNow);`);
+assert.ok(run('alarmLayout.groups[0].entries.length') >= 3);
+assert.equal(run('alarmLayout.right[0].id'),'tomorrow');
+assert.ok(run('alarmLayout.groups.every(group => Math.abs(group.x-160)>=18)'));
+assert.ok(Math.abs(run('alarmLayout.marks[0].position')-(50+1/14.4))<1e-10);
+assert.ok(Math.abs(run('alarmLayout.marks[1].position')-(50+5/14.4))<1e-10);
+assert.equal(run("cityAlarmLayout([tomorrowAlarm], 'Asia/Vladivostok', new Date(tomorrowAlarm.alarm*1000),320,alarmNow).marks.length"),1);
+assert.equal(run("cityAlarmLayout([{alarm:Date.parse('2026-10-11T16:00:00Z')/1000}], 'Asia/Vladivostok', alarmNow,320,alarmNow).marks.length"),1);
+assert.ok(run("reminderTooltipText(nearbyAlarms.slice(0,2)).includes('Сегодня')"));
+run(`const edgeAlarms=[-13,-12,0,12,13].map((hour,i)=>({id:'edge'+i,alarm:alarmNow.getTime()/1000+hour*3600})); const edgeLayout=cityAlarmLayout(edgeAlarms,'Asia/Vladivostok',alarmNow,320);`);
+assert.equal(run('edgeLayout.left.length'),1);
+assert.equal(run('edgeLayout.right.length'),1);
+assert.equal(run('edgeLayout.marks.length'),3);
+assert.equal(run("cityAlarmLayout([tomorrowAlarm],'Asia/Vladivostok',new Date(alarmNow.getTime()+48*3600000),320).left.length"),1);
+assert.equal(run("cityAlarmLayout([tomorrowAlarm],'Asia/Vladivostok',new Date(alarmNow.getTime()+48*3600000),320).right.length"),0);
 assert.deepEqual(Array.from(run("[0,6,12,18,24].map(h => timelineCaption(h,new Date('2026-09-26T19:24:00Z'),'Asia/Bangkok'))")), ['02','08','14','20','02'].map(h => `${h}<small class="timeline-minutes">:24</small>`));
 assert.equal(run("timelineCaption(6,new Date('2026-09-26T19:59:00Z'),'Asia/Bangkok')"), '08<small class="timeline-minutes">:59</small>');
 assert.equal(run("timelineCaption(6,new Date('2026-09-26T20:00:00Z'),'Asia/Bangkok')"), '09<small class="timeline-minutes">:00</small>');
@@ -227,7 +246,9 @@ run("config.timezones=['A','B']; config.cityContext={A:{availabilityOverride:{ok
 assert.equal(run("replaceCityAt(0,'C')"), true);
 assert.equal(run("config.timezones.join()"), 'C,B');
 assert.equal(run("Boolean(config.cityContext.A)"), false);
-assert.equal(run("replaceCityAt(0,'B')"), false);
+assert.equal(run("replaceCityAt(0,'B')"), true);
+assert.equal(run("catalogKey(config.timezones[0])"), 'B');
+assert.notEqual(run("config.timezones[0]"), 'B');
 run("config=structuredClone(defaults); normalize(); offset=0");
 run("config.settings.reminder_intervals = [30, 30, 60]; normalize()");
 assert.equal(run('config.settings.reminder_intervals.join()'), '30,30,60');
@@ -300,6 +321,7 @@ assert.ok(!run("alarmRoot.innerHTML.includes('⌛') || alarmRoot.innerHTML.inclu
 console.log('Reminder countdown, city/base alarm times and section height checks passed.');
 
 run(`
+  config.timezones=['Asia/Almaty@@one','Asia/Almaty@@two'];
   byKey.set('Asia/Almaty@@one', {key:'Asia/Almaty@@one', en:'Almaty', ru:'Алматы'});
   byKey.set('Asia/Almaty@@two', {key:'Asia/Almaty@@two', en:'Astana', ru:'Астана'});
   reminders.entries = [
@@ -510,3 +532,37 @@ assert.equal(run("meetingRangeGradient(0, [], 0)"), 'none');
 assert.equal(run("meetingRangeGradient(Date.parse('2026-10-09T09:00:00Z'), [{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'09:00',workingEnd:'12:00',dndStart:'13:00'}},{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'10:00',workingEnd:'12:00',dndStart:'13:00'}}], 120)"), 'linear-gradient(to right,var(--availability-okay) 0% 50%,var(--availability-working) 50% 100%)');
 assert.equal(run("meetingRangeGradient(Date.parse('2026-10-09T09:00:00Z'), [{zone:'UTC',schedule:{okayStart:'08:00',workingStart:'09:00',workingEnd:'09:07',dndStart:'13:00'}}], 14)"), 'linear-gradient(to right,var(--availability-working) 0% 50%,var(--availability-okay) 50% 100%)');
 console.log('Meeting window colors passed: mixed periods, all participants, exact minute boundaries and empty windows.');
+
+run(`config=structuredClone(defaults); reminders={entries:[]};
+ const original='Asia/Almaty@@one'; config.timezones=[original];
+ const copy=uniqueCityKey(original); config.timezones.push(copy);
+ config.cityContext={[original]:{label:'Anna',availabilityOverride:{okayStart:'07:00',workingStart:'09:00',workingEnd:'18:00',dndStart:'22:00'}},[copy]:{label:'Ivan',availabilityOverride:{okayStart:'09:00',workingStart:'11:00',workingEnd:'20:00',dndStart:'23:00'}}};
+ offset=1; createReminder(original,0); offset=1; createReminder(copy,0);
+`);
+assert.equal(run('zoneOf(copy)'),run('zoneOf(original)'));
+assert.equal(run('item(copy).key'),run('item(original).key'));
+assert.equal(run('cityReminders(original).length'),1);
+assert.equal(run('cityReminders(copy).length'),1);
+assert.equal(run('reminders.entries.length'),2);
+assert.match(run('reminders.entries[0].city'),/Anna/);
+assert.match(run('reminders.entries[1].city'),/Ivan/);
+assert.notEqual(run('scheduleFor(original).workingStart'),run('scheduleFor(copy).workingStart'));
+run('config=JSON.parse(JSON.stringify(config)); reminders=JSON.parse(JSON.stringify(reminders)); normalize()');
+assert.equal(run('config.timezones[1]'),run('copy'));
+assert.equal(run('cityReminders(copy).length'),1);
+assert.equal(run('scheduleFor(copy).workingStart'),'11:00');
+run("reminders.entries[0].alarm+=300; reminders.entries[0].state='ringing'; config.timezones.reverse()");
+assert.equal(run('cityReminders(copy)[0].state'),'pending');
+run("reminders.entries=reminders.entries.filter(e=>e.city_key!==original); config.timezones=config.timezones.filter(k=>k!==original); delete config.cityContext[original]");
+assert.equal(run('cityReminders(copy).length'),1);
+assert.equal(run('scheduleFor(copy).workingStart'),'11:00');
+run(`config.timezones=[original,original]; config.cityContext={[original]:{label:'Legacy',availabilityOverride:{okayStart:'09:00',workingStart:'11:00',workingEnd:'20:00',dndStart:'23:00'}}};
+ reminders.entries=[{id:'old',zone:'Asia/Almaty',city:'Алматы',source_city_id:'Asia/Almaty',alarm:1800003600,state:'pending'}]; normalize();`);
+assert.notEqual(run('config.timezones[0]'),run('config.timezones[1]'));
+assert.equal(run('cityReminders(config.timezones[0]).length'),1);
+assert.equal(run('cityReminders(config.timezones[1]).length'),0);
+run("config.cityContext[config.timezones[1]].availabilityOverride.workingStart='12:00'");
+assert.equal(run('scheduleFor(config.timezones[0]).workingStart'),'11:00');
+const persistedKeys=run('JSON.stringify(config.timezones)'); run('normalize()'); assert.equal(run('JSON.stringify(config.timezones)'),persistedKeys);
+run('config.timezones.shift(); normalize()'); assert.equal(run('cityReminders(config.timezones[0]).length'),0);
+console.log('Duplicate city records: isolated alarms/names/contact hours, restart, reorder, removal, legacy migration and stable IDs passed.');

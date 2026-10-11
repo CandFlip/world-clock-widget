@@ -7,7 +7,7 @@ function syncReminderModel(entry) {
     entry.source_type = legacyBase ? 'base' : 'city';
     if (legacyBase) entry.base_kind = 'auto';
   }
-  entry.source_city_id = entry.source_type === 'base' && entry.base_kind === 'auto' ? null : (entry.city_key || entry.zone);
+  entry.source_city_id = entry.source_type === 'base' && entry.base_kind === 'auto' ? null : (entry.city_key || entry.source_city_id || null);
   entry.timezone_id = zoneOf(entry.zone);
   entry.scheduled_at = new Date(entry.alarm * 1000).toISOString();
   const local = inputAt(entry.alarm * 1000, entry.timezone_id).split('T');
@@ -43,6 +43,141 @@ function compactAlarmDate(at, zone, now = new Date()) {
 function alarmLabel(entry) {
   const at = new Date(entry.alarm * 1000), zone = zoneOf(entry.zone);
   return `${entry.repeat === 'daily' ? '↻ ' : ''}${compactAlarmDate(at, zone)} · ${timeAt(at, zone)}`;
+}
+
+// The city band spans 24 hours, centred on the selected moment.
+// Edge badges describe chronological direction relative to the visible band.
+function cityAlarmLayout(entries, zone, selected, width) {
+  const left = [], right = [], marks = [];
+  for (const entry of entries) {
+    const at = new Date(entry.alarm * 1000);
+    const position = 50 + (at - selected) / 864000;
+    if (position < 0) left.push(entry);
+    else if (position > 100) right.push(entry);
+    else marks.push({entry, position, x:position * width / 100});
+  }
+  const badgeWidth = entries => Math.max(16, String(entries.length).length*6+6);
+  const min = left.length ? 8+badgeWidth(left)+10 : 10;
+  const max = Math.max(min, width-(right.length ? 8+badgeWidth(right)+10 : 10));
+  const centre = width / 2;
+  // Reserve the sun's hit area; all nearby alarms share one displaced button.
+  const buttonX = x => {
+    x = clamp(x, min, max);
+    if (Math.abs(x - centre) < 18.8) {
+      const left=centre-18.8, right=centre+18.8;
+      x = x < centre && left >= min || right > max ? left : right;
+      x = clamp(x,min,max);
+    }
+    return x;
+  };
+  const groups = [];
+  for (const mark of marks.sort((a,b) => a.x-b.x)) {
+    const x = buttonX(mark.x);
+    let group = groups.find(group => Math.abs(group.x-x) < 18);
+    // Prefer a small icon displacement over merging alarms hours apart.
+    if (group && Math.abs(group.rawX-mark.x) >= 18 && group.x+18 <= max) {
+      groups.push({x:group.x+18, rawX:mark.x, entries:[mark.entry]});
+      continue;
+    }
+    if (!group) { group = {x, rawX:mark.x, entries:[]}; groups.push(group); }
+    group.entries.push(mark.entry);
+  }
+  return {marks, groups, left, right};
+}
+
+function reminderInfoLabel(entry) {
+  const at=new Date(entry.alarm*1000), zone=zoneOf(entry.zone), now=new Date();
+  const p=zonedParts(at,zone), current=zonedParts(now,zone);
+  const day=compactAlarmDate(at,zone);
+  const date=new Intl.DateTimeFormat(lang()==='ru'?'ru-RU':'en-GB',{timeZone:zone,day:'numeric',month:'short',...(p.year!==current.year?{year:'numeric'}:{})}).format(at);
+  return `${entry.repeat==='daily'?'↻ ':''}${day}${p.day!==current.day || p.month!==current.month || p.year!==current.year ? ` (${date})` : ''} · ${timeAt(at,zone)}`;
+}
+
+function reminderTooltipText(entries) {
+  return entries.map(entry => `${reminderInfoLabel(entry)}${entry.title ? ` · ${entry.title}` : ''}`).join('\n');
+}
+
+function hideReminderTooltip() { document.querySelector('#reminderTooltip')?.remove?.(); }
+document.addEventListener('scroll', hideReminderTooltip, true);
+
+function bindReminderTooltip(button, entries) {
+  button.onmouseenter = button.onfocus = () => {
+    hideReminderTooltip();
+    const popup = document.createElement('div');
+    popup.id = 'reminderTooltip'; popup.className = 'reminder-tooltip'; popup.setAttribute('role','tooltip');
+    popup.textContent = reminderTooltipText(entries);
+    document.body.appendChild(popup);
+    button.setAttribute('aria-describedby', popup.id);
+    const rect = button.getBoundingClientRect();
+    popup.style.left = `${clamp(rect.left + rect.width/2 - popup.offsetWidth/2, 8, window.innerWidth-popup.offsetWidth-8)}px`;
+    popup.style.top = `${Math.max(8, rect.top-popup.offsetHeight-8)}px`;
+  };
+  button.onmouseleave = button.onblur = () => { hideReminderTooltip(); button.removeAttribute('aria-describedby'); };
+}
+
+function showReminderList(ids) {
+  hideReminderTooltip();
+  const entries = ids.map(id => reminders.entries.find(entry => entry.id === id)).filter(Boolean).sort((a,b) => a.alarm-b.alarm);
+  modal(t('reminders'), `<div class="alarm-list-detail">${entries.length ? entries.map(entry => `<article class="reminder-list-row"><button class="reminder-list-open" data-open-alarm="${esc(entry.id)}"><strong>${esc(entry.title || sourceCaption(entry))}</strong>${entry.title ? `<span>${esc(sourceCaption(entry))}</span>` : ''}<span>${esc(reminderInfoLabel(entry))}</span></button><button class="saved-delete" data-list-delete="${esc(entry.id)}" aria-label="${esc(t('delete'))}">${trashIcon}</button></article>`).join('') : `<div class="empty">${t('none')}</div>`}</div>`);
+  $$('[data-open-alarm]').forEach(button => button.onclick = () => {
+    showAlarmDetail(button.dataset.openAlarm);
+    $('#back').onclick = () => showReminderList(ids);
+    const cancel = $('#cancelAlarm'), cancelEdit = cancel?.onclick;
+    if (cancel) cancel.onclick = () => { cancelEdit?.(); showReminderList(ids); };
+  });
+  $$('[data-list-delete]').forEach(button => button.onclick = () => {
+    reminders.entries = reminders.entries.filter(entry => entry.id !== button.dataset.listDelete);
+    if (alertId === button.dataset.listDelete) { alertId = null; stopAlarmSound(); }
+    saveReminders(); renderAlarms(); showReminderList(ids);
+  });
+}
+
+let cityAlarmResizeObserver;
+
+function renderCityAlarmTrack(card, entries) {
+  const root = card.querySelector('.city-alarm-track');
+  if (!root) return;
+  const width = root.getBoundingClientRect().width;
+  if (typeof ResizeObserver === 'function') {
+    cityAlarmResizeObserver ||= new ResizeObserver(changes => changes.forEach(change => {
+      const owner=change.target.closest('.city-card');
+      if (owner?.isConnected) renderCityAlarmTrack(owner, cityReminders(owner.dataset.zone));
+    }));
+    cityAlarmResizeObserver.observe(root);
+  }
+  // The 9.6px dial preserves the 4px gap above the timeline.
+  const layout = cityAlarmLayout(entries, zoneOf(card.dataset.zone), new Date(referenceTimestamp()), width);
+  const allIds = entries.map(entry => entry.id);
+  const markup = layout.marks.map(mark => {
+    const group=layout.groups.find(group=>group.entries.includes(mark.entry));
+    const link=`<i class="city-alarm-link" style="left:${Math.min(group.x,mark.x)}px;width:${Math.abs(group.x-mark.x)}px"></i>`;
+    return `${link}<i class="city-alarm-tick" style="left:${mark.position}%"></i>`;
+  }).join('') +
+    layout.groups.map((group,index) => `<button class="city-alarm-pin" data-alarm-group="${index}" style="left:${group.x}px" aria-label="${esc(reminderTooltipText(group.entries))}">${cityReminderIcon}${group.entries.length > 1 ? `<small>${group.entries.length}</small>` : ''}</button>`).join('') +
+    ['left','right'].map(side => layout[side].length ? `<button class="city-alarm-edge city-alarm-${side}" data-alarm-side="${side}" aria-label="${esc(`${lang()==='ru' ? (side==='left'?'Напоминания слева от шкалы':'Напоминания справа от шкалы') : (side==='left'?'Reminders before the visible range':'Reminders after the visible range')}: ${layout[side].length}. ${reminderTooltipText(layout[side])}`)}">${layout[side].length}</button>` : '').join('');
+  // Keep hover and keyboard focus stable while the clock ticks.
+  const signature=JSON.stringify([entries,entries.map(reminderInfoLabel),layout.groups.map(group=>group.entries.map(entry=>entry.id)),layout.left.map(entry=>entry.id),layout.right.map(entry=>entry.id),lang()]);
+  if (root.alarmTrackSignature === signature) {
+    const ticks=root.querySelectorAll('.city-alarm-tick'), links=root.querySelectorAll('.city-alarm-link'), pins=root.querySelectorAll('.city-alarm-pin');
+    layout.marks.forEach((mark,index)=>{
+      const group=layout.groups.find(group=>group.entries.includes(mark.entry));
+      ticks[index].style.left=`${mark.position}%`;
+      links[index].style.left=`${Math.min(group.x,mark.x)}px`;
+      links[index].style.width=`${Math.abs(group.x-mark.x)}px`;
+    });
+    layout.groups.forEach((group,index)=>{pins[index].style.left=`${group.x}px`;});
+    return;
+  }
+  root.alarmTrackSignature = signature;
+  if (root.contains(document.activeElement) || root.matches(':hover')) hideReminderTooltip();
+  root.innerHTML = markup;
+  root.querySelectorAll('button').forEach(button => {
+    const shown = button.hasAttribute('data-alarm-group') ? layout.groups[+button.dataset.alarmGroup].entries : layout[button.dataset.alarmSide];
+    bindReminderTooltip(button, shown);
+    button.onclick = event => { event.stopPropagation(); showReminderList(allIds); };
+    button.onpointerdown = event => event.stopPropagation();
+    button.ondragstart = event => {event.preventDefault(); event.stopPropagation();};
+  });
 }
 
 function renderAlarmLabels(root, entries) {
@@ -158,7 +293,7 @@ function newAlarmForCity(key) {
   const entry = {
     id: crypto.randomUUID().replaceAll('-', ''), target: timestamp / 1000,
     alarm: timestamp / 1000, state: 'pending', lead: 0, direction: 'after',
-    zone: zoneOf(key), city_key: key, city: cityName(key), started_at: Date.now() / 1000,
+    zone: zoneOf(key), city_key: key, city: cityCaption(key), started_at: Date.now() / 1000,
     title: '', source_type: 'city', base_kind: null,
   };
   syncReminderModel(entry);
@@ -352,7 +487,8 @@ function valueWheelUnits(event) {
   const legacy = Math.abs(Number(event.wheelDeltaY));
   const detents = legacy/120;
   if(Math.abs(delta) >= 80 && legacy >= 120 && Math.abs(detents-Math.round(detents)) < .001) {
-    return Math.sign(delta)*Math.round(detents);
+    // Use the physical detent direction when Chromium supplies it.
+    return -Math.sign(Number(event.wheelDeltaY))*Math.round(detents);
   }
   return delta/40;
 }

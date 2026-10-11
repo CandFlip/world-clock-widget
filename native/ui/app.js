@@ -1,5 +1,6 @@
 const trashIcon = `<svg class="trash-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><g class="trash-lid"><path d="M4 6h16M9 6V4h6v2"/></g><path d="M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>`;
 const quickAlarmIcon = `<svg class="quick-alarm-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 1.5M5.5 3.5 2.5 6.5M18.5 3.5l3 3M7 20l-1.5 2M17 20l1.5 2"/></svg>`;
+const cityReminderIcon = `<svg class="city-reminder-glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>`;
 const quickChevronIcon = `<svg class="quick-chevron-glyph" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 6 5 5 5-5"/></svg>`;
 const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg>`;
 const checkUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9A7 7 0 0 1 18 6.8L20 12M4 12l2 5.2A7 7 0 0 0 18.2 15"/></svg>`;
@@ -22,7 +23,8 @@ const host = window.chrome?.webview;
 const send = message => host?.postMessage(message);
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-const zoneOf = key => (key || 'Etc/UTC').split('@@')[0];
+const catalogKey = key => (key || 'Etc/UTC').split('~~')[0];
+const zoneOf = key => catalogKey(key).split('@@')[0];
 const defaultAvailability = Object.freeze({okayStart:'07:00',workingStart:'09:00',workingEnd:'18:00',dndStart:'22:00'});
 const baseScheduleKey = '__base_schedule__';
 
@@ -301,9 +303,18 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
 function item(key) {
-  return byKey.get(key) || zoneFallback.get(zoneOf(key)) || {
+  return byKey.get(catalogKey(key)) || zoneFallback.get(zoneOf(key)) || {
     key, en: zoneOf(key).split('/').pop().replaceAll('_', ' '), ru: '', cc: '',
   };
+}
+
+function uniqueCityKey(key, used = config.timezones) {
+  return used.includes(key) ? `${catalogKey(key)}~~${crypto.randomUUID()}` : key;
+}
+
+function cityCaption(key) {
+  const name = cityContext(key).label;
+  return name ? `${name} · ${cityName(key)}` : cityName(key);
 }
 
 function cityName(key) {
@@ -819,6 +830,13 @@ function normalize() {
   config = {...structuredClone(defaults), ...config, settings: {...defaults.settings, ...(config.settings || {})}};
   config.cityContext = config.cityContext && typeof config.cityContext === 'object' && !Array.isArray(config.cityContext) ? config.cityContext : {};
   config.timezones = Array.isArray(config.timezones) ? config.timezones : [...defaults.timezones];
+  const seenCities = [];
+  config.timezones = config.timezones.map(key => {
+    const distinct = uniqueCityKey(key, seenCities);
+    if (distinct !== key && config.cityContext[key]) config.cityContext[distinct] = structuredClone(config.cityContext[key]);
+    seenCities.push(distinct);
+    return distinct;
+  });
   config.favorites = Array.isArray(config.favorites) ? config.favorites : [...defaults.favorites];
   const intervals = config.settings.reminder_intervals;
   if (!Array.isArray(intervals) || intervals.length < 1 ||
@@ -847,7 +865,13 @@ function normalize() {
     }
     config.settings.title_library_version = 1;
   }
-  reminders.entries.forEach(syncReminderModel);
+  reminders.entries.forEach(entry => {
+    syncReminderModel(entry);
+    if (entry.source_type !== 'base' && !entry.city_key) {
+      const owner = reminderCityKey(entry);
+      if (owner) { entry.city_key = owner; syncReminderModel(entry); }
+    }
+  });
 }
 
 function saveConfig() { send(`saveConfig\n${JSON.stringify(config, null, 2)}`); if (!applyingRemoteSync) window.syncLocalChanged?.(); }
@@ -867,6 +891,7 @@ function scheduleBackgroundTick() {
 }
 
 function render() {
+  hideReminderTooltip();
   liveOffset = null;
   normalize();
   const systemLight = window.matchMedia?.('(prefers-color-scheme: light)').matches;
@@ -934,6 +959,7 @@ function render() {
 function renderCities() {
   const root = $('#cities');
   if (!root) return;
+  cityAlarmResizeObserver?.disconnect();
   const selected = new Date(referenceTimestamp());
   const baseOffset = offsetHours(baseZone(), selected);
   const remaining = until(selected.getTime());
@@ -946,11 +972,12 @@ function renderCities() {
     const expanded = expandedCityKey === key;
      return `<article class="card city-card ${expanded ? 'expanded' : ''}" draggable="${!meetingMode}" data-city="${index}" data-zone="${esc(key)}" aria-expanded="${expanded}">
       <div class="city-summary">
-        <div class="city-main"><div class="city-name">${label(key)}</div><div class="offset">${delta >= 0 ? '+' : ''}${delta} ${lang() === 'ru' ? 'ч.' : 'h'} ${t('from')}</div><div class="city-reminders"></div></div>
+        <div class="city-main"><div class="city-name">${label(key)}</div><div class="offset">${delta >= 0 ? '+' : ''}${delta} ${lang() === 'ru' ? 'ч.' : 'h'} ${t('from')}</div></div>
         <div class="city-clock"><div class="city-time"><span class="clock-value">${timeAt(selected, zone)}</span></div><div class="until">${remaining}${extra ? ` · ${esc(extra)}` : ''}</div></div>
         <button class="delete" data-delete="${index}" aria-label="${lang() === 'ru' ? 'Удалить город' : 'Delete city'}">${trashIcon}</button>
         <span class="city-context"><span class="solar-glyph context-token" tabindex="0" aria-label="${esc(contextAccessibility(context))}" data-tooltip="${esc(contextAccessibility(context))}">${availabilityGlyph(context.availability)}</span></span>
         ${temporalBandHtml(selected, key)}
+        <div class="city-alarm-track"></div>
       </div>
        <div class="card-actions-wrap" aria-hidden="${!expanded}"><div class="card-actions"><button data-city-action="alarm">${t('alarmAction')}</button><button data-city-action="base">${t('makeBase')}</button><button data-city-action="replace">${t('changeCity')}</button><button data-city-action="schedule">${t('nameAndSchedule')}</button></div></div>
        ${meetingOutlineSvg}
@@ -961,19 +988,23 @@ function renderCities() {
   updateMeetingUI();
 }
 
+// Keyed reminders belong to one added record, even if it has been removed.
+// Legacy reminders without a record key are assigned to the first matching record.
+function reminderCityKey(entry) {
+  if (entry.city_key) return entry.city_key;
+  if (entry.source_city_id && entry.source_city_id !== entry.zone) return entry.source_city_id;
+  const candidates = config.timezones.filter(key => zoneOf(key) === zoneOf(entry.zone));
+  return candidates.find(key => !entry.city ||
+    [item(key).en, item(key).ru, cityCaption(key)].some(name => name && name.toLocaleLowerCase() === entry.city.toLocaleLowerCase()));
+}
+
 function cityReminders(key) {
-  const city = item(key);
-  return reminders.entries.filter(entry => {
-    if (!['pending', 'ringing'].includes(entry.state) || entry.source_type === 'base') return false;
-    if (entry.city_key) return entry.city_key === key || item(entry.city_key).key === city.key;
-    if (zoneOf(entry.zone) !== zoneOf(key)) return false;
-    if (entry.city) return [city.en, city.ru, cityName(key)].some(name => name && name.toLocaleLowerCase() === entry.city.toLocaleLowerCase());
-    return item(entry.zone).key === city.key;
-  }).sort((a, b) => a.alarm - b.alarm);
+  return reminders.entries.filter(entry => ['pending', 'ringing'].includes(entry.state) &&
+    entry.source_type !== 'base' && reminderCityKey(entry) === key).sort((a, b) => a.alarm - b.alarm);
 }
 
 function renderCityAlarms() {
-  $$('.city-card').forEach(card => renderAlarmLabels(card.querySelector('.city-reminders'), cityReminders(card.dataset.zone)));
+  $$('.city-card').forEach(card => renderCityAlarmTrack(card, cityReminders(card.dataset.zone)));
   const base = $('#baseReminders');
   if (base) {
     const entries = reminders.entries.filter(entry => entry.source_type === 'base' && entry.active).sort((a,b) => a.alarm-b.alarm);
@@ -1122,6 +1153,7 @@ function bindHeroResize() {
 window.addEventListener?.('resize', () => {
   syncHeroHeight();
   updateSliderVisual(liveOffset ?? offset);
+  renderCityAlarms();
 });
 
 function sliderPosition(value, width, inset = 10) {
@@ -1450,7 +1482,9 @@ function closeExpandedCardsOutside(target) {
 }
 
 function replaceCityAt(index, key) {
-  if (!config.timezones[index] || config.timezones.some((candidate, candidateIndex) => candidate === key && candidateIndex !== index)) return false;
+  if (!config.timezones[index]) return false;
+  if (catalogKey(config.timezones[index]) === catalogKey(key)) return true;
+  key = uniqueCityKey(key);
   const oldKey = config.timezones[index];
   config.timezones[index] = key;
   if (oldKey !== key) delete config.cityContext[oldKey];
@@ -1497,7 +1531,7 @@ function createReminder(zone, lead, city, options = {}) {
   const entry = {
     id: crypto.randomUUID().replaceAll('-', ''), target: target / 1000,
     alarm: alarmTimestamp(target, lead) / 1000, state: 'pending', lead, direction: 'after',
-    zone: zoneOf(zone), city_key: zone, city: city || cityName(zone), started_at: now / 1000,
+    zone: zoneOf(zone), city_key: zone, city: city || cityCaption(zone), started_at: now / 1000,
     title: '', source_type: options.sourceType || 'city', base_kind: options.sourceType === 'base' ? config.settings.top_clock_mode : null,
   };
   syncReminderModel(entry);
@@ -1513,6 +1547,7 @@ function createReminder(zone, lead, city, options = {}) {
 }
 
 function modal(title, body, onBack = closeModal) {
+  hideReminderTooltip();
   if (capturingHotkey) send('endHotkeyCapture');
   detailId = null; capturingHotkey = false; closeNamePopover();
   $('#modal').innerHTML = `<section class="modal-root"><div class="modal-head"><button class="icon" id="back">‹</button><h2>${esc(title)}</h2></div><div class="modal-body">${body}</div></section>`;
@@ -1542,7 +1577,7 @@ function featureGuideItems() {
     "cities",
     "Добавить город",
     "Нажмите «+ Добавить город» под списком и введите название в поиске. Нажмите кнопку добавления рядом с найденным городом.",
-    "В списке появится карточка с местным временем и разницей с базовыми часами."
+    "Один город можно добавить несколько раз: у каждой копии свои имя, часы связи и напоминания."
   ],
   [
     "cityActions",
@@ -1645,7 +1680,7 @@ function featureGuideItems() {
     "cities",
     "Add a city",
     "Press “+ Add city” below the list and search by name. Press the add button beside a search result.",
-    "A card shows its local time and difference from your base clock."
+    "Add the same city more than once: each copy has its own name, contact hours, and reminders."
   ],
   [
     "cityActions",
@@ -2275,8 +2310,7 @@ function renderResults(mode, query) {
   $('#results').innerHTML = rows.map(city => {
     const favorite = config.favorites.includes(city.key);
     const chosen = config.settings.top_clock_mode === 'manual' && config.settings.manual_top_timezone === city.key;
-    const duplicate = replaceIndex >= 0 && config.timezones.includes(city.key) && config.timezones[replaceIndex] !== city.key;
-    const disabled = (choosingBase && chosen) || duplicate;
+    const disabled = choosingBase && chosen;
     return `<div class="result city-result"><div><b>${label(city.key)}</b></div><b class="result-time" data-live-zone="${esc(zoneOf(city.key))}">${timeAt(new Date(), zoneOf(city.key))}</b><button data-add="${esc(city.key)}" ${disabled ? 'disabled' : ''}>${choosingBase && chosen ? '✓' : '＋'}</button><button class="${favorite ? 'on' : ''}" data-star="${esc(city.key)}">☆</button>${favorite ? `<button class="trash" aria-label="${lang() === 'ru' ? 'Удалить из избранного' : 'Remove from favorites'}" data-unfav="${esc(city.key)}">${trashIcon}</button>` : '<span></span>'}</div>`;
   }).join('');
   $$('[data-add]').forEach(button => button.onclick = () => {
@@ -2288,7 +2322,7 @@ function renderResults(mode, query) {
       expandedBase = false;
     } else if (replaceIndex >= 0 && config.timezones[replaceIndex]) {
       replaceCityAt(replaceIndex, key);
-    } else if (!config.timezones.includes(key)) config.timezones.push(key);
+    } else config.timezones.push(uniqueCityKey(key));
     saveConfig(); render(); mode === 'base-settings' ? openSettings() : closeModal();
   });
   $$('[data-star]').forEach(button => button.onclick = () => {
@@ -2440,7 +2474,7 @@ host?.addEventListener('message', event => {
   try { reminders = JSON.parse(event.data.remindersText || '{}'); } catch { reminders = {lead: 15, entries: []}; }
   version = event.data.version || version;
   restoreUpdateState();
-  const previousTitleVersion = config.settings?.title_library_version;
+  const previousConfig = JSON.stringify(config);
   const previousReminders = JSON.stringify(reminders);
   normalize();
   activeHotkey = Number.isInteger(event.data.hotkeyModifiers) && Number.isInteger(event.data.hotkeyKey)
@@ -2450,7 +2484,7 @@ host?.addEventListener('message', event => {
     config.settings.manual_hotkey = {...config.settings.hotkey};
   soundLibraryReady = loadSoundLibrary();
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
-  if (previousTitleVersion !== 1) saveConfig();
+  if (JSON.stringify(config) !== previousConfig) saveConfig();
   send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
   render();
   send('rendered');

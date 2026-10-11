@@ -214,3 +214,14 @@ get('#editorSoundChoices').dataset.soundId='default';
 get('#saveAlarm').onclick();
 assert.equal(run("reminders.entries[0].sound_id"),undefined);
 console.log('Alarm sound buttons: favorites, individual override, missing file fallback, save and cancel passed.');
+
+for (const start of [5,-5,0]) {
+  scalar=start; wheelEvent(-100,0,120); flush(); assert.equal(scalar,start+1);
+  wheelEvent(100,0,-120); flush(); assert.equal(scalar,start);
+}
+scalar=-1; wheelEvent(-100,0,120); flush(); assert.equal(scalar,0);
+wheelEvent(-100,0,120); flush(); assert.equal(scalar,1);
+wheelEvent(100,0,-120); flush(); wheelEvent(100,0,-120); flush(); assert.equal(scalar,-1);
+scalar=0; wheelEvent(100,0,120); flush(); assert.equal(scalar,1);
+wheelEvent(-100,0,-120); flush(); assert.equal(scalar,0);
+console.log('Physical wheel detents: up increases and down decreases signed intervals, including zero crossing and inconsistent browser delta signs.');

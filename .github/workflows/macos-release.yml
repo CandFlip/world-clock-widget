@@ -31,7 +31,9 @@ jobs:
         run: node native/test_hotkey_ui.cjs
 
       - name: Check shared scheduling and meeting behavior
-        run: node native/test_ui_logic.cjs
+        run: |
+          node native/test_ui_logic.cjs
+          node native/test_reminder_ux.cjs
 
       - name: Check macOS layout and capture previews
         env:

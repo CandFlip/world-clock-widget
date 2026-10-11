@@ -76,6 +76,150 @@ async function connect() {
         render();
       `});
       await new Promise(resolve => setTimeout(resolve, 350));
+      const reminderCheck = await send('Runtime.evaluate', {expression:`(() => {
+        const previous = structuredClone(reminders), oldOffset=offset;
+        offset=0; render();
+        const card=document.querySelector('.city-card'), key=card.dataset.zone;
+        const height=card.getBoundingClientRect().height;
+        const now=Date.now()/1000;
+        reminders.entries=[1,5,1440,2880].map((minutes,i)=>({id:'layout-alarm-'+i, city_key:key,city:cityName(key),zone:zoneOf(key),source_type:'city',alarm:now+minutes*60,target:now+minutes*60,started_at:now,state:'pending',title:'Test '+i}));
+        renderAlarms();
+        const pin=card.querySelector('.city-alarm-pin'), future=card.querySelector('.city-alarm-right');
+        renderAlarms();
+        const stablePin=pin===card.querySelector('.city-alarm-pin');
+        const rect=element=>element.getBoundingClientRect(), sun=card.querySelector('.city-context');
+        const p=rect(pin), s=rect(sun), f=rect(future);
+        const pinStyle=getComputedStyle(pin), tick=card.querySelector('.city-alarm-tick'), tickRect=rect(tick);
+        const originalHeight=rect(card.querySelector('.city-summary')).height;
+        const unframed=pinStyle.backgroundColor==='rgba(0, 0, 0, 0)' && pinStyle.borderTopWidth==='0px';
+        const neutral=pinStyle.color===getComputedStyle(card).getPropertyValue('--muted').trim() || pinStyle.color===getComputedStyle(sun).color;
+        const glyphGap=Math.max(s.left-p.right,p.left-s.right);
+        const dial=rect(pin.querySelector('.city-reminder-glyph'));
+        const dialFits=dial.top>=rect(card.querySelector('.offset')).bottom-.5 && dial.top>=rect(card.querySelector('.until')).bottom-.5;
+        const tickHeight=tickRect.height, tickOnScale=Math.abs(tickRect.bottom-rect(card.querySelector('.temporal-band')).bottom)<.5;
+        const marker=rect(card.querySelector('.temporal-marker'));
+        const tickMatchesSun=tickRect.width===marker.width && tickRect.height===marker.height;
+        const tickColorMatchesLink=getComputedStyle(tick).backgroundColor===getComputedStyle(document.querySelector('.whats-next')).color;
+        const untilVisible=getComputedStyle(card.querySelector('.until')).visibility==='visible' && !!card.querySelector('.until').textContent;
+        const counterAligned=Math.abs(f.top+f.height/2-(dial.top+dial.height/2))<.5;
+        const scaleGap=rect(card.querySelector('.temporal-band')).top-dial.bottom;
+        const textGap=dial.top-rect(card.querySelector('.until')).bottom;
+        const badgeStyle=getComputedStyle(future);
+        const badgeFramed=badgeStyle.borderTopWidth==='1px' && parseFloat(badgeStyle.borderRadius)>=7 && badgeStyle.backgroundColor!=='rgba(0, 0, 0, 0)';
+        pin.dispatchEvent(new MouseEvent('mouseenter'));
+        const popup=document.querySelector('#reminderTooltip');
+        const tooltip=popup?.textContent, tooltipFits=popup && rect(popup).left>=0 && rect(popup).right<=innerWidth;
+        pin.dispatchEvent(new MouseEvent('mouseleave'));
+        future.click();
+        const rows=document.querySelectorAll('.reminder-list-row').length;
+        document.querySelector('[data-list-delete]').click();
+        const remaining=document.querySelectorAll('.reminder-list-row').length;
+        offset=24; updateDynamic();
+        const shiftedLeft=card.querySelector('.city-alarm-left')?.textContent;
+        const shiftedRight=!!card.querySelector('.city-alarm-right');
+        const shiftedVisible=card.querySelectorAll('.city-alarm-tick').length;
+        card.querySelector('.city-alarm-left').dispatchEvent(new MouseEvent('mouseenter'));
+        const leftTooltip=document.querySelector('#reminderTooltip')?.textContent;
+        card.querySelector('.city-alarm-left').dispatchEvent(new MouseEvent('mouseleave'));
+        offset=0; updateDynamic();
+        const result={badgeFramed,shiftedLeft,shiftedRight,shiftedVisible,leftTooltip,textGap,tickMatchesSun,tickColorMatchesLink,untilVisible,counterAligned,scaleGap,dialHeight:dial.height,dialWidth:dial.width,dialFits,originalHeight,unframed,neutral,glyphGap,tickHeight,tickOnScale,stablePin,heightStable:height===card.getBoundingClientRect().height, pins:card.querySelectorAll('.city-alarm-pin').length,ticks:card.querySelectorAll('.city-alarm-tick').length,future:future.textContent,sunClear:p.right<=s.left || p.left>=s.right,futureClear:p.right<=f.left || p.left>=f.right,tooltip,tooltipFits,rows,remaining,deleted:!reminders.entries.some(entry=>entry.id==='layout-alarm-0')};
+        closeModal(); reminders=previous; offset=oldOffset; render(); return result;
+      })()`,returnByValue:true});
+      if (reminderCheck.exceptionDetails) throw new Error(JSON.stringify(reminderCheck.exceptionDetails));
+      const reminderResult=reminderCheck.result.value;
+      assert.equal(reminderResult.stablePin,true);
+      assert.equal(reminderResult.originalHeight,67);
+      assert.equal(reminderResult.badgeFramed,true);
+      assert.equal(reminderResult.shiftedLeft,'1');
+      assert.equal(reminderResult.shiftedRight,true);
+      assert.equal(reminderResult.shiftedVisible,1);
+      assert.match(reminderResult.leftTooltip,/Test 1/);
+      assert.doesNotMatch(reminderResult.leftTooltip,/Test 2|Test 3/);
+      assert.equal(reminderResult.tickMatchesSun,true);
+      assert.equal(reminderResult.tickColorMatchesLink,true);
+      assert.equal(reminderResult.untilVisible,true);
+      assert.equal(reminderResult.counterAligned,true);
+      assert.equal(reminderResult.scaleGap,4);
+      assert.ok(Math.abs(reminderResult.textGap-3.4)<.1);
+      assert.ok(Math.abs(reminderResult.dialHeight-9.6)<.1);
+      assert.ok(Math.abs(reminderResult.dialWidth-9.6)<.1);
+      assert.equal(reminderResult.dialFits,true);
+      assert.equal(reminderResult.unframed,true);
+      assert.equal(reminderResult.neutral,true);
+      assert.ok(reminderResult.glyphGap>=6);
+      assert.ok(reminderResult.glyphGap<=6.5);
+      assert.equal(reminderResult.tickHeight,4);
+      assert.equal(reminderResult.tickOnScale,true);
+      assert.equal(reminderResult.heightStable,true);
+      assert.equal(reminderResult.future,'2');
+      assert.equal(reminderResult.sunClear,true);
+      assert.equal(reminderResult.futureClear,true);
+      assert.equal(reminderResult.tooltipFits,true);
+      assert.match(reminderResult.tooltip,/Test 0/);
+      assert.match(reminderResult.tooltip,/Test 1/);
+      assert.equal(reminderResult.rows,4);
+      assert.equal(reminderResult.remaining,3);
+      assert.equal(reminderResult.deleted,true);
+      console.log(width+'x'+height+' reminder track: 20% larger dial, preserved time caption, aligned separate counter, 2x4 accent tick, mini dial, hover and deletion passed');
+      if (process.env.LAYOUT_SCREENSHOT_DIR && width === 390) {
+        await send('Runtime.evaluate', {expression:`window.reminderShotState={entries:structuredClone(reminders.entries),offset}; offset=0; const shotNow=Date.now()/1000; const shotKey=config.timezones[0]; reminders.entries=[1,5,240,1440,2880].map((m,i)=>({id:'shot-'+i,city_key:shotKey,city:cityName(shotKey),zone:zoneOf(shotKey),source_type:'city',alarm:shotNow+m*60,target:shotNow+m*60,started_at:shotNow,state:'pending',title:['Лекарство','Созвон','Встреча','Работа','Такси'][i]})); render();`});
+        await new Promise(resolve => setTimeout(resolve, 150));
+        const shot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'reminder-track.png'), Buffer.from(shot.data,'base64'));
+        const pointerTarget = await send('Runtime.evaluate', {expression:`(() => {const r=document.querySelector('.city-alarm-pin').getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2};})()`,returnByValue:true});
+        await send('Input.dispatchMouseEvent', {type:'mouseMoved',...pointerTarget.result.value});
+        await new Promise(resolve => setTimeout(resolve, 160));
+        const hoverCheck = await send('Runtime.evaluate', {expression:`(() => {const pin=document.querySelector('.city-alarm-pin'), probe=document.createElement('span'); probe.style.color='var(--accent)'; document.body.appendChild(probe); const result={purple:getComputedStyle(pin).color===getComputedStyle(probe).color,unframed:getComputedStyle(pin).backgroundColor==='rgba(0, 0, 0, 0)' && getComputedStyle(pin).borderTopWidth==='0px',popup:!!document.querySelector('#reminderTooltip')}; probe.remove(); return result;})()`,returnByValue:true});
+        assert.deepEqual(hoverCheck.result.value,{purple:true,unframed:true,popup:true});
+        const tooltipShot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'reminder-tooltip.png'), Buffer.from(tooltipShot.data,'base64'));
+        await send('Input.dispatchMouseEvent', {type:'mouseMoved',x:0,y:0});
+        await send('Runtime.evaluate', {expression:'offset=24; updateDynamic();'});
+        const edgeShot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'reminder-directions.png'), Buffer.from(edgeShot.data,'base64'));
+        await send('Runtime.evaluate', {expression:'offset=0; updateDynamic();'});
+        await send('Runtime.evaluate', {expression:`document.querySelector('.city-alarm-right').click();`});
+        const listShot = await send('Page.captureScreenshot', {format:'png',captureBeyondViewport:false});
+        fs.writeFileSync(path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'reminder-list.png'), Buffer.from(listShot.data,'base64'));
+        await send('Input.dispatchMouseEvent', {type:'mouseMoved',x:0,y:0});
+        await send('Runtime.evaluate', {expression:`closeModal(); reminders.entries=window.reminderShotState.entries; offset=window.reminderShotState.offset; render();`});
+      }
+      if (width === 390) {
+        const duplicateCheck = await send('Runtime.evaluate', {returnByValue:true,expression:`(() => {
+          const saved={config:structuredClone(config),reminders:structuredClone(reminders),offset,meetingMode,quickAtNowOpen};
+          meetingMode=false; quickAtNowOpen=true; reminders.entries=[];
+          const original=item(config.timezones[0]).key; config.timezones[0]=original;
+          openCities('add'); renderResults('add',cityName(original));
+          [...document.querySelectorAll('[data-add]')].find(b=>b.dataset.add===original).click();
+          const copy=config.timezones.at(-1);
+          for (const [key,name,start] of [[original,'Анна','09:00'],[copy,'Иван','11:00']]) {
+            openScheduleEditor(key);
+            if(document.querySelector('#useDefaultSwitch').getAttribute('aria-checked')==='true') document.querySelector('#useDefaultSwitch').click();
+            document.querySelector('#scheduleCityLabel').value=name;
+            document.querySelector('[data-schedule-time="workingStart"]').value=start;
+            document.querySelector('#saveSchedule').click(); closeModal();
+          }
+          offset=1; createReminder(original,0); offset=1; createReminder(copy,0);
+          config=JSON.parse(JSON.stringify(config)); reminders=JSON.parse(JSON.stringify(reminders)); normalize(); render();
+          const cards=[...document.querySelectorAll('.city-card')];
+          const result={distinct:copy!==original,sameCity:cityName(copy)===cityName(original),names:[cityContext(original).label,cityContext(copy).label],starts:[scheduleFor(original).workingStart,scheduleFor(copy).workingStart],alarms:[cityReminders(original).length,cityReminders(copy).length],pins:[original,copy].map(key=>cards.find(c=>c.dataset.zone===key).querySelectorAll('.city-alarm-pin').length)};
+          const wheel=[];
+          for(const initial of [5,-5,0]) {
+            config.settings.reminder_intervals[0]=initial; render();
+            const chip=document.querySelector('.chip');
+            chip.dispatchEvent(new WheelEvent('wheel',{deltaY:-40,bubbles:true,cancelable:true}));
+            wheel.push(+chip.dataset.lead);
+            chip.dispatchEvent(new WheelEvent('wheel',{deltaY:40,bubbles:true,cancelable:true}));
+            wheel.push(+chip.dataset.lead);
+          }
+          result.wheel=wheel;
+          config=saved.config; reminders=saved.reminders; offset=saved.offset; meetingMode=saved.meetingMode; quickAtNowOpen=saved.quickAtNowOpen; closeModal(); render();
+          return result;
+        })()`});
+        if(duplicateCheck.exceptionDetails) throw new Error(JSON.stringify(duplicateCheck.exceptionDetails));
+        assert.deepEqual(duplicateCheck.result.value,{distinct:true,sameCity:true,names:['Анна','Иван'],starts:['09:00','11:00'],alarms:[1,1],pins:[1,1],wheel:[6,5,-4,-5,1,0]});
+        console.log('Real UI duplicate add, independent name/schedule editors, isolated pins after reload and signed interval wheel directions passed.');
+      }
       if (process.env.LAYOUT_SCREENSHOT_DIR && width === 360 && height === 640) {
         await send('Runtime.evaluate', {expression:'meetingMode=false; offset=0; quickAtNowOpen=true; render();'});
         await new Promise(resolve => setTimeout(resolve, 350));
@@ -150,6 +294,8 @@ async function connect() {
             fontSizes.add(getComputedStyle(node.parentElement).fontSize);
         }
         const del = rect('.city-summary>.delete');
+        const trash = rect('.city-summary>.delete .trash-icon');
+        const track = rect('.city-alarm-track');
         const summary = rect('.city-summary');
         const band = rect('.city-summary .temporal-band');
         const icon = rect('.city-context');
@@ -169,7 +315,9 @@ async function connect() {
           cityTitleToCard:firstCity.top-cityTitle.bottom,
           labelLeft:label.left,nowLabelLeft,railLeft:rail.left,heroLeft:hero.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,addLeft:rect('.add').left,
           statusWidths,shiftedStatusWidths,longStatusFits,
-          deleteTop:del.top,deleteBottom:del.bottom,deleteRight:del.right,
+          deleteTop:del.top,deleteBottom:del.bottom,deleteRight:del.right,deleteLeft:del.left,
+          trashX:(trash.left+trash.right)/2,trashY:(trash.top+trash.bottom)/2,deleteX:(del.left+del.right)/2,
+          trackLeft:track.left,trackRight:track.right,iconX:(icon.left+icon.right)/2,
           summaryTop:summary.top,summaryBottom:summary.bottom,summaryRight:summary.right,
           bandTop:band.top,bandBottom:band.bottom,iconTop:icon.top,iconBottom:icon.bottom,
           bandLeft:band.left,bandRight:band.right,summaryLeft:summary.left,
@@ -204,14 +352,17 @@ async function connect() {
       assert.ok(Math.abs(layout.quickTitleLeft - layout.heroLeft) <= 1, `quick heading is not aligned to the main blocks at ${width}x${height}`);
       assert.ok(layout.cityTitleToCard <= 8, `city heading is too far from its cards at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteTop - layout.summaryTop) <= 1, `delete button top gap at ${width}x${height}`);
-      assert.ok(Math.abs(layout.deleteBottom - layout.bandTop) <= 1, `delete button stops at the bottom color band at ${width}x${height}`);
+      assert.ok(Math.abs(layout.deleteBottom - layout.summaryBottom) <= 1, `delete button spans the full column at ${width}x${height}`);
       assert.ok(Math.abs(layout.bandBottom - layout.summaryBottom) <= 1, `color band should sit at city-card bottom at ${width}x${height}`);
       assert.ok(layout.iconBottom <= layout.bandTop + 1, `city icon remains above the bottom timeline at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteRight - layout.summaryRight) <= 1, `delete button right gap at ${width}x${height}`);
       assert.ok(Math.abs(layout.cityTextInset - layout.baseTextInset) <= 1, `city and base left text insets should match at ${width}x${height}`);
       assert.ok(Math.abs(layout.deleteTextGap - layout.baseTextRight) <= 1, `city time should match base-card right inset at ${width}x${height}`);
-      assert.ok(Math.abs(layout.bandLeft - layout.summaryLeft) <= 1 && Math.abs(layout.bandRight - layout.summaryRight) <= 1,
-        `color band must span the card at ${width}x${height}`);
+      assert.ok(Math.abs(layout.bandLeft - layout.summaryLeft) <= 1 && Math.abs(layout.bandRight - layout.deleteLeft) <= 1,
+        `color band must stop at the delete column at ${width}x${height}`);
+      assert.ok(Math.abs(layout.trashX-layout.deleteX)<=1 && Math.abs(layout.trashY-layout.deleteCenter)<=1, `trash glyph centered in its column at ${width}x${height}`);
+      assert.ok(Math.abs(layout.trackLeft-layout.bandLeft)<=1 && Math.abs(layout.trackRight-layout.bandRight)<=1, `reminder track follows shortened band at ${width}x${height}`);
+      assert.ok(Math.abs(layout.iconX-(layout.bandLeft+layout.bandRight)/2)<=1, `sun follows shortened band center at ${width}x${height}`);
       assert.ok(layout.longStatusFits, `short day-shift status should be fully visible at ${width}x${height}`);
       if (width < 760 && height >= 520) {
         assert.ok(layout.quickToCities >= layout.cityTitleToCard * 2, `city section grouping at ${width}x${height}`);
