@@ -18,7 +18,7 @@ type Roadmap = { ideas: Idea[]; counts: Record<string, number>; funded: Record<s
 type Modal = null | 'auth' | 'suggest' | 'support';
 
 const defaults: Roadmap = { ideas: [], counts: {}, funded: {}, selected: null, settings: {}, methods: [], suggestions: [], ownSuggestions: [] };
-const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.168/WorldClockWidget-Setup-v1.1.168.exe';
+const currentDownload = 'https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.180/WorldClockWidget-Setup-v1.1.180.exe';
 export default function Home() {
   const [lang, setLang] = useState<'ru' | 'en'>('ru');
   const [data, setData] = useState<Roadmap>(defaults);
@@ -58,7 +58,7 @@ export default function Home() {
     localStorage.setItem('wc-lang', value);
     document.documentElement.setAttribute('lang', value);
   };
-  const version = data.settings.download_version || 'v1.1.168';
+  const version = data.settings.download_version || 'v1.1.180';
   const download = version === data.settings.download_version && data.settings.download_url ? data.settings.download_url : currentDownload;
   const macDownload = `https://github.com/CandFlip/world-clock-widget/releases/download/${version}/WorldClockWidget-macOS-${version}.dmg`;
   function trackDownload(platform: 'windows' | 'mac') {
@@ -134,7 +134,7 @@ export default function Home() {
       <h1>{t.headline}</h1><p className="hero-copy">{t.intro}</p>
       <div className="hero-actions"><a className="primary-action" href={download} onClick={() => trackDownload('windows')}><ArrowDownToLine />{t.download}<span>{version}</span></a><a className="primary-action" href={macDownload} onClick={() => trackDownload('mac')}><ArrowDownToLine />{t.downloadMac}<span>Beta</span></a><a className="text-action" href={`https://github.com/CandFlip/world-clock-widget/releases/tag/${version}`} target="_blank" rel="noreferrer">{t.source}<ExternalLink /></a></div>
       <p className="download-note">{t.downloadNote}</p>
-      {version === 'v1.1.168' && <p className="hero-copy">{lang === 'ru' ? 'В v1.1.168: отдельные напоминания и часы связи для людей в одном городе, компактные отметки будильников на шкале и прокрутка интервалов через ноль.' : 'In v1.1.168: separate reminders and contact hours for people in the same city, compact alarm markers on the timeline, and signed intervals that scroll through zero.'}</p>}
+      {version === 'v1.1.180' && <p className="hero-copy">{lang === 'ru' ? 'В v1.1.180: чёткие напоминания прямо на шкале, группы близких отметок со списком времён, компактные карточки и обновлённое обучение.' : 'In v1.1.180: clear reminders directly on the timeline, nearby markers grouped with a list of times, compact cards, and an updated guide.'}</p>}
     </section>
 
     <section className="roadmap-section" id="roadmap">
