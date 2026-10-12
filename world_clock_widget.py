@@ -39,9 +39,9 @@ except ImportError:
 
 
 APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.180"
+APP_VERSION = "v1.1.181"
 APP_DIR_NAME = "WorldClockWidget"
-ROADMAP_URL = "https://world-clock-next.decent-rat-2368.chatgpt.site"
+ROADMAP_URL = "https://world-clock-next.uuuraaaaa.workers.dev"
 MIN_WIDGET_HEIGHT = 640
 SHUTDOWN_EVENT_NAME = "Local\\WorldClockWidgetShutdown"
 SHOW_EVENT_NAME = "Local\\WorldClockWidgetShow"

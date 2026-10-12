@@ -1181,7 +1181,7 @@ function bindMain() {
   $('[data-action=settings]').onclick = openSettings;
   $('[data-action=add]').onclick = () => openCities('add');
   $('[data-action=hide]').onclick = () => send('hide');
-  $('[data-action=whats-next]').onclick = () => send('openExternal\nhttps://world-clock-next.decent-rat-2368.chatgpt.site');
+  $('[data-action=whats-next]').onclick = () => send('openExternal\nhttps://world-clock-next.uuuraaaaa.workers.dev');
   $('#versionButton').onclick = openFeatureGuide;
   $('#updateButton').onclick = updateButtonClick;
   updateUpdateButton();

@@ -4,10 +4,12 @@
 
 World Clock Widget показывает местное время ваших коллег, клиентов и близких, помогает выбрать удобный момент для звонка и напоминает о нём. Всё важное — в небольшом окне на рабочем столе.
 
-### Скачать v1.1.180
+### Скачать v1.1.181
 
-- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.180/WorldClockWidget-Setup-v1.1.180.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
-- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.180/WorldClockWidget-macOS-v1.1.180.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
+В этой версии исправлен переход «Что дальше?»: планы, голосование и предложения открываются прямо на [новом сайте](https://world-clock-next.uuuraaaaa.workers.dev).
+
+- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.181/WorldClockWidget-Setup-v1.1.181.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
+- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.181/WorldClockWidget-macOS-v1.1.181.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
 
 ## Что можно делать
 
@@ -21,12 +23,12 @@ World Clock Widget показывает местное время ваших к�
 
 ## Последнее обновление
 
-В v1.1.180 напоминания стоят прямо на шкале города. Близкие отметки объединяются со счётчиком, а подсказка перечисляет время и название каждого напоминания. Карточки стали компактнее, подсказки помещаются в окне, встроенное обучение обновлено.
+В v1.1.181 напоминания стоят прямо на шкале города. Близкие отметки объединяются со счётчиком, а подсказка перечисляет время и название каждого напоминания. Карточки стали компактнее, подсказки помещаются в окне, встроенное обучение обновлено.
 
-[Что нового в v1.1.180 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.180) · [История изменений →](CHANGELOG.md)
+[Что нового в v1.1.181 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.181) · [История изменений →](CHANGELOG.md)
 
 ---
 
-[Исходный код v1.1.180](https://github.com/CandFlip/world-clock-widget/tree/v1.1.180) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
+[Исходный код v1.1.181](https://github.com/CandFlip/world-clock-widget/tree/v1.1.181) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
 
 Каталог крупных городов основан на данных [GeoNames](https://www.geonames.org/) с указанием источника по лицензии CC BY 4.0.
