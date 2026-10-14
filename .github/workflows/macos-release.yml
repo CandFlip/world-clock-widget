@@ -1,0 +1,88 @@
+name: Build cross-platform release draft
+
+on:
+  workflow_dispatch:
+    inputs:
+  push:
+    tags:
+      - 'v*'
+      - 'mac-test-*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check synchronized release versions
+        run: node native/test_release_versions.cjs
+
+      - name: Check tag matches application version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          version=$(sed -n 's/.*<key>CFBundleShortVersionString<\/key><string>\([^<]*\)<\/string>.*/\1/p' macos/Info.plist)
+          test "v$version" = "$GITHUB_REF_NAME"
+
+      - name: Build universal macOS application and DMG
+        run: bash macos/build.sh
+
+      - name: Check shared shortcut behavior
+        run: node native/test_hotkey_ui.cjs
+
+      - name: Check shared scheduling and meeting behavior
+        run: |
+          node native/test_ui_logic.cjs
+          node native/test_reminder_ux.cjs
+          node native/test_interface_scale.cjs
+          node native/test_sound_library.cjs
+          node native/test_sync.cjs
+
+      - name: Check macOS layout and capture previews
+        env:
+          LAYOUT_REQUIRE_CHROME: '1'
+          LAYOUT_SCREENSHOT_DIR: ${{ runner.temp }}/world-clock-layout
+        run: node native/test_layout.cjs
+
+      - name: Upload macOS layout previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldClockWidget-macOS-layout-${{ github.run_id }}
+          path: ${{ runner.temp }}/world-clock-layout/*.png
+          if-no-files-found: warn
+
+      - name: Check release description
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          test -s RELEASE_NOTES.md
+          grep -Fq "## $GITHUB_REF_NAME" RELEASE_NOTES.md
+
+      - name: Upload macOS build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldClockWidget-macOS-${{ github.run_id }}
+          path: release/WorldClockWidget-macOS-*.dmg
+          if-no-files-found: error
+
+      - name: Publish cross-platform GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: World Clock Widget ${{ github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            release/WorldClockWidget-macOS-*.dmg
+            release/WorldClockWidget-Setup-${{ github.ref_name }}.exe
+          fail_on_unmatched_files: true
+          draft: true
+          make_latest: false
