@@ -1,5 +1,5 @@
 #define MyAppName "World Clock Widget"
-#define MyAppVersion "1.1.181"
+#define MyAppVersion "1.1.184"
 #define MyAppExeName "WorldClockWidget.exe"
 #define MyAppPublisher "CandFlip"
 #define MyAppURL "https://github.com/CandFlip/world-clock-widget"
@@ -36,7 +36,7 @@ SetupLogging=yes
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoProductName={#MyAppName}
-VersionInfoVersion=1.1.181.0
+VersionInfoVersion=1.1.184.0
 SetupIconFile=native\app-icon.ico
 
 [InstallDelete]

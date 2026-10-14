@@ -44,6 +44,7 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 plutil -lint "$CONTENTS/Info.plist"
 lipo -info "$CONTENTS/MacOS/WorldClockWidget"
 WORLD_CLOCK_SELF_TEST=1 "$CONTENTS/MacOS/WorldClockWidget"
+WORLD_CLOCK_SELF_TEST=1 WORLD_CLOCK_SCALE_SELF_TEST=1 "$CONTENTS/MacOS/WorldClockWidget"
 
 STAGING="$BUILD/dmg"
 mkdir -p "$STAGING"

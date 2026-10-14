@@ -39,7 +39,7 @@ except ImportError:
 
 
 APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.181"
+APP_VERSION = "v1.1.184"
 APP_DIR_NAME = "WorldClockWidget"
 ROADMAP_URL = "https://world-clock-next.uuuraaaaa.workers.dev"
 MIN_WIDGET_HEIGHT = 640

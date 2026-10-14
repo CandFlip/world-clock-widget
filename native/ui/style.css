@@ -5,6 +5,16 @@ html,body,#app{height:100%;margin:0;overflow:hidden;background:transparent}
 body{color:var(--text);font-size:var(--type-body);line-height:1.25;user-select:none}
 .light{--bg:#f6f8fa;--surface:#fff;--hover:#eaedf1;--border:#d0d7de;--text:#1f2328;--muted:#656d76;--accent:#6e40e6;--danger:#cf222e;--badge:#eee9ff;--availability-working:#5d9f7b;--availability-okay:#b49450;--availability-dnd:#a0a6b0;--solar-daylight:#e4c76f;--solar-twilight:#aaa0bd;--solar-night:#59667d;--marker:#111827;--reminder-marker:#fff;color-scheme:light}
 button,input{font:inherit}
+.interface-scale-group{padding-bottom:12px}
+.interface-scale-control{display:flex;align-items:center;gap:12px;margin:16px 12px 8px}
+#interfaceScaleSlider{display:block;flex:1;min-width:0;width:100%;height:20px;margin:0;appearance:none;background:transparent;accent-color:var(--accent);cursor:pointer}
+#interfaceScaleSlider::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--accent) 0 var(--scale-progress,0%),var(--border) var(--scale-progress,0%) 100%)}
+#interfaceScaleSlider::-webkit-slider-thumb{appearance:none;width:16px;height:16px;margin-top:-6px;border:0;border-radius:50%;background:var(--accent)}
+#interfaceScaleSlider::-moz-range-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--accent) 0 var(--scale-progress,0%),var(--border) var(--scale-progress,0%) 100%)}
+#interfaceScaleSlider::-moz-range-thumb{width:16px;height:16px;border:0;border-radius:50%;background:var(--accent)}
+#interfaceScaleSlider:disabled{opacity:.45;cursor:default}
+#interfaceScaleValue{flex:none;min-width:4ch;text-align:right;color:var(--accent);font-variant-numeric:tabular-nums}
+.interface-scale-labels{display:flex;justify-content:space-between;margin:0 12px;color:var(--muted);font-size:var(--type-caption)}
 button{color:inherit}
 .shell{width:100%;height:100%;padding:18px;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:12px;background:var(--bg);overflow:hidden}
 .shell>*{width:100%;min-width:0;max-width:100%}

@@ -17,6 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check synchronized release versions
+        run: node native/test_release_versions.cjs
+
       - name: Check tag matches application version
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
@@ -34,6 +41,9 @@ jobs:
         run: |
           node native/test_ui_logic.cjs
           node native/test_reminder_ux.cjs
+          node native/test_interface_scale.cjs
+          node native/test_sound_library.cjs
+          node native/test_sync.cjs
 
       - name: Check macOS layout and capture previews
         env:

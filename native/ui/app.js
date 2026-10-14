@@ -33,7 +33,7 @@ const defaults = {
   favorites: ['Asia/Tokyo', 'America/New_York', 'Europe/London', 'Asia/Dubai', 'Australia/Sydney', 'Europe/Berlin'],
   settings: {
     top_clock_mode: 'auto', manual_top_timezone: 'Asia/Ho_Chi_Minh', base_timezone: '',
-    overlay_direction: 'right', time_format: 'system', theme: 'system', language: 'ru',
+    overlay_direction: 'right', time_format: 'system', theme: 'system', language: 'ru', interface_scale: 100, interface_scale_default: true,
     availabilityDefault: {...defaultAvailability}, baseAvailabilityOverride: null,
     reminder_intervals: [15, 30, 60], autostart: true,
   },
@@ -831,7 +831,10 @@ function secondaryContext(selected, zone) {
 }
 
 function normalize() {
+  const scaleDefault = config.settings?.interface_scale_default;
   config = {...structuredClone(defaults), ...config, settings: {...defaults.settings, ...(config.settings || {})}};
+  config.settings.interface_scale = interfaceScale(config.settings.interface_scale);
+  config.settings.interface_scale_default = typeof scaleDefault === 'boolean' ? scaleDefault : config.settings.interface_scale === 100;
   config.cityContext = config.cityContext && typeof config.cityContext === 'object' && !Array.isArray(config.cityContext) ? config.cityContext : {};
   config.timezones = Array.isArray(config.timezones) ? config.timezones : [...defaults.timezones];
   const seenCities = [];
@@ -1672,7 +1675,7 @@ function featureGuideItems() {
   [
     "settings",
     "Настроить внешний вид и вызов",
-    "Нажмите шестерёнку: здесь меняются тема, язык, формат времени, сочетание клавиш и автозапуск.",
+    "Нажмите шестерёнку: здесь меняются тема, масштаб интерфейса (по умолчанию или вручную: 100–200%, шаг 5%), язык, формат времени, сочетание клавиш и автозапуск.",
     "Размер окна меняется за его край. Высота блока больших часов и напоминаний — за короткую ручку под этим блоком."
   ],
   [
@@ -1781,7 +1784,7 @@ function featureGuideItems() {
   [
     "settings",
     "Customize appearance and shortcuts",
-    "Press the gear to change theme, language, time format, keyboard shortcut, and startup.",
+    "Press the gear to change theme, interface scale (default or custom: 100–200%, 5% steps), language, time format, keyboard shortcut, and startup.",
     "Drag a window edge to resize it. Drag the short handle below the top panels to change their height."
   ],
   [
@@ -2063,10 +2066,53 @@ document.addEventListener('keyup', event => {
   updateHotkeyUI();
 }, true);
 
+function interfaceScale(value = config.settings.interface_scale) {
+  const percent = Number(value);
+  return Number.isInteger(percent) && percent >= 100 && percent <= 200 && percent % 5 === 0 ? percent : 100;
+}
+function applyInterfaceScale() {
+  send(`setInterfaceScale\n${currentInterfaceScale()}`);
+}
+function currentInterfaceScale() {
+  return config.settings.interface_scale_default ? 100 : interfaceScale();
+}
+function openInterfaceScale() {
+  const ru = lang() === 'ru';
+  modal(ru ? 'Масштаб интерфейса' : 'Interface scale', `
+    <p class="settings-help">${ru ? 'Выключите масштаб по умолчанию, чтобы выбрать свой размер с шагом 5%. Включите его снова, чтобы вернуться к 100%. Ваш выбор запоминается.' : 'Turn off default interface scale to choose your size in 5% steps. Turn it on again to return to 100%. Your custom size is remembered.'}</p>
+    <div class="group interface-scale-group">
+      <div class="row toggle-row"><span>${ru ? 'Масштаб по умолчанию' : 'Default interface scale'}</span><button class="switch" id="interfaceScaleDefaultSwitch" type="button" role="switch" aria-label="${ru ? 'Масштаб по умолчанию' : 'Default interface scale'}"></button></div>
+      <div class="interface-scale-control"><input id="interfaceScaleSlider" type="range" min="100" max="200" step="5" aria-label="${ru ? 'Масштаб интерфейса' : 'Interface scale'}"><output id="interfaceScaleValue" for="interfaceScaleSlider"></output></div>
+      <div class="interface-scale-labels"><span>100%</span><span>200%</span></div>
+    </div>`, openSettings);
+  const refresh = () => {
+    const automatic = config.settings.interface_scale_default;
+    const scale = currentInterfaceScale();
+    $('#interfaceScaleDefaultSwitch').classList.toggle('on', automatic);
+    $('#interfaceScaleDefaultSwitch').setAttribute('aria-checked', String(automatic));
+    $('#interfaceScaleSlider').disabled = automatic;
+    $('#interfaceScaleSlider').value = scale;
+    $('#interfaceScaleSlider').style.setProperty('--scale-progress', `${scale - 100}%`);
+    $('#interfaceScaleSlider').setAttribute('aria-valuetext', `${scale}%`);
+    $('#interfaceScaleValue').textContent = `${scale}%`;
+  };
+  $('#interfaceScaleSlider').oninput = event => {
+    if (config.settings.interface_scale_default) return;
+    config.settings.interface_scale = interfaceScale(event.target.value);
+    refresh(); saveConfig(); applyInterfaceScale();
+  };
+  $('#interfaceScaleDefaultSwitch').onclick = () => {
+    config.settings.interface_scale_default = !config.settings.interface_scale_default;
+    refresh(); saveConfig(); applyInterfaceScale();
+  };
+  refresh();
+}
+
 function openSettings() {
   const themeName = config.settings.theme === 'system' ? t('systemTheme') : t(config.settings.theme);
   const formatName = config.settings.time_format === 'system' ? t('systemFormat') : t(config.settings.time_format === '12' ? 'hour12' : 'hour24');
   modal(t('settings'), `<div class="group"><div class="row" id="theme"><span>${t('theme')}</span><span class="row-value">${themeName} ›</span></div>
+    <button class="row settings-button" id="interfaceScale"><span>${lang() === 'ru' ? 'Масштаб интерфейса' : 'Interface scale'}</span><span class="row-value">${currentInterfaceScale()}% ›</span></button>
     <div class="row" id="timeFormat"><span>${t('timeFormat')}</span><span class="row-value">${formatName} ›</span></div>
     <div class="row" id="base"><span>${t('base')}</span><span class="row-value">${config.settings.top_clock_mode === 'auto' ? t('system') : esc(cityName(config.settings.manual_top_timezone))} ›</span></div></div>
     <div class="group"><div class="row" id="language"><span>${t('language')}</span><span class="row-value">${lang() === 'ru' ? 'Русский' : 'English'} ›</span></div></div>
@@ -2084,6 +2130,7 @@ function openSettings() {
     config.settings.time_format = value; saveConfig(); render(); openSettings();
   });
   $('#base').onclick = () => openCities('base-settings');
+  $('#interfaceScale').onclick = openInterfaceScale;
   $('#language').onclick = () => choice(t('language'), [['ru', 'Русский'], ['en', 'English']], lang(), value => {
     config.settings.language = value; saveConfig(); render(); openSettings();
   });
@@ -2558,6 +2605,7 @@ host?.addEventListener('message', event => {
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
   if (JSON.stringify(config) !== previousConfig) saveConfig();
   send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
+  applyInterfaceScale();
   render();
   send('rendered');
   if (typeof setTimeout === 'function') setTimeout(() => checkForUpdates(), 1200);

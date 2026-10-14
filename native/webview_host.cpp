@@ -45,13 +45,14 @@ constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.181";
+constexpr wchar_t kVersion[] = L"v1.1.184";
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
 std::atomic_bool g_updateDownloading{false};
 
 HWND g_window{};
 ComPtr<ICoreWebView2Controller> g_controller;
+double g_interfaceScale = 1.0;
 ComPtr<ICoreWebView2> g_webview;
 NOTIFYICONDATAW g_tray{};
 HANDLE g_showEvent{}, g_shutdownEvent{}, g_watchThread{};
@@ -668,6 +669,24 @@ void handleMessage(const std::wstring& message) {
             g_webview->ExecuteScript(L"window.nativeTick&&window.nativeTick(false)", nullptr);
         }
     }
+    else if (message.rfind(L"setInterfaceScale\n", 0) == 0) {
+        const auto value = payload(L"setInterfaceScale\n");
+        if (value.size() != 3 || !std::all_of(value.begin(), value.end(), [](wchar_t c) { return c >= L'0' && c <= L'9'; })) return;
+        const int percent = std::stoi(value);
+        if (percent < 100 || percent > 200 || percent % 5 != 0) return;
+        g_interfaceScale = percent / 100.0;
+        if (g_controller) g_controller->put_ZoomFactor(g_interfaceScale);
+        RECT rect = g_target;
+        MONITORINFO monitor{sizeof(MONITORINFO)};
+        GetMonitorInfoW(MonitorFromWindow(g_window, MONITOR_DEFAULTTONEAREST), &monitor);
+        const auto& work = monitor.rcWork;
+        int width = std::min(int(work.right-work.left), std::max(int(rect.right-rect.left), int(400*g_interfaceScale)));
+        int height = std::min(int(work.bottom-work.top), std::max(int(rect.bottom-rect.top), int(320*g_interfaceScale)));
+        int x = std::clamp(int(rect.left), int(work.left), int(work.right)-width);
+        int y = std::clamp(int(rect.top), int(work.top), int(work.bottom)-height);
+        g_target = {LONG(x), LONG(y), LONG(x+width), LONG(y+height)};
+        SetWindowPos(g_window, nullptr, x, y, width, height, SWP_NOZORDER|SWP_NOACTIVATE);
+    }
     else if (message == L"drag") { ReleaseCapture(); SendMessageW(g_window, WM_NCLBUTTONDOWN, HTCAPTION, 0); }
     else if (message == L"resize") { ReleaseCapture(); SendMessageW(g_window, WM_NCLBUTTONDOWN, HTBOTTOMRIGHT, 0); }
     else if (message.rfind(L"resize:", 0) == 0) {
@@ -751,6 +770,7 @@ void initializeWebView() {
                     settings->put_AreDefaultContextMenusEnabled(FALSE);
                     settings->put_AreDevToolsEnabled(FALSE);
                     settings->put_IsStatusBarEnabled(FALSE);
+                    settings->put_IsZoomControlEnabled(FALSE);
                     auto* messageHandler = new MessageHandler(
                         [](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args)->HRESULT {
                             LPWSTR raw{}; if (SUCCEEDED(args->TryGetWebMessageAsString(&raw)) && raw) { handleMessage(raw); CoTaskMemFree(raw); }
@@ -815,7 +835,7 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         }
         case WM_SIZE: setBounds(); return 0;
         case WM_EXITSIZEMOVE: if(!g_animating&&g_visible){GetWindowRect(window,&g_target);saveWindow();} return 0;
-        case WM_GETMINMAXINFO: { auto* info=(MINMAXINFO*)lParam; info->ptMinTrackSize={400,320}; return 0; }
+        case WM_GETMINMAXINFO: { auto* info=(MINMAXINFO*)lParam; info->ptMinTrackSize={LONG(400*g_interfaceScale),LONG(320*g_interfaceScale)}; return 0; }
         case WM_HOTKEY: if (wParam==kHotkey) showWidget(!g_visible); return 0;
         case kShowMessage: showWidget(true); return 0;
         case WM_TIMECHANGE:

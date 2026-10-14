@@ -251,6 +251,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         webView.evaluateJavaScript(script) { result, error in
             let passed = nativeHotKeyMapping && error == nil && result as? String == "pass"
             if passed {
+                if ProcessInfo.processInfo.environment["WORLD_CLOCK_SCALE_SELF_TEST"] == "1" {
+                    self.runScaleSelfTest()
+                    return
+                }
                 self.hideWidget()
                 self.runHiddenAlarmSelfTest()
                 return
@@ -263,6 +267,61 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
                     fputs("macOS runtime tick test failed: hotkey=\(nativeHotKeyMapping), result=\(String(describing: result)), error=\(String(describing: error)), details=\(String(describing: details)), detailError=\(String(describing: diagnosticError))\n", stderr)
                     self.finishSelfTest(code: 3)
                 }
+            }
+        }
+    }
+
+    private func runScaleSelfTest(step: Int = 0) {
+        var cases: [(script: String, scale: Int, automatic: Bool, manual: Int)] = [
+            ("config.settings.interface_scale=100;config.settings.interface_scale_default=true;openInterfaceScale();applyInterfaceScale();", 100, true, 100)
+        ]
+        for percent in stride(from: 100, through: 200, by: 5) {
+            cases.append(("if(config.settings.interface_scale_default)$('#interfaceScaleDefaultSwitch').click();$('#interfaceScaleSlider').value=\(percent);$('#interfaceScaleSlider').dispatchEvent(new Event('input'));", percent, false, percent))
+        }
+        cases.append(("$('#interfaceScaleSlider').value=135;$('#interfaceScaleSlider').dispatchEvent(new Event('input'));$('#interfaceScaleDefaultSwitch').click();", 100, true, 135))
+        cases.append(("reload", 100, true, 135))
+        cases.append(("$('#interfaceScaleDefaultSwitch').click();", 135, false, 135))
+        cases.append(("reload", 135, false, 135))
+        guard step < cases.count else {
+            fputs("macOS WKWebView scale test passed: 21 scales, default switch, disabled slider, remembered custom size and config reload in both modes\n", stderr)
+            finishSelfTest(code: 0)
+        }
+        let test = cases[step]
+        let check = "JSON.stringify({pass:currentInterfaceScale()===\(test.scale)&&interfaceScale()===\(test.manual)&&config.settings.interface_scale_default===\(test.automatic)&&$('#interfaceScaleSlider').disabled===\(test.automatic)&&$('#interfaceScaleSlider').step==='5'&&$('#interfaceScaleValue').textContent==='\(test.scale)%'&&$('.modal-body').scrollWidth<=$('.modal-body').clientWidth+1,scale:currentInterfaceScale(),manual:interfaceScale(),automatic:config.settings.interface_scale_default,disabled:$('#interfaceScaleSlider').disabled,viewport:[innerWidth,innerHeight]})"
+        let validate = {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                self.webView.evaluateJavaScript(check) { result, error in
+                    let text = result as? String ?? ""
+                    let record = text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+                    let work = self.panel.screen?.visibleFrame ?? self.panel.frame
+                    let frame = self.panel.frame
+                    let visible = frame.minX >= work.minX - 1 && frame.maxX <= work.maxX + 1 && frame.minY >= work.minY - 1 && frame.maxY <= work.maxY + 1
+                    let saved = self.readDataFile(name: "widget_config.json", fallback: "{}").data(using: .utf8)
+                        .flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+                    let settings = saved?["settings"] as? [String: Any]
+                    guard error == nil, record?["pass"] as? Bool == true,
+                          abs(self.webView.pageZoom - CGFloat(test.scale) / 100) < 0.01, visible,
+                          settings?["interface_scale"] as? Int == test.manual,
+                          settings?["interface_scale_default"] as? Bool == test.automatic else {
+                        fputs("macOS scale step \(step) failed: \(text), zoom=\(self.webView.pageZoom), visible=\(visible), error=\(String(describing: error))\n", stderr)
+                        self.finishSelfTest(code: 3)
+                    }
+                    self.runScaleSelfTest(step: step + 1)
+                }
+            }
+        }
+        if test.script == "reload" {
+            postInitialState()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.webView.evaluateJavaScript("openInterfaceScale();") { _, error in
+                    if let error { fputs("macOS scale reload failed: \(error)\n", stderr); self.finishSelfTest(code: 3) }
+                    validate()
+                }
+            }
+        } else {
+            webView.evaluateJavaScript(test.script) { _, error in
+                if let error { fputs("macOS scale action failed: \(error)\n", stderr); self.finishSelfTest(code: 3) }
+                validate()
             }
         }
     }
@@ -381,6 +440,19 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             let key = values.count == 2 ? UInt32(values[1]) : nil
             let success = modifiers.flatMap { m in key.map { registerHotKey(modifiers: m, key: $0) } } ?? false
             postHotKeyResult(success: success)
+        } else if message.hasPrefix("setInterfaceScale\n") {
+            guard let percent = Double(payload(message, prefix: "setInterfaceScale\n")),
+                  percent >= 100, percent <= 200, percent.truncatingRemainder(dividingBy: 5) == 0 else { return }
+            let scale = CGFloat(percent / 100)
+            webView.pageZoom = scale
+            panel.minSize = NSSize(width: 360 * scale, height: 320 * scale)
+            var frame = panel.frame
+            let work = panel.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? frame
+            frame.size.width = min(work.width, max(frame.width, panel.minSize.width))
+            frame.size.height = min(work.height, max(frame.height, panel.minSize.height))
+            frame.origin.x = min(max(frame.origin.x, work.minX), work.maxX - frame.width)
+            frame.origin.y = min(max(frame.origin.y, work.minY), work.maxY - frame.height)
+            panel.setFrame(frame, display: true)
         } else if message.hasPrefix("saveConfig\n") {
             writeDataFile(name: "widget_config.json", value: payload(message, prefix: "saveConfig\n"))
         } else if message.hasPrefix("saveReminders\n") {
