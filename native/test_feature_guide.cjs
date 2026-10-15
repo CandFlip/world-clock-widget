@@ -108,7 +108,7 @@ async function connect() {
    assert.ok(switchLayout.display==='flex'&&Math.abs(switchLayout.width-42*.85)<.1&&switchLayout.sameRow&&switchLayout.sideBySide,JSON.stringify(switchLayout));
    assert.notEqual(switchLayout.color,'rgba(0, 0, 0, 0)');
    const rhythm=await evaluate(`(()=>{
-    const host=document.querySelector('.feature-content'),p=document.createElement('p');
+    const host=document.querySelector('.feature-card[open] .feature-content'),p=document.createElement('p');
     p.style.maxWidth='240px';p.innerHTML=guideText('Текст [[add]] текст [[cityPlus]] текст [[favorite]] текст [[unfavorite]] текст [[periodSwitch]] текст [[alarm]] текст [[interval]] текст [[delete]] текст');host.append(p);
     const walker=document.createTreeWalker(p,NodeFilter.SHOW_TEXT),ys=[];
     while(walker.nextNode()){if(walker.currentNode.parentElement.closest('.guide-control'))continue;const range=document.createRange();range.selectNodeContents(walker.currentNode);for(const r of range.getClientRects())ys.push(r.top);}

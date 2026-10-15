@@ -40,7 +40,7 @@ window.__guideSelfTest = {state:'pending'};
       check(Math.abs(document.querySelector('.modal-body').scrollTop-before.scroll)<1,`Return scroll ${id}`);
       topics++;
     }
-    const host=document.querySelector('.feature-content'),probe=document.createElement('p');
+    const host=document.querySelector('.feature-card[open] .feature-content'),probe=document.createElement('p');
     probe.style.maxWidth='240px';
     probe.innerHTML=guideText('Text [[add]] text [[cityPlus]] text [[favorite]] text [[unfavorite]] text [[periodSwitch]] text [[alarm]] text [[interval]] text [[delete]] text');host.append(probe);
     const walker=document.createTreeWalker(probe,NodeFilter.SHOW_TEXT),ys=[];
