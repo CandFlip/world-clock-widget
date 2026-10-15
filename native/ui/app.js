@@ -1566,6 +1566,7 @@ function modal(title, body, onBack = closeModal) {
 function closeModal() { if (capturingHotkey) send('endHotkeyCapture'); detailId = null; capturingHotkey = false; candidateHotkey = null; $('#modal').innerHTML = ''; }
 
 let featureTourTarget = null;
+let featureGuideViewState = null;
 
 function stopFeatureTour() {
   featureTourTarget?.classList.remove('feature-tour-focus');
@@ -1578,225 +1579,317 @@ function featureGuideItems() {
   return lang() === 'ru' ? [
   [
     "timeline",
-    "Посмотреть другое время",
-    "Передвиньте ползунок под часами или прокрутите колесо над шкалой. Чтобы вернуться к текущему времени, нажмите на шкалу правой кнопкой мыши.",
-    "Время во всех городах изменится одновременно. Белая отметка на каждой карточке покажет выбранный момент."
+    "Посмотреть время во всех городах",
+    "Передвиньте ползунок [[timeline]] под большими часами. Все города покажут выбранный момент по местному времени.\nЧтобы вернуться к текущему времени, нажмите общую шкалу правой кнопкой мыши.",
+    "Ползунок помогает выбрать время звонка без пересчёта часовых поясов. Его также можно двигать колёсиком над общей шкалой."
   ],
   [
     "cities",
-    "Добавить город",
-    "Нажмите «+ Добавить город» под списком и введите название в поиске. Нажмите кнопку добавления рядом с найденным городом.",
-    "Один город можно добавить несколько раз: у каждой копии свои имя, часы связи и напоминания."
+    "Добавить город и сохранить в избранное",
+    "Нажмите «Добавить город» [[add]] под списком.\nВведите название и нажмите [[cityPlus]] рядом с нужным результатом. Карточка появится на главном экране.",
+    "Звёздочка [[favorite]] сохраняет город для быстрого выбора: избранные видны при пустой строке поиска. Повторное нажатие или корзина [[unfavorite]] в этом списке убирает только из избранного. Чтобы добавить карточку, нажимайте [[cityPlus]]. Один город можно добавить для нескольких людей."
   ],
   [
     "cityActions",
     "Изменить список городов",
-    "Нажмите карточку города: под ней появятся кнопки действий. Чтобы изменить порядок, перетащите карточку на нужное место.",
-    "Город можно заменить, сделать базовым или удалить кнопкой корзины справа."
+    "Нажмите карточку города и выберите «Сменить город» [[replace]] или «Сделать базовым» [[base]].\nДля удаления нажмите корзину [[delete]] справа на карточке — раскрывать её не нужно.",
+    "Чтобы изменить порядок, удерживайте карточку мышью, перенесите на нужное место и отпустите. Действие относится только к этой карточке, даже если город повторяется."
   ],
   [
     "baseCity",
-    "Выбрать базовое время",
-    "Откройте шестерёнку → «Базовый город». Оставьте системное время или выберите город вручную.",
-    "Большие часы вверху показывают базовое время. От него считаются разница часовых поясов и время на общей шкале."
+    "Выбрать время для больших часов",
+    "Откройте настройки [[settings]] → «Базовый город».\nОставьте время компьютера или выберите город.",
+    "Большие часы показывают базовое время. От него считаются разница времени городов и время на общей шкале."
   ],
   [
     "availability",
-    "Понять, когда звонить",
-    "Посмотрите на полосу внизу карточки города. Значок над белой отметкой относится к времени, показанному на этой карточке.",
-    "Зелёный и солнце — рабочие часы; жёлтый и солнце с горизонтом — связаться можно; тёмный и луна — не беспокоить. Эти часы можно настроить для каждого города."
+    "Понять, когда удобно связаться",
+    "Посмотрите на цветную полосу внизу карточки города. Белая черта показывает момент, выбранный общим ползунком. [[cityScale]]",
+    "Зелёный [[working]] — рабочие часы.\nЖёлтый [[okay]] — человек, вероятно, не спит: сначала спросите, удобно ли говорить; срочное обращение возможно.\nТёмный [[dnd]] — лучше не беспокоить.\nЦвета отражают заданный график, а не присутствие в сети."
   ],
   [
     "schedule",
     "Задать имя и часы связи",
-    "Нажмите карточку города → «Имя и график». Введите имя человека или команды и задайте рабочие часы, допустимое время связи и часы тишины.",
-    "Имя поможет различать карточки, а ваш график будет учитываться при подборе созвона."
+    "Нажмите карточку города → «Имя и график» [[schedule]] и введите имя человека.\nДля личного распорядка выключите «Использовать общий график» [[scheduleDefault]].\nЗадайте начало часов связи, начало и конец работы, начало «Не беспокоить». Нажмите «Сохранить».",
+    "Имя помогает различать людей в одном городе. График изменит цветную полосу и будет учтён при подборе созвона."
   ],
   [
     "meeting",
     "Найти время для созвона",
-    "Нажмите значок напоминания справа над шкалой, затем «Удобно всем». Города из списка уже участвуют в подборе. Нажимайте их карточки, чтобы исключать или возвращать участников. Чтобы учесть своё время, нажмите карточку с большими часами вверху.",
-    "Виджет выберет общее время на ближайшие 24 часа. Рядом с кнопкой появится длительность окна. Зелёное солнце выбирает лучшее время; жёлтое солнце с горизонтом — более раннее допустимое, если оно есть. Ползунок тоже меняет выбор. Участок шкалы справа от него показывает общее окно: зелёный — у всех рабочие часы, жёлтый — хотя бы у одного допустимое время связи. «Нет окна» означает, что в выбранный момент общего времени нет. Нажмите «Удобно всем» ещё раз, чтобы выйти."
+    "Раскройте быстрые напоминания через [[quick]] и нажмите «Удобно всем» [[meeting]].\nВсе города уже участвуют. Нажмите карточку, чтобы исключить город; ещё раз — вернуть. Чтобы учесть своё время, нажмите большие часы.\nНажмите [[copy]] справа от [[meeting]] и вставьте текст в чат: каждый увидит время встречи для своего города.",
+    "Для двух и более участников ищется общее окно от 30 минут в ближайшие 24 часа. Если есть более ранний вариант, появится [[periodSwitch]]: солнце — лучшее время, закат — более раннее. Жёлтые часы согласуйте с участниками. Для выхода нажмите [[meeting]] снова."
   ],
   [
     "meetingCopy",
     "Отправить время участникам",
-    "Выберите момент ползунком и нажмите значок двух листов справа от «Удобно всем». В режиме подбора будут скопированы только выбранные участники.",
-    "Вставьте скопированный текст в чат: у каждого участника будет своя дата и местное время."
+    "Выберите момент ползунком [[timeline]] или найдите его через [[meeting]].\nНажмите [[copy]] справа от «Удобно всем». Если кнопки скрыты, раскройте их через [[quick]].\nОткройте чат и вставьте текст: Ctrl+V в Windows или ⌘V на Mac.",
+    "Копируется список местных дат, времени и названий: в подборе — выбранных участников, вне подбора — больших часов и всех городов. До вставки текст хранится в буфере обмена."
   ],
   [
     "reminderNow",
     "Напомнить через несколько минут",
-    "Нажмите значок напоминания справа над шкалой. Нажмите карточку с «+» и числом минут, затем карточку нужного города или большие часы вверху.",
-    "Напоминание сработает через указанное число минут от текущего момента."
+    "Вернитесь к «Сейчас» правым кликом по общей шкале [[timeline]]. Если интервалы скрыты, нажмите [[quick]].\nНажмите положительный интервал [[positiveInterval]], затем нужный город или большие часы.",
+    "Можно вместо двух нажатий перетащить интервал прямо на нужную карточку. Напоминание появится рядом с большими часами и прозвучит через выбранное число минут. При желании добавьте название."
   ],
   [
     "reminderFuture",
-    "Напомнить до или после выбранного часа",
-    "Передвиньте ползунок к нужному времени. Под шкалой нажмите карточку с минутами, затем карточку города или большие часы.",
-    "«−15 мин» напомнит за 15 минут до выбранного момента, «+15 мин» — спустя 15 минут. Карточка с временем создаёт напоминание на сам выбранный момент."
+    "Напомнить в выбранный час, до или после него",
+    "Передвиньте ползунок [[timeline]] на нужное будущее время.\nНажмите интервал [[interval]], затем город или большие часы. Можно перетащить интервал прямо на них.",
+    "Например, при выбранных 10:00: [[before]] — сигнал в 9:45, [[after]] — в 10:15. Интервал 0 показывает время [[zeroInterval]] и ставит сигнал ровно на 10:00. Число минут меняется колёсиком. Все примеры используют время больших часов; сигнал должен оставаться в будущем."
   ],
   [
     "reminderScroll",
-    "Изменить быстрый интервал",
-    "Наведите указатель на карточку с минутами под шкалой и прокрутите колесо мыши.",
-    "Прокрутка вверх увеличивает интервал, вниз — уменьшает, включая отрицательные значения и переход через ноль. Значение сохранится; нажмите карточку и выберите город."
+    "Изменить число минут на карточке",
+    "Наведите указатель на интервал [[interval]]. Колёсико вверх увеличивает минуты, вниз — уменьшает; один щелчок меняет одну минуту.",
+    "Плюс означает «после» выбранного времени, минус — «до». При 0 карточка показывает время [[zeroInterval]]: сигнал будет точно в этот момент. Значение сохраняется. Для 0 и минуса сначала выберите будущее время ползунком."
   ],
   [
     "reminderDrag",
-    "Перетащить интервал на город",
-    "Возьмите карточку с минутами под шкалой и перетащите её на карточку города или большие часы. Минуты можно заранее изменить колёсиком.",
-    "Напоминание сразу создастся для выбранного города. После этого можно добавить название."
+    "Поставить напоминание перетаскиванием",
+    "Оставьте «Сейчас» для отсчёта от текущего времени или передвиньте [[timeline]] на будущий момент.\nУдерживайте интервал [[interval]] мышью, перенесите на город или большие часы и отпустите.",
+    "Минуты можно заранее изменить колёсиком. Напоминание создастся сразу, если время срабатывания ещё впереди. Оно появится рядом с большими часами; можно добавить название. Это альтернатива нажатию интервала и города."
   ],
   [
     "reminderExact",
-    "Указать точную дату и время",
-    "Нажмите карточку города или большие часы → «Напоминание». Выберите дату и время в открывшемся окне, затем сохраните.",
-    "Время задаётся по часам выбранного города. По желанию добавьте название, ежедневный повтор и отдельный звук."
+    "Указать дату, время и ежедневный повтор",
+    "Нажмите город или большие часы → «Напоминание» [[alarm]].\nВыберите будущие день, часы и минуты по местному времени этой карточки.\nДля повтора каждый день включите «Ежедневно» [[daily]]. Нажмите «Создать».",
+    "С выключенным переключателем сигнал прозвучит один раз, с включённым — каждый день в этот местный час. Название и звук необязательны. Изменения существующего напоминания подтверждаются кнопкой «Сохранить»."
   ],
   [
     "reminderTrack",
-    "Прочитать напоминания на шкале",
-    "Значок напоминания стоит прямо на шкале города в момент срабатывания. Наведите курсор, чтобы увидеть время и название; нажмите, чтобы открыть список напоминаний этого города.",
-    "Близкие значки объединяются со счётчиком: подсказка перечисляет все напоминания группы. Числа на концах шкалы показывают напоминания за её левой или правой границей; их подсказки тоже содержат список. Белая отметка под солнцем или луной показывает выбранное время."
+    "Найти напоминание на полосе города",
+    "Значок будильника на цветной полосе отмечает время сигнала. Вот пример его расположения: [[reminderScale]]",
+    "Наведите указатель на будильник, чтобы увидеть время и название; нажмите — открыть список напоминаний города. Число у значка означает группу, у края полосы — напоминания вне видимой части. Белая черта показывает выбранное время, а не будильник."
   ],
   [
     "reminderManage",
-    "Изменить или удалить напоминание",
-    "Нажмите сохранённое напоминание в блоке справа от больших часов. Чтобы удалить его сразу, нажмите корзину рядом с ним.",
-    "В открывшемся окне можно изменить напоминание. Когда оно сработает, его можно отложить на 5 минут."
+    "Удалить или изменить напоминание",
+    "Для удаления нажмите корзину [[deleteReminder]] в строке напоминания рядом с большими часами. Оно удалится сразу.\nДля изменения нажмите текст строки, исправьте время, название, повтор или звук и нажмите «Сохранить».",
+    "Другой путь — открыть список через будильник на полосе города, затем нужное напоминание. В редакторе тоже есть «Удалить». При срабатывании сигнал можно отложить на 5 минут."
   ],
   [
     "reminderPrefs",
-    "Настроить быстрые напоминания",
-    "Нажмите шестерёнку. Откройте настройки интервалов, названий или звука напоминаний.",
-    "Задайте привычные интервалы и названия, выберите звук. При создании отдельного напоминания звук можно изменить."
+    "Подготовить свои интервалы, названия и звук",
+    "Откройте настройки [[settings]].\nВ «Интервалах напоминания» задайте привычные минуты, в «Быстрых названиях напоминаний» — частые дела.\nВ «Звуке напоминания» выберите и прослушайте сигнал или добавьте свой аудиофайл.",
+    "Готовые минуты и названия ускоряют создание напоминаний. Звёздочка отмечает любимые звуки для быстрого выбора. Отдельному напоминанию можно назначить другой звук в редакторе."
   ],
   [
     "settings",
-    "Настроить внешний вид и вызов",
-    "Нажмите шестерёнку: здесь меняются тема, масштаб интерфейса (по умолчанию или вручную: 100–200%, шаг 5%), язык, формат времени, сочетание клавиш и автозапуск.",
-    "Размер окна меняется за его край. Высота блока больших часов и напоминаний — за короткую ручку под этим блоком."
+    "Настроить виджет под себя",
+    "Откройте настройки [[settings]]. Здесь выбираются тема, язык, формат часов, базовый город и масштаб текста и элементов.\nВ «Появлении и скрытии» выберите сторону панели, в «Клавише вызова панели» — сочетание клавиш. Включите автозапуск для открытия при входе в систему.",
+    "Тему можно согласовать с системой, часы показывать в формате 12 или 24 часа. Размер окна меняется за край; высота верхнего блока — за ручку под ним. Настройки сохраняются."
   ],
   [
     "updates",
     "Проверить обновления",
-    "Нажмите значок обновления рядом с номером версии внизу окна. Сам номер версии открывает этот обзор возможностей.",
-    "Если доступна новая версия, виджет предложит скачать её. В Windows установщик запускается после проверки контрольной суммы; на Mac откроется загрузка DMG в браузере."
+    "Нажмите [[update]] внизу окна. Если новая версия уже найдена, кнопка предложит её скачать.",
+    "В Windows установщик запускается после проверки загрузки; на Mac откроется загрузка DMG. Номер версии [[version]] открывает это обучение."
   ]
 ] : [
   [
     "timeline",
-    "View another time",
-    "Move the slider below the clocks or scroll over the scale. Right-click the scale to return to the current time.",
-    "All city clocks change together. Each card’s white marker shows the selected moment."
+    "See the time in all cities",
+    "Move the slider [[timeline]] below the large clock. All cities show the chosen moment in their local time.\nRight-click the main timeline to return to the current time.",
+    "Use it to plan a call without time-zone calculations. You can also move it with the mouse wheel over the main timeline."
   ],
   [
     "cities",
-    "Add a city",
-    "Press “+ Add city” below the list and search by name. Press the add button beside a search result.",
-    "Add the same city more than once: each copy has its own name, contact hours, and reminders."
+    "Add a city and save a favorite",
+    "Press “Add city” [[add]] below the list.\nType a name and press [[cityPlus]] beside the right result. Its card appears on the main screen.",
+    "The star [[favorite]] saves a city for quick selection: favorites appear when search is empty. Pressing it again or the trash button [[unfavorite]] in that list removes only the favorite. Press [[cityPlus]] to add a card. One city can represent several people."
   ],
   [
     "cityActions",
     "Change your city list",
-    "Click a city card to reveal its actions. Drag the card to change its position.",
-    "Replace a city, make it your base, or remove it with the trash button on the right."
+    "Click a city card and choose “Change city” [[replace]] or “Make base” [[base]].\nTo delete it, press [[delete]] on the right; no need to expand the card.",
+    "To reorder, hold a card with the mouse, move it and release. Actions affect only that card, even if the city appears more than once."
   ],
   [
     "baseCity",
-    "Choose your base time",
-    "Open the gear → “Base city”. Keep system time or choose a city manually.",
-    "The large clock at the top shows your base time. Time differences and the shared scale use this clock."
+    "Choose the time for the large clock",
+    "Open settings [[settings]] → “Base city”.\nKeep computer time or choose a city.",
+    "The large clock shows your base time. The main timeline and city time differences use this clock."
   ],
   [
     "availability",
-    "Know when to call",
-    "Look at the band along the bottom of a city card. The icon above its white marker describes the time shown on that card.",
-    "Green and a sun mean work hours; yellow and a sun on the horizon mean contact is okay; dark and a moon mean do not disturb. Set these hours for each city."
+    "Know when to get in touch",
+    "Look at the colored band at the bottom of a city card. The white line indicates the moment selected with the main slider. [[cityScale]]",
+    "Green [[working]] means working hours.\nYellow [[okay]] means the person is probably awake: ask if it is a good time to talk; urgent contact may be possible.\nDark [[dnd]] means it is best not to disturb them.\nColors reflect the configured schedule, not online presence."
   ],
   [
     "schedule",
     "Set a name and contact hours",
-    "Click a city card → “Name and schedule”. Enter a person or team name and set work hours, acceptable contact hours, and quiet hours.",
-    "Names distinguish your cards. Your schedule is used to find a call time."
+    "Click a city card → “Name and schedule” [[schedule]] and enter the person’s name.\nFor a personal routine, turn off “Use default schedule” [[scheduleDefault]].\nSet when contact starts, work starts and ends, and do-not-disturb begins. Press “Save”.",
+    "Names distinguish people in one city. The schedule changes their colored band and is used to find a shared call time."
   ],
   [
     "meeting",
     "Find a time to call",
-    "Press the reminder icon above the right end of the scale, then “Good for all”. Listed cities are included automatically. Click their cards to exclude or include them. To include your own time, click the large clock card at the top.",
-    "The widget finds a shared time within the next 24 hours and shows its duration beside the button. A green sun chooses the best time; a yellow sun on the horizon chooses an earlier acceptable time when available. Moving the slider also changes this choice. The shared window to its right is green when everyone is working and yellow when someone is in acceptable contact hours. “No window” means no shared time at that moment. Press “Good for all” again to exit."
+    "Open quick reminders with [[quick]] and press “Good for all” [[meeting]].\nAll cities are included. Click a card to exclude that city; click again to include it. Click the large clock to include your own time.\nPress [[copy]] beside [[meeting]] and paste into chat so everyone sees their local meeting time.",
+    "For two or more participants, the widget finds at least 30 shared minutes in the next 24 hours. If an earlier option exists, [[periodSwitch]] appears: sun means best, sunset means earlier. Check yellow hours with participants. Press [[meeting]] again to exit."
   ],
   [
     "meetingCopy",
     "Share participant times",
-    "Select a moment with the slider and press the two-sheet icon beside “Good for all”. During call selection, only selected participants are copied.",
-    "Paste the text into your chat. Each participant gets their local date and time."
+    "Choose a moment with [[timeline]] or find one using [[meeting]].\nPress [[copy]] beside “Good for all”. If hidden, open the buttons with [[quick]].\nOpen your chat and paste: Ctrl+V on Windows or ⌘V on Mac.",
+    "The copied list contains local dates, times and names: selected participants during meeting selection; otherwise the large clock and all cities. Until pasted, the text is stored on the clipboard."
   ],
   [
     "reminderNow",
     "Remind me in a few minutes",
-    "Press the reminder icon above the right end of the scale. Click a card with “+” and a number of minutes, then a city card or the large clock.",
-    "The reminder rings that many minutes from now."
+    "Right-click the main timeline [[timeline]] to return to “Now”. Press [[quick]] if intervals are hidden.\nClick a positive interval [[positiveInterval]], then a city or the large clock.",
+    "Alternatively, drag the interval straight onto the desired card. The reminder appears beside the large clock and rings that many minutes from now. You can add a title."
   ],
   [
     "reminderFuture",
-    "Remind me before or after a time",
-    "Move the slider to the desired time. Click a minutes card below the scale, then a city card or the large clock.",
-    "“−15 min” rings 15 minutes before the selected moment; “+15 min” rings 15 minutes after it. The card showing a clock time creates a reminder at that exact moment."
+    "Remind me at, before or after a time",
+    "Move [[timeline]] to the future time you need.\nClick an interval [[interval]], then a city or the large clock. Or drag it straight onto either one.",
+    "For example, with 10:00 selected: [[before]] rings at 9:45 and [[after]] at 10:15. Interval 0 shows a time [[zeroInterval]] and rings exactly at 10:00. Change minutes with the wheel. These examples use the large clock’s time; the alarm must remain in the future."
   ],
   [
     "reminderScroll",
-    "Change a quick interval",
-    "Hover over a minutes card below the scale and scroll the mouse wheel.",
-    "Scroll up to increase the interval, down to decrease it, including negative values and crossing zero. The value is saved; click the card, then choose a city."
+    "Change the minutes on a card",
+    "Hover over an interval [[interval]]. Scroll up to increase minutes or down to decrease them; each wheel click changes one minute.",
+    "Plus means “after” the selected time; minus means “before”. At 0, the card shows a time [[zeroInterval]] and rings at that exact moment. The value is saved. Select a future time first for zero or negative intervals."
   ],
   [
     "reminderDrag",
-    "Drag an interval onto a city",
-    "Drag a minutes card from below the scale onto a city card or the large clock. Adjust its minutes with the wheel first if needed.",
-    "The reminder is created immediately for that city. You can then add a title."
+    "Set a reminder by dragging",
+    "Leave “Now” to count from the current time, or move [[timeline]] to a future moment.\nHold an interval [[interval]] with the mouse, move it onto a city or the large clock and release.",
+    "Adjust minutes with the wheel first if needed. A reminder is created immediately if the alarm time is still ahead. It appears beside the large clock; you can add a title. This is an alternative to clicking the interval and city."
   ],
   [
     "reminderExact",
-    "Choose an exact date and time",
-    "Click a city card or the large clock → “Reminder”. Choose a date and time, then save.",
-    "The time uses the selected city’s clock. Optionally add a title, daily repeat, or separate sound."
+    "Choose a date, time and daily repeat",
+    "Click a city or the large clock → “Reminder” [[alarm]].\nChoose a future day, hour and minute in that card’s local time.\nEnable “Daily” [[daily]] for a daily repeat. Press “Create”.",
+    "With the switch off, it rings once; with it on, every day at that local hour. Title and sound are optional. Confirm edits to an existing reminder with “Save”."
   ],
   [
     "reminderTrack",
-    "Read reminders on the timeline",
-    "A reminder icon sits on the city timeline at its scheduled time. Hover to see its time and title; click to open that city’s reminder list.",
-    "Nearby icons merge with a count; the tooltip lists every reminder in the group. Counts at the ends show reminders before or after the visible range and also have list tooltips. The white marker below the sun or moon shows the selected time."
+    "Find a reminder on a city band",
+    "The alarm icon on the colored band marks the signal time. Here is an example of its position: [[reminderScale]]",
+    "Hover over the alarm for its time and title; click to open the city’s reminder list. A count beside an icon means a group; at an edge it means reminders outside the visible band. The white line marks the selected time, not an alarm."
   ],
   [
     "reminderManage",
-    "Edit or delete a reminder",
-    "Click a saved reminder in the panel to the right of the large clock. To remove it immediately, press its trash button.",
-    "Edit the reminder in the window that opens. When it rings, you can snooze it for 5 minutes."
+    "Delete or edit a reminder",
+    "To delete, press [[deleteReminder]] in the reminder row beside the large clock. It is removed immediately.\nTo edit, click the row’s text, change the time, title, repeat or sound and press “Save”.",
+    "Alternatively, open the list using an alarm on the city band, then open the reminder. Its editor also has “Delete”. When it rings, you can snooze for 5 minutes."
   ],
   [
     "reminderPrefs",
-    "Set up quick reminders",
-    "Press the gear and open the interval, title, or reminder sound settings.",
-    "Set your usual intervals and titles and choose a sound. A separate reminder can use its own sound."
+    "Prepare your intervals, titles and sound",
+    "Open settings [[settings]].\nSet your usual minutes in “Reminder intervals” and frequent tasks in “Quick reminder titles”.\nIn “Reminder sound”, choose and preview a signal or add your own audio file.",
+    "Ready-made minutes and titles make reminders quicker to create. A star marks favorite sounds for quick selection. Set a different sound for an individual reminder in its editor."
   ],
   [
     "settings",
-    "Customize appearance and shortcuts",
-    "Press the gear to change theme, interface scale (default or custom: 100–200%, 5% steps), language, time format, keyboard shortcut, and startup.",
-    "Drag a window edge to resize it. Drag the short handle below the top panels to change their height."
+    "Make the widget suit you",
+    "Open settings [[settings]] to choose a theme, language, clock format, base city and interface scale.\nIn “Show and hide”, choose the panel’s side; in “Panel shortcut”, set a key combination. Enable startup to open it when you sign in.",
+    "The theme can follow your system; clocks can use 12 or 24 hours. Drag a window edge to resize; drag the handle below the top panels to adjust their height. Settings are saved."
   ],
   [
     "updates",
     "Check for updates",
-    "Press the update icon beside the version at the bottom. Clicking the version itself opens this feature guide.",
-    "When a new version is available, the widget offers a download. Windows verifies the installer checksum before starting it; Mac opens the DMG download in your browser."
+    "Press [[update]] at the bottom. If a new version is already found, the button offers its download.",
+    "Windows starts the installer after checking the download; Mac opens the DMG download. The version number [[version]] opens this guide."
   ]
 ];
 }
 
-function openFeatureGuide() {
+// Illustrative card fragment: shared band renderer and reminder glyph, never saved data.
+function guideCityScale(withReminder = false) {
+  const key = config.timezones[0] || config.settings.base_timezone || baseZone();
+  const at = new Date(referenceTimestamp());
+  const band = temporalBandHtml(at, key).replace('<div ', '<span ').replace('</div>', '</span>');
+  return `<span class="guide-city-scale"><span class="guide-city-caption">${esc(cityName(key))}</span><span class="guide-city-time">${esc(timeAt(at, zoneOf(key)))}</span>${band}${withReminder ? `<span class="city-alarm-track"><span class="city-alarm-pin" style="left:72%">${cityReminderIcon}</span></span>` : ''}</span>`;
+}
+
+function guideControls() {
+  const ru = lang() === 'ru';
+  return {
+    settings: ['[data-action=settings]', `<button class="icon">⚙</button>`, t('settings')],
+    cityPlus: ['[data-add]:not(:disabled)', '<button class="guide-result-button">＋</button>', ru ? 'Добавить найденный город' : 'Add city result', 'guide-city-result'],
+    favorite: ['[data-star]', '<button class="guide-result-button">☆</button>', ru ? 'Сохранить город в избранном' : 'Favorite city', 'guide-city-result'],
+    unfavorite: ['[data-unfav]', `<button class="guide-result-button trash">${trashIcon}</button>`, ru ? 'Убрать только из избранного' : 'Remove favorite only', 'guide-city-result'],
+    zeroInterval: ['.quick .chip[data-lead="0"]', `<button class="chip"><span class="chip-caption">${esc(intervalCaption(0))}</span><span class="grip">⋮</span></button>`, ru ? 'Нулевой интервал: ровно выбранное время' : 'Zero interval: exactly the selected time'],
+    daily: ['#dailySwitch', '<button class="switch on"></button>', ru ? 'Повторять ежедневно' : 'Repeat daily'],
+    cityScale: ['', guideCityScale(), ru ? 'Пример карточки города с цветной полосой и белой отметкой выбранного времени' : 'Example city card with contact band and white selected-time marker'],
+    reminderScale: ['', guideCityScale(true), ru ? 'Пример карточки: значок будильника расположен прямо на цветной полосе' : 'Example card: alarm icon directly on the colored band'],
+    add: ['[data-action=add]', `<button class="add">＋ &nbsp; ${t('add')}</button>`, t('add')],
+    deleteReminder: ['.saved-delete svg', trashIcon, t('delete')],
+    delete: ['.city-card .delete svg', trashIcon, t('delete')],
+    quick: ['#quickToggle', `<button class="quick-toggle">${quickAlarmIcon}${quickChevronIcon}</button>`, ru ? 'Быстрые напоминания' : 'Quick reminders'],
+    positiveInterval: ['.quick .chip:not([data-lead="0"]):not([data-lead^="-"])', `<button class="chip"><span class="chip-caption">${esc(intervalCaption(15))}</span><span class="grip">⋮</span></button>`, ru ? 'Положительный интервал' : 'Positive interval'],
+    interval: ['.quick .chip', `<button class="chip"><span class="chip-caption">${esc(intervalCaption(config.settings.reminder_intervals[0]))}</span><span class="grip">⋮</span></button>`, ru ? 'Карточка интервала' : 'Interval card'],
+    before: ['', `<button class="chip"><span class="chip-caption">${esc(intervalCaption(-15))}</span><span class="grip">⋮</span></button>`, ru ? 'За 15 минут' : '15 minutes before'],
+    after: ['', `<button class="chip"><span class="chip-caption">${esc(intervalCaption(15))}</span><span class="grip">⋮</span></button>`, ru ? 'Через 15 минут' : '15 minutes after'],
+    meeting: ['#meetingToggle', `<button class="meeting-toggle">${ru ? 'Удобно всем' : 'Good for all'}</button>`, ru ? 'Удобно всем' : 'Good for all'],
+    copy: ['#meetingCopy', `<button class="meeting-copy">${copyIcon}</button>`, ru ? 'Скопировать время городов' : 'Copy city times'],
+    periodSwitch: ['#meetingEarlier', `<button class="period-switch"><i class="period-thumb"></i><span>${sunIcon}</span><span>${horizonIcon}</span></button>`, ru ? 'Лучшее или более раннее время' : 'Best or earlier time', 'meeting-status'],
+    alarm: ['[data-city-action=alarm]', `<button>${t('alarmAction')}</button>`, t('alarmAction'), 'card-actions'],
+    schedule: ['[data-city-action=schedule]', `<button>${t('nameAndSchedule')}</button>`, t('nameAndSchedule'), 'card-actions'],
+    base: ['[data-city-action=base]', `<button>${t('makeBase')}</button>`, t('makeBase'), 'card-actions'],
+    replace: ['[data-city-action=replace]', `<button>${t('changeCity')}</button>`, t('changeCity'), 'card-actions'],
+    update: ['#updateButton', `<button class="update-button">${checkUpdateIcon}</button>`, ru ? 'Проверить обновления' : 'Check for updates'],
+    version: ['#versionButton', `<button class="version-button">${esc(version)}</button>`, ru ? 'Номер версии' : 'Version number'],
+    scheduleDefault: ['#useDefaultSwitch', `<button class="switch on"></button>`, t('useDefault')],
+    defaultScale: ['#interfaceScaleDefaultSwitch', `<button class="switch ${config.settings.interface_scale_default ? 'on' : ''}"></button>`, ru ? 'Масштаб по умолчанию' : 'Default interface scale'],
+    working: ['', `<span class="guide-period working">${availabilityGlyph('working')}</span>`, ru ? 'Рабочее время' : 'Working hours'],
+    okay: ['', `<span class="guide-period okay">${availabilityGlyph('okay')}</span>`, ru ? 'Можно связаться' : 'Okay to contact'],
+    dnd: ['', `<span class="guide-period dnd">${availabilityGlyph('dnd')}</span>`, ru ? 'Не беспокоить' : 'Do not disturb'],
+    reminder: ['', cityReminderIcon, ru ? 'Напоминание на шкале' : 'Timeline reminder'],
+    timeline: ['', `<span class="guide-scale"><span class="slider-rail"><span class="slider-fill"></span></span><span class="slider-thumb"></span></span>`, ru ? 'Шкала времени и ползунок' : 'Timeline and slider'],
+  };
+}
+
+function guideControl(key) {
+  const definition = guideControls()[key];
+  if (!definition) return esc(key);
+  const [selector, fallback, label, context = ''] = definition;
+  const source = selector ? $(selector) : null;
+  let markup = fallback;
+  // Read the actual rendered control: future icon, caption and style changes carry into help.
+  if (source?.cloneNode) {
+    const clone = source.cloneNode(true);
+    // Preserve the live control's typography and paint, including selector context.
+    // Its inline illustration uses the same component at a uniformly smaller scale.
+    const originals = [source, ...source.querySelectorAll('*')];
+    [clone, ...clone.querySelectorAll('*')].forEach((node, index) => {
+      const style = window.getComputedStyle?.(originals[index]);
+      if (!style || !node.style) return;
+      for (const property of ['font-family','font-size','font-weight','font-style','line-height','letter-spacing','color','background-color','background-image','border-top','border-right','border-bottom','border-left','border-radius','box-shadow','padding','height','fill','stroke','stroke-width']) {
+        node.style.setProperty(property, style.getPropertyValue(property));
+      }
+    });
+    clone.removeAttribute('hidden');
+    for (const node of [clone, ...clone.querySelectorAll('*')]) {
+      for (const attribute of [...node.attributes]) {
+        if (/^(id|name|for|title|autofocus|aria-controls|aria-labelledby|aria-describedby)$/.test(attribute.name) || /^(data-|on)/.test(attribute.name)) node.removeAttribute(attribute.name);
+      }
+    }
+    markup = clone.outerHTML;
+  }
+  return `<span class="guide-control ${context}" data-guide-control="${key}" role="img" aria-label="${esc(label)}"><span class="guide-control-visual" inert aria-hidden="true">${markup}</span></span>`;
+}
+
+function guideText(text) {
+  return esc(text).replace(/\[\[([a-zA-Z]+)\]\]/g, (_, key) => guideControl(key));
+}
+
+function guideParagraphs(text) {
+  return text.split(/(\[\[(?:cityScale|reminderScale)\]\])/).map(part => {
+    if (/^\[\[(?:cityScale|reminderScale)\]\]$/.test(part)) return `<figure class="guide-figure">${guideText(part)}</figure>`;
+    return part.split('\n').filter(line => line.trim()).map(line => `<p>${guideText(line)}</p>`).join('');
+  }).join('');
+}
+
+function guideSteps(text) {
+  const steps = text.split('\n');
+  return steps.length > 1 ? `<ol class="guide-steps">${steps.map(step => `<li>${guideText(step)}</li>`).join('')}</ol>` : guideParagraphs(text);
+}
+
+function openFeatureGuide({restore = false} = {}) {
   stopFeatureTour();
   const ru = lang() === 'ru';
   const groups = ru ? [
@@ -1811,11 +1904,36 @@ function openFeatureGuide() {
     ['Widget', ['settings','updates']]
   ];
   const items = new Map(featureGuideItems().map(item => [item[0], item]));
-  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Widget ${esc(version)}</strong><p>${ru ? 'Выберите задачу — покажем нужное место в виджете.' : 'Choose a task to see the right place in the widget.'}</p></div>${groups.map(([name, ids], index) => `<details class="feature-group" ${index === 0 ? 'open' : ''}><summary>${esc(name)} <span>${ids.length}</span></summary><div class="feature-group-content">${ids.map(id => { const [, title, press, result] = items.get(id); return `<section class="feature-card"><div><h3>${esc(title)}</h3><p>${esc(press)}</p><p>${esc(result)}</p></div><button class="feature-show" data-feature="${id}" type="button">${ru ? 'Показать в интерфейсе' : 'Show in the widget'} ›</button></section>`; }).join('')}</div></details>`).join('')}</div>`);
+  const view = restore ? featureGuideViewState : null;
+  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Widget ${esc(version)}</strong><p>${ru ? 'Большие часы показывают время компьютера или выбранного базового города. Ползунок меняет показанный момент сразу во всех городах. Выберите раздел и тему; образцы в тексте помогают узнать нужный элемент, а «Показать в интерфейсе» — найти его.' : 'The large clock shows computer time or your chosen base city. The slider changes the displayed moment in every city. Choose a section and topic; illustrations help you recognize controls, and “Show in the widget” helps you find them.'}</p></div>${groups.map(([name, ids], index) => `<details class="feature-group" data-guide-section="${index}" ${view?.section === String(index) ? 'open' : ''}><summary><h3>${esc(name)}</h3><span class="feature-count">${ids.length}</span></summary><div class="feature-group-content">${ids.map(id => { const [, title, press, result] = items.get(id); return `<details class="feature-card" data-guide-topic="${id}" ${view?.topic === id ? 'open' : ''}><summary><h4>${esc(title)}</h4></summary><div class="feature-content">${guideSteps(press)}${guideParagraphs(result)}<button class="feature-show" data-feature="${id}" type="button">${ru ? 'Показать в интерфейсе' : 'Show in the widget'} ›</button></div></details>`; }).join('')}</div></details>`).join('')}</div>`);
+  const sections = $$('.feature-group'), topics = $$('.feature-card');
+  sections.forEach(section => section.addEventListener('toggle', () => {
+    if (section.open) sections.filter(other => other !== section).forEach(other => { other.open = false; });
+    else section.querySelectorAll('.feature-card').forEach(topic => { topic.open = false; });
+  }));
+  topics.forEach(topic => topic.addEventListener('toggle', () => {
+    if (topic.open) topics.filter(other => other !== topic).forEach(other => { other.open = false; });
+  }));
   $$('[data-feature]').forEach(button => button.onclick = () => showFeatureInApp(button.dataset.feature));
+  if (view) {
+    const restoreView = () => {
+      const body = $('#modal .modal-body');
+      if (!body?.querySelector('.feature-guide')) return;
+      body.scrollTop = view.scrollTop;
+      body.querySelector(`[data-feature="${view.topic}"]`)?.focus?.({preventScroll:true});
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(restoreView);
+    else restoreView();
+  }
 }
 
 function showFeatureInApp(id) {
+  const guide = $('#modal .feature-guide');
+  if (guide?.querySelector) featureGuideViewState = {
+    section: guide.querySelector('.feature-group[open]')?.dataset.guideSection ?? null,
+    topic: guide.querySelector('.feature-card[open]')?.dataset.guideTopic ?? id,
+    scrollTop: $('#modal .modal-body')?.scrollTop || 0,
+  };
   stopFeatureTour();
   closeModal();
   let selector = '', focusSelector = '';
@@ -1837,7 +1955,7 @@ function showFeatureInApp(id) {
   }
   else if (id === 'reminderNow' || id === 'reminderFuture' || id === 'reminderDrag' || id === 'reminderScroll') {
     if (offset === 0) { quickAtNowOpen = true; updateQuickVisibility(); }
-    selector = id === 'reminderNow' ? '#quickToggle' : '.quick .chip';
+    selector = '.quick .chip';
   }
   else if (id === 'reminderExact') {
     if (config.timezones.length) { expandedCityKey = config.timezones[0]; applyExpandedCityState(); selector = '[data-city-action=alarm]'; }
@@ -1849,19 +1967,19 @@ function showFeatureInApp(id) {
   else if (id === 'settings') { openSettings(); selector = '#theme'; }
   else if (id === 'updates') selector = '#updateButton';
   const target = $(selector);
-  if (!target) { openFeatureGuide(); return; }
+  if (!target) { openFeatureGuide({restore:true}); return; }
   const [,title,originalPress,result] = featureGuideItems().find(([key]) => key === id);
   const press = id === 'reminderManage' && !reminders.entries.length
-    ? (lang() === 'ru' ? 'Здесь появятся ваши напоминания. Создайте первое через быстрый интервал или карточку города.' : 'Saved reminders appear here. Create one with a quick interval or a city card.')
+    ? (lang() === 'ru' ? 'Здесь появятся ваши напоминания. Создайте первое через [[quick]] или действие [[alarm]] на карточке города.' : 'Saved reminders appear here. Create one with [[quick]] or [[alarm]] on a city card.')
     : originalPress;
   featureTourTarget = $(focusSelector || selector) || target;
   featureTourTarget.classList.add('feature-tour-focus');
   target.scrollIntoView?.({block:'center',behavior:'smooth'});
   const panel = $('#featureTour');
-  panel.innerHTML = `<div class="feature-tour-card"><button class="feature-tour-close" id="featureTourClose" type="button" aria-label="${lang() === 'ru' ? 'Закрыть подсказку' : 'Close tip'}">×</button><strong>${esc(title)}</strong><p>${esc(press)}</p><p class="feature-tour-result">${esc(result)}</p><button id="featureTourBack" type="button">${lang() === 'ru' ? '← Все возможности' : '← All features'}</button></div>`;
+  panel.innerHTML = `<div class="feature-tour-card"><button class="feature-tour-close" id="featureTourClose" type="button" aria-label="${lang() === 'ru' ? 'Закрыть подсказку' : 'Close tip'}">×</button><strong>${esc(title)}</strong>${guideSteps(press)}<div class="feature-tour-result">${guideParagraphs(result)}</div><button id="featureTourBack" type="button">${lang() === 'ru' ? '← Все возможности' : '← All features'}</button></div>`;
   panel.className = 'show';
   if (target.getBoundingClientRect?.().top > window.innerHeight / 2) panel.classList.add('top');
-  $('#featureTourBack').onclick = openFeatureGuide;
+  $('#featureTourBack').onclick = () => openFeatureGuide({restore:true});
   $('#featureTourClose').onclick = stopFeatureTour;
 }
 
@@ -2071,6 +2189,7 @@ function interfaceScale(value = config.settings.interface_scale) {
   return Number.isInteger(percent) && percent >= 100 && percent <= 200 && percent % 5 === 0 ? percent : 100;
 }
 function applyInterfaceScale() {
+  window.__worldClockWheelZoom = currentInterfaceScale() / 100;
   send(`setInterfaceScale\n${currentInterfaceScale()}`);
 }
 function currentInterfaceScale() {
@@ -2587,6 +2706,7 @@ host?.addEventListener('message', event => {
     return;
   }
   if (event.data?.type !== 'init') return;
+  window.__worldClockWheelLines = Number.isFinite(event.data.wheelScrollLines) && event.data.wheelScrollLines > 0 && event.data.wheelScrollLines < 1000 ? event.data.wheelScrollLines : 3;
   platform = event.data.platform === 'macos' ? 'macos' : 'windows';
   window.__worldClockPlatform = platform;
   try { config = JSON.parse(event.data.configText || '{}'); } catch { config = {}; }

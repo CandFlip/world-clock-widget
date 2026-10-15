@@ -498,7 +498,7 @@ context.document.querySelector = selector => {
 };
 run("showFeatureInApp('timeline')");
 assert.ok(guideNodes.get('#sliderArea').classList.added.has('feature-tour-focus'));
-assert.match(guideNodes.get('#featureTour').innerHTML, /Передвиньте ползунок/);
+assert.match(guideNodes.get('#featureTour').innerHTML, /передвиньте ползунок/i);
 run('openFeatureGuide()');
 assert.equal(guideNodes.get('#sliderArea').classList.added.size, 0);
 console.log('Interactive feature guide routes to controls and returns cleanly.');

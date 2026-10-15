@@ -251,6 +251,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         webView.evaluateJavaScript(script) { result, error in
             let passed = nativeHotKeyMapping && error == nil && result as? String == "pass"
             if passed {
+                if ProcessInfo.processInfo.environment["WORLD_CLOCK_GUIDE_SELF_TEST"] == "1" {
+                    self.runGuideSelfTest()
+                    return
+                }
                 if ProcessInfo.processInfo.environment["WORLD_CLOCK_SCALE_SELF_TEST"] == "1" {
                     self.runScaleSelfTest()
                     return
@@ -268,6 +272,53 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
                     self.finishSelfTest(code: 3)
                 }
             }
+        }
+    }
+
+    private func runGuideSelfTest() {
+        guard let path = ProcessInfo.processInfo.environment["WORLD_CLOCK_GUIDE_SELF_TEST_SCRIPT"],
+              let script = try? String(contentsOfFile: path, encoding: .utf8) else {
+            fputs("macOS guide test script missing\n", stderr)
+            finishSelfTest(code: 3)
+        }
+        webView.evaluateJavaScript(script) { _, error in
+            if let error { fputs("macOS guide test start failed: \(error)\n", stderr); self.finishSelfTest(code: 3) }
+            self.pollGuideSelfTest()
+        }
+    }
+
+    private func pollGuideSelfTest(attempt: Int = 0) {
+        webView.evaluateJavaScript("JSON.stringify(window.__guideSelfTest || {})") { result, error in
+            let text = result as? String ?? ""
+            let record = text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            if error == nil && record?["state"] as? String == "pass" {
+                fputs("macOS WKWebView guide test passed: \(text)\n", stderr)
+                self.finishGuideSelfTest(code: 0, name: "passed.png")
+                return
+            }
+            if error != nil || record?["state"] as? String == "fail" || attempt >= 600 {
+                fputs("macOS WKWebView guide test failed: \(text), error=\(String(describing: error))\n", stderr)
+                self.finishGuideSelfTest(code: 3, name: "failure.png")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.pollGuideSelfTest(attempt: attempt + 1)
+            }
+        }
+    }
+
+    private func finishGuideSelfTest(code: Int32, name: String) {
+        guard let directory = ProcessInfo.processInfo.environment["WORLD_CLOCK_GUIDE_SELF_TEST_SNAPSHOT_DIR"] else {
+            finishSelfTest(code: code)
+        }
+        webView.takeSnapshot(with: nil) { image, _ in
+            if let data = image?.tiffRepresentation,
+               let bitmap = NSBitmapImageRep(data: data),
+               let png = bitmap.representation(using: .png, properties: [:]) {
+                try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                try? png.write(to: URL(fileURLWithPath: directory).appendingPathComponent(name))
+            }
+            self.finishSelfTest(code: code)
         }
     }
 

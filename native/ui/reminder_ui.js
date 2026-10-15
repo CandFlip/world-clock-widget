@@ -355,8 +355,8 @@ function openAlarmEditor(entry, isNew) {
   if (!isNew) $('#removeAlarm').onclick = () => deleteAlarm(id);
 }
 
-// Native scrolling owns wheel/touch momentum and snapping. Only mouse dragging
-// needs a kinetic adapter: browsers do not pan a scrollport with the left button.
+// Precision wheel/touch input keeps native momentum. Discrete wheel input uses
+// row steps; its fast gestures share the same decay as mouse dragging.
 function bindScheduleWheel(root, options, changed) {
   const {min,max,wrap=false,parse=Number,format=String,label=value=>String(value).padStart(2,'0')} = options;
   const count = max-min+1, cycles = wrap ? 41 : 1, middle = wrap ? count*20 : 0;
@@ -383,7 +383,7 @@ function bindScheduleWheel(root, options, changed) {
   };
   root.onscroll = update;
   root.onscrollend = () => {
-    if(drag || frame) return;
+    if(drag || frame || mouseWheel.active()) return;
     update();
     // Recenter identical cycles only after native momentum and snapping finish.
     if(wrap) {
@@ -391,18 +391,16 @@ function bindScheduleWheel(root, options, changed) {
       if(Math.abs(index-centered) > count*5) root.scrollTop = centered*40;
     }
   };
-  root.addEventListener('wheel', () => {
-    stop(); drag = null; root.style.scrollSnapType = '';
-  }, {passive:true});
   root.onkeydown = event => {
     const delta = {ArrowUp:-1,ArrowDown:1,PageUp:-5,PageDown:5}[event.key];
     if(delta === undefined && !['Home','End'].includes(event.key)) return;
-    event.preventDefault(); stop(); drag = null;
+    event.preventDefault(); mouseWheel.cancel(); stop(); drag = null;
     const index = Math.round(root.scrollTop/40);
     const destination = delta !== undefined ? index+delta : middle+(event.key === 'Home' ? 0 : count-1);
     root.scrollTo({top:clamp(destination,0,count*cycles-1)*40,behavior:'smooth'});
   };
   root.onpointerdown = event => {
+    mouseWheel.cancel();
     if(event.pointerType !== 'mouse' || event.button !== 0) return;
     stop(); root.focus(); root.setPointerCapture(event.pointerId);
     root.style.scrollSnapType = 'none';
@@ -440,6 +438,18 @@ function bindScheduleWheel(root, options, changed) {
   };
   root.onpointercancel = () => {if(drag) {drag = null; stop(); snap();}};
   root.onlostpointercapture = () => {if(drag) {drag = null; stop(); snap();}};
+  const mouseWheel = bindPickerMouseWheel(root, {
+    read: () => root.scrollTop / 40,
+    paint: value => {root.scrollTop = value * 40; update();},
+    max: count * cycles - 1,
+    prepare: () => {
+      stop(); drag = null;
+      root.scrollTo({top:root.scrollTop,behavior:'instant'});
+      root.style.scrollSnapType = 'none';
+    },
+    native: () => {stop(); drag = null; root.style.scrollSnapType = '';},
+    finish: () => {root.style.scrollSnapType = '';},
+  });
   update();
 }
 
@@ -450,22 +460,103 @@ function pickerDecay(velocity, milliseconds) {
 
 // Numeric controls have no scrollport. Preserve the entire wheel distance,
 // including native momentum events; never synthesize a second wheel inertia.
-function valueWheelUnits(event) {
+function wheelInput(event) {
   const delta = event.deltaY;
-  if(event.deltaMode === 1) return Math.sign(delta)*Math.max(1,Math.round(Math.abs(delta)/3));
-  if(event.deltaMode === 2) return delta*5;
-
-  // Chromium exposes a classic mouse-wheel detent as wheelDeltaY=120 even
-  // though deltaY is reported in pixels (usually 100). Precision touchpads
-  // produce variable, fractional wheelDeltaY values, so keep their complete
-  // stream untouched for native momentum and fine positioning.
-  const legacy = Math.abs(Number(event.wheelDeltaY));
-  const detents = legacy/120;
-  if(Math.abs(delta) >= 80 && legacy >= 120 && Math.abs(detents-Math.round(detents)) < .001) {
-    // Use the physical detent direction when Chromium supplies it.
-    return -Math.sign(Number(event.wheelDeltaY))*Math.round(detents);
+  if(event.ctrlKey || !Number.isFinite(delta) || !delta || Math.abs(event.deltaX || 0)>Math.abs(delta)) return null;
+  // WebView2 scales both deltaY and integer wheelDeltaY by page zoom. Undo
+  // that once, independently of display DPI, before counting physical steps.
+  const zoom = Number(window.__worldClockWheelZoom) || 1;
+  const legacy = Number(event.wheelDeltaY ?? event.wheelDelta);
+  const spin = -legacy*zoom/120;
+  const roundedSpin = Math.round(spin);
+  const whole = Number.isFinite(spin) && roundedSpin!==0 && Math.abs(spin-roundedSpin)<=zoom/120+.001;
+  const units = whole ? roundedSpin : spin;
+  if(event.deltaMode === 1) {
+    const lines = Number(window.__worldClockWheelLines) || 3;
+    return {units:Number.isFinite(units) && units ? units : delta/lines,discrete:true};
   }
-  return delta/40;
+  if(event.deltaMode === 2) return {units:Number.isFinite(units) && units ? units : delta,discrete:true};
+  // Spin and pixel distance are distinct, as in Facebook's normalizeWheel.
+  // Do not infer a detent from a fixed CSS-pixel threshold: zoom changes pixels.
+  const precise = event.momentum === true || event.preciseScrolling === true
+    || (!whole && Number.isFinite(legacy) && Math.abs(Math.abs(legacy)-Math.abs(delta)*3)<1);
+  if(!precise && Number.isFinite(spin) && spin) {
+    const pixelsPerStep = Math.abs(delta*zoom/spin);
+    if(whole || Math.abs(pixelsPerStep-100)<5) return {units,discrete:true};
+  }
+  return {units:delta*zoom/40,discrete:false};
+}
+
+function valueWheelUnits(event) {
+  return wheelInput(event)?.units || 0;
+}
+
+function bindPickerMouseWheel(root, {read,paint,max,prepare,native,finish}) {
+  let frame = 0, position = 0, target = 0, speed = 0, lastFrame = 0;
+  let lastInput = -Infinity, direction = 0, quickIntervals = 0, coast = false;
+  let detentCredit = 0, lastDetent = -Infinity;
+  let precisionUntil = -Infinity;
+  const reduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const stopFrame = () => {if(frame) cancelAnimationFrame(frame); frame = 0;};
+  const cancel = () => {
+    stopFrame(); speed = 0; coast = false; quickIntervals = 0; lastInput = lastDetent = -Infinity; detentCredit = 0;
+    finish();
+  };
+  const animate = now => {
+    frame = 0;
+    if(!root.isConnected) {cancel(); return;}
+    const dt = Math.min(32,Math.max(1,now-lastFrame)); lastFrame = now;
+    if(now-lastInput>1600) {coast = false; speed = 0; target = Math.round(target);}
+    if(coast && now-lastInput>64) {
+      const decay = pickerDecay(speed,dt);
+      target = clamp(target+decay.distance,0,max); speed = decay.velocity;
+      if(target===0 || target===max || Math.abs(speed)<.001) {coast = false; speed = 0; target = Math.round(target);}
+    }
+    // Frame-rate independent exponential damping, used by Lenis Animate/damp.
+    position += (target-position)*(1-Math.exp(-dt/45));
+    paint(position);
+    if(!coast && Math.abs(target-position)<.005) {
+      position = target = Math.round(target); paint(position); finish(); return;
+    }
+    frame = requestAnimationFrame(animate);
+  };
+  root.addEventListener('wheel', event => {
+    const input = wheelInput(event);
+    if(!input) return;
+    const now = Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now();
+    // Keep the entire precision gesture native, including occasional deltas
+    // that happen to equal a whole wheel unit and its decaying tail.
+    if(!input.discrete || now<precisionUntil) {cancel(); precisionUntil = now+180; native(); return;}
+    event.preventDefault(); event.stopPropagation();
+    const dt = now-lastInput, sign = Math.sign(input.units);
+    const fresh = dt>180 || dt<0 || sign!==direction;
+    if(fresh) {
+      stopFrame(); position = target = Math.round(read()); speed = 0; coast = false; quickIntervals = 0; detentCredit = 0; lastDetent = -Infinity;
+    }
+    prepare();
+    // Count completed detents, not driver sub-events: four 1/4 pulses still
+    // describe one deliberate click, not a four-click fling.
+    detentCredit += Math.abs(input.units);
+    const detents = Math.floor(detentCredit+1e-6);
+    if(detents) {
+      detentCredit -= detents;
+      const gap = now-lastDetent;
+      if(gap>0 && gap<80) {
+        quickIntervals += detents;
+        speed = clamp(speed*.35+(sign*detents/gap)*.65,-.04,.04);
+      } else {
+        quickIntervals = detents-1;
+        speed = detents>=3 ? sign*Math.min(.04,detents/80) : 0;
+      }
+      lastDetent = now;
+      coast = quickIntervals>=2 && !reduced();
+    }
+    direction = sign; lastInput = now;
+    target = clamp(target+input.units,0,max);
+    if(reduced()) {stopFrame(); position = target = Math.round(target); paint(position); finish(); return;}
+    if(!frame) {lastFrame = performance.now(); frame = requestAnimationFrame(animate);}
+  }, {passive:false});
+  return {cancel,active:()=>!!frame};
 }
 
 function bindValueScroll(root, {read,write,min=-Number.MAX_SAFE_INTEGER,max=Number.MAX_SAFE_INTEGER,paint=()=>{},finish=()=>{},stepForEvent=()=>1}) {
