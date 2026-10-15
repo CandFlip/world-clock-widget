@@ -121,7 +121,7 @@ assert.ok(get('#scheduleError').textContent.includes('недоступно'));
 console.log('Schedule wheels: year/leap-day transitions, keyboard, past-time and DST validation, cancel passed.');
 
 const wheel = get('#alarmMinute');
-assert.equal(wheel.onwheel,undefined); assert.equal(wheel.listeners.wheel.options.passive,true);
+assert.equal(wheel.onwheel,undefined); assert.equal(wheel.listeners.wheel.options.passive,false);
 setPicker('#alarmMinute','0'); const initial=wheel.scrollTop;
 scrollPicker('#alarmMinute',7.5);assert.equal(wheel.scrollTop,initial+7.5); // fractional position preserved, no snap per event
 scrollPicker('#alarmMinute',392.5);assert.equal(+wheel.value,10); // a flick spans many rows
@@ -144,8 +144,8 @@ const flush=()=>{const list=[...scheduled.values()];scheduled.clear();for(const 
 wheelEvent(100,0,-120);assert.equal(scalar,10); // one physical mouse-wheel detent is exactly one value
 wheelEvent(-100,0,120);assert.equal(scalar,11);flush();
 wheelEvent(6,1);assert.equal(scalar,9);flush();
-wheelEvent(1,2);assert.equal(scalar,4);flush();
-wheelEvent(2000);assert.equal(scalar,-46);flush(); // signed zero crossing and fast multi-value input
+wheelEvent(1,2);assert.equal(scalar,8);flush();
+wheelEvent(2000);assert.equal(scalar,-42);flush(); // signed zero crossing and fast multi-value input
 let quarter=0;const shiftControl=node();context.shiftControl=shiftControl;context.shiftOptions={read:()=>quarter,write:value=>quarter=value,stepForEvent:event=>event.shiftKey?.25:1};run('bindValueScroll(shiftControl,shiftOptions)');
 shiftControl.onwheel({deltaY:-100,deltaMode:0,wheelDeltaY:120,shiftKey:true,preventDefault(){},stopPropagation(){}});assert.equal(quarter,.25);flush();
 shiftControl.onwheel({deltaY:-100,deltaMode:0,wheelDeltaY:120,shiftKey:false,preventDefault(){},stopPropagation(){}});assert.equal(quarter,1.25);flush();

@@ -42,6 +42,7 @@ jobs:
           node native/test_ui_logic.cjs
           node native/test_reminder_ux.cjs
           node native/test_interface_scale.cjs
+          node native/test_wheel_input.cjs
           node native/test_sound_library.cjs
           node native/test_sync.cjs
 
@@ -50,6 +51,20 @@ jobs:
           LAYOUT_REQUIRE_CHROME: '1'
           LAYOUT_SCREENSHOT_DIR: ${{ runner.temp }}/world-clock-layout
         run: node native/test_layout.cjs
+
+      - name: Check illustrated guide and capture previews
+        env:
+          LAYOUT_REQUIRE_CHROME: '1'
+          GUIDE_SCREENSHOT_DIR: ${{ runner.temp }}/world-clock-guide
+        run: node native/test_feature_guide.cjs
+
+      - name: Upload guide previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldClockWidget-macOS-guide-${{ github.run_id }}
+          path: ${{ runner.temp }}/world-clock-guide/*.png
+          if-no-files-found: warn
 
       - name: Upload macOS layout previews
         if: always()

@@ -45,7 +45,7 @@ constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.184";
+constexpr wchar_t kVersion[] = L"v1.1.189";
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
 std::atomic_bool g_updateDownloading{false};
@@ -404,13 +404,16 @@ bool writeSyncCredential(const std::wstring& value) {
 
 void postInitialState() {
     if (!g_webview) return;
+    UINT wheelLines = 3;
+    SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &wheelLines, 0);
     auto config = readUtf8(dataDir() / L"widget_config.json", L"{}");
     auto reminders = readUtf8(dataDir() / L"reminders.json", L"{\"lead\":15,\"entries\":[]}");
     std::wstring payload = L"{\"type\":\"init\",\"version\":" + jsonQuote(kVersion) +
         L",\"configText\":" + jsonQuote(config) + L",\"remindersText\":" + jsonQuote(reminders) +
         L",\"syncCredential\":" + jsonQuote(readSyncCredential()) +
         L",\"hotkeyModifiers\":" + std::to_wstring(g_hotkeyModifiers) +
-        L",\"hotkeyKey\":" + std::to_wstring(g_hotkeyKey) + L"}";
+        L",\"hotkeyKey\":" + std::to_wstring(g_hotkeyKey) +
+        L",\"wheelScrollLines\":" + std::to_wstring(wheelLines) + L"}";
     g_webview->PostWebMessageAsJson(payload.c_str());
 }
 

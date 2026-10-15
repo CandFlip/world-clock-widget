@@ -251,6 +251,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         webView.evaluateJavaScript(script) { result, error in
             let passed = nativeHotKeyMapping && error == nil && result as? String == "pass"
             if passed {
+                if ProcessInfo.processInfo.environment["WORLD_CLOCK_GUIDE_SELF_TEST"] == "1" {
+                    self.runGuideSelfTest()
+                    return
+                }
                 if ProcessInfo.processInfo.environment["WORLD_CLOCK_SCALE_SELF_TEST"] == "1" {
                     self.runScaleSelfTest()
                     return
@@ -267,6 +271,36 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
                     fputs("macOS runtime tick test failed: hotkey=\(nativeHotKeyMapping), result=\(String(describing: result)), error=\(String(describing: error)), details=\(String(describing: details)), detailError=\(String(describing: diagnosticError))\n", stderr)
                     self.finishSelfTest(code: 3)
                 }
+            }
+        }
+    }
+
+    private func runGuideSelfTest() {
+        guard let path = ProcessInfo.processInfo.environment["WORLD_CLOCK_GUIDE_SELF_TEST_SCRIPT"],
+              let script = try? String(contentsOfFile: path, encoding: .utf8) else {
+            fputs("macOS guide test script missing\n", stderr)
+            finishSelfTest(code: 3)
+        }
+        webView.evaluateJavaScript(script) { _, error in
+            if let error { fputs("macOS guide test start failed: \(error)\n", stderr); self.finishSelfTest(code: 3) }
+            self.pollGuideSelfTest()
+        }
+    }
+
+    private func pollGuideSelfTest(attempt: Int = 0) {
+        webView.evaluateJavaScript("JSON.stringify(window.__guideSelfTest || {})") { result, error in
+            let text = result as? String ?? ""
+            let record = text.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            if error == nil && record?["state"] as? String == "pass" {
+                fputs("macOS WKWebView guide test passed: \(text)\n", stderr)
+                self.finishSelfTest(code: 0)
+            }
+            if error != nil || record?["state"] as? String == "fail" || attempt >= 600 {
+                fputs("macOS WKWebView guide test failed: \(text), error=\(String(describing: error))\n", stderr)
+                self.finishSelfTest(code: 3)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                self.pollGuideSelfTest(attempt: attempt + 1)
             }
         }
     }

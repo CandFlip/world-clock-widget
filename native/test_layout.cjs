@@ -566,7 +566,7 @@ async function connect() {
         openSettings();
         const settings = {frameLeft:box('.modal-root').left,headerHeight:box('.modal-head').height,inset:getComputedStyle(document.querySelector('.row')).paddingLeft,titleSize:getComputedStyle(document.querySelector('.modal-head h2')).fontSize};
         openFeatureGuide();
-        const help = {inset:getComputedStyle(document.querySelector('.feature-card')).paddingLeft,body:document.querySelector('.feature-guide').textContent};
+        const help = {inset:getComputedStyle(document.querySelector('.feature-group>summary')).paddingLeft,body:document.querySelector('.feature-guide').textContent};
         closeModal();
         return {frameLeft:frame.left,headerHeight,inset,settings,help};
       })()`, returnByValue:true});
