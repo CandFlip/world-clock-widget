@@ -34,6 +34,14 @@ jobs:
       - name: Build universal macOS application and DMG
         run: bash macos/build.sh
 
+      - name: Upload native WebKit guide diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WorldClockWidget-macOS-native-guide-${{ github.run_id }}
+          path: macos/build/guide-qa/*.png
+          if-no-files-found: ignore
+
       - name: Check shared shortcut behavior
         run: node native/test_hotkey_ui.cjs
 

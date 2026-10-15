@@ -297,6 +297,19 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             }
             if error != nil || record?["state"] as? String == "fail" || attempt >= 600 {
                 fputs("macOS WKWebView guide test failed: \(text), error=\(String(describing: error))\n", stderr)
+                let directory = ProcessInfo.processInfo.environment["WORLD_CLOCK_GUIDE_SELF_TEST_SNAPSHOT_DIR"]
+                if let directory {
+                    self.webView.takeSnapshot(with: nil) { image, _ in
+                        if let data = image?.tiffRepresentation,
+                           let bitmap = NSBitmapImageRep(data: data),
+                           let png = bitmap.representation(using: .png, properties: [:]) {
+                            try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+                            try? png.write(to: URL(fileURLWithPath: directory).appendingPathComponent("failure.png"))
+                        }
+                        self.finishSelfTest(code: 3)
+                    }
+                    return
+                }
                 self.finishSelfTest(code: 3)
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {

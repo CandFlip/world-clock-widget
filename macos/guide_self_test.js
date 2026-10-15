@@ -22,7 +22,7 @@ window.__guideSelfTest = {state:'pending'};
         const visual=sample.querySelector('.guide-control-visual'),rect=visual.getBoundingClientRect();
         check(rect.width>0 && rect.height>0,`Missing illustration ${id}`);
         check(!visual.querySelector('[id],[data-action],[data-city-action]') && visual.inert,'Safe illustration');
-        if (!sample.closest('figure')) check(rect.height<=parseFloat(getComputedStyle(sample.closest('p,li')).lineHeight)+1,`Tall inline illustration ${id}`);
+        if (!sample.closest('figure')) check(rect.height<=parseFloat(getComputedStyle(sample.closest('p,li')).lineHeight)+1,`Tall inline illustration ${JSON.stringify({id,key:sample.dataset.guideControl,language,theme,scale,height:rect.height,line:getComputedStyle(sample.closest('p,li')).lineHeight,zoom:getComputedStyle(visual).zoom,offsetHeight:visual.offsetHeight,devicePixelRatio,viewport:[innerWidth,innerHeight]})}`);
       }
       body.scrollTop += topic.getBoundingClientRect().top-body.getBoundingClientRect().top-8;
       const before={section:topic.closest('.feature-group').dataset.guideSection,topic:id,scroll:body.scrollTop};
