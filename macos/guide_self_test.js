@@ -22,7 +22,13 @@ window.__guideSelfTest = {state:'pending'};
         const visual=sample.querySelector('.guide-control-visual'),rect=visual.getBoundingClientRect();
         check(rect.width>0 && rect.height>0,`Missing illustration ${id}`);
         check(!visual.querySelector('[id],[data-action],[data-city-action]') && visual.inert,'Safe illustration');
-        if (!sample.closest('figure')) check(rect.height<=parseFloat(getComputedStyle(sample.closest('p,li')).lineHeight)+1,`Tall inline illustration ${JSON.stringify({id,key:sample.dataset.guideControl,language,theme,scale,height:rect.height,line:getComputedStyle(sample.closest('p,li')).lineHeight,zoom:getComputedStyle(visual).zoom,offsetHeight:visual.offsetHeight,devicePixelRatio,viewport:[innerWidth,innerHeight]})}`);
+        if (!sample.closest('figure')) {
+          // Older WebKit returns local, unzoomed client rects for CSS zoom.
+          // The unzoomed parent gives the displayed width in page coordinates.
+          const coordinateScale=sample.getBoundingClientRect().width/rect.width;
+          const shownHeight=rect.height*coordinateScale;
+          check(shownHeight<=parseFloat(getComputedStyle(sample.closest('p,li')).lineHeight)+1,`Tall inline illustration ${JSON.stringify({id,key:sample.dataset.guideControl,language,theme,scale,height:rect.height,shownHeight,line:getComputedStyle(sample.closest('p,li')).lineHeight,coordinateScale})}`);
+        }
       }
       body.scrollTop += topic.getBoundingClientRect().top-body.getBoundingClientRect().top-8;
       const before={section:topic.closest('.feature-group').dataset.guideSection,topic:id,scroll:body.scrollTop};
@@ -34,10 +40,26 @@ window.__guideSelfTest = {state:'pending'};
       check(Math.abs(document.querySelector('.modal-body').scrollTop-before.scroll)<1,`Return scroll ${id}`);
       topics++;
     }
+    const host=document.querySelector('.feature-content'),probe=document.createElement('p');
+    probe.style.maxWidth='240px';
+    probe.innerHTML=guideText('Text [[add]] text [[cityPlus]] text [[favorite]] text [[unfavorite]] text [[periodSwitch]] text [[alarm]] text [[interval]] text [[delete]] text');host.append(probe);
+    const walker=document.createTreeWalker(probe,NodeFilter.SHOW_TEXT),ys=[];
+    while(walker.nextNode()) {
+      if(walker.currentNode.parentElement.closest('.guide-control'))continue;
+      const range=document.createRange();range.selectNodeContents(walker.currentNode);
+      for(const rect of range.getClientRects())ys.push(rect.top);
+    }
+    const rows=[...new Set(ys.map(y=>Math.round(y*10)/10))].sort((a,b)=>a-b),line=parseFloat(getComputedStyle(probe).lineHeight);
+    check(rows.length>1,'Multiline probe');
+    check(rows.slice(1).every((y,i)=>Math.abs((y-rows[i])/line-Math.round((y-rows[i])/line))<.04),`Uneven text rhythm ${JSON.stringify({language,theme,scale,rows,line})}`);
+    probe.remove();
     openFeatureGuide();
     check(document.querySelectorAll('.feature-guide details[open]').length===0,'New entry collapsed after return');
     closeModal();
   }
+  config.settings.language='ru';config.settings.theme='dark';config.settings.interface_scale=125;render();applyInterfaceScale();await pause(120);openFeatureGuide();
+  const finalTopic=document.querySelector('[data-guide-topic=cities]');finalTopic.closest('.feature-group').open=true;finalTopic.open=true;await pause(120);
+  document.querySelector('.modal-body').scrollTop+=finalTopic.getBoundingClientRect().top-document.querySelector('.modal-body').getBoundingClientRect().top-8;
   return {state:'pass',topics,scales:[100,125,200],languages:['ru','en'],themes:['dark','light'],returnState:true,inlineLayout:true};
 })().then(result => {window.__guideSelfTest=result;}, error => {window.__guideSelfTest={state:'fail',message:String(error),stack:error.stack};});
 void 0;
