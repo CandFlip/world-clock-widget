@@ -1,4 +1,4 @@
-# World Clock Widget for macOS
+# World Clock Connect for macOS
 
 The macOS MVP uses the same web interface as the Windows application inside a native AppKit/WKWebView host. The build produces one universal DMG for Apple Silicon and Intel Macs running macOS 13 or later.
 

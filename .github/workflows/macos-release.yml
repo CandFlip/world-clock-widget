@@ -21,6 +21,15 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Verify the published Windows companion for macOS v1.1.205
+        if: startsWith(github.ref_name, 'mac-test-v205-')
+        shell: bash
+        run: |
+          mkdir -p release
+          asset=release/WorldClockWidget-Setup-v1.1.205.exe
+          curl --fail --location --retry 3 --output "$asset" https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.205/WorldClockWidget-Setup-v1.1.205.exe
+          printf '%s  %s\n' d731559844c1b2e3e6845c400beb4828c3aa4e03abec8f5dcf90772755eb53e2 "$asset" | shasum -a 256 -c -
+
       - name: Check synchronized release versions
         run: node native/test_release_versions.cjs
 

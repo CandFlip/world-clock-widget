@@ -5,7 +5,7 @@ const read = name => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
 const version = read('macos/Info.plist').match(/CFBundleShortVersionString<\/key><string>([^<]+)/)[1];
 for (const [file, pattern] of [
   ['world_clock_widget.py', /APP_VERSION = "v([^"]+)"/],
-  ['native/webview_host.cpp', /kVersion\[\] = L"v([^"]+)"/],
+  ['native/webview_host.cpp', /#define WORLD_CLOCK_BUILD_VERSION L"v([^"]+)"/],
   ['WorldClockWidget.iss', /MyAppVersion "([^"]+)"/],
 ]) assert.equal(read(file).match(pattern)[1], version, file);
 const numbers = version.split('.').map(Number).concat(0);

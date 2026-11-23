@@ -54,7 +54,7 @@ ln -s /Applications "$STAGING/Applications"
 DMG="$RELEASE/WorldClockWidget-macOS-v${VERSION}.dmg"
 for attempt in 1 2 3; do
   rm -f "$DMG"
-  if hdiutil create -volname "World Clock Widget" -srcfolder "$STAGING" -ov -format UDZO "$DMG"; then break; fi
+  if hdiutil create -volname "World Clock Connect" -srcfolder "$STAGING" -ov -format UDZO "$DMG"; then break; fi
   if [ "$attempt" -eq 3 ]; then exit 1; fi
   sleep 2
 done

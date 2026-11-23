@@ -35,7 +35,7 @@ const key = (code, keyName, modifiers = {}) => ({
 });
 const fireKey = event => {for (const listener of listeners.keydown) {listener(event); if (event.stopped) break;}};
 
-run("hotkeySelection='custom'; startHotkeyCapture()");
+run("config.settings.language='ru'; hotkeySelection='custom'; startHotkeyCapture()");
 assert.match(field('hotkeyCapture').textContent, /Запись идёт/);
 assert.equal(field('hotkeyApply').disabled, true);
 fireKey(key('ControlLeft', 'Control', {ctrlKey: true}));
@@ -79,7 +79,7 @@ run('requestHotkey(candidateHotkey)');
 assert.equal(hostMessages.at(-1), 'setHotkey\n12,75');
 run('pendingHotkey=null; pendingHotkeyMode=null; closeNamePopover=()=>{}; loadSoundLibrary=()=>Promise.resolve()');
 listeners['host:message']({data: {type:'init', platform:'windows', version:'v1.1.115',
-  configText: JSON.stringify({settings:{hotkey:{modifiers:6,key:75}}}), remindersText:'{}',
+  configText: JSON.stringify({settings:{language:'ru',hotkey:{modifiers:6,key:75}}}), remindersText:'{}',
   hotkeyModifiers:6, hotkeyKey:75}});
 assert.equal(run('hotkeyLabel()'), 'Ctrl+Shift+K');
 assert.equal(run('config.settings.manual_hotkey.key'), 75);

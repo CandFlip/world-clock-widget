@@ -8,7 +8,7 @@ World Clock Connect показывает местное время ваших к
 
 - **[Windows 10/11 — скачать v1.1.205](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.205/WorldClockWidget-Setup-v1.1.205.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
 - **[Microsoft Store](https://apps.microsoft.com/detail/9N9X3T947SZ5)** · Откройте страницу World Clock Connect в магазине.
-- **[macOS 13+ — скачать v1.1.189](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.189/WorldClockWidget-macOS-v1.1.189.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
+- **[macOS 13+ — скачать v1.1.205](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.205/WorldClockWidget-macOS-v1.1.205.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
 
 ## Что можно делать
 

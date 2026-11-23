@@ -70,6 +70,7 @@ async function connect() {
       await new Promise(resolve => setTimeout(resolve, 500));
       await send('Runtime.evaluate', {expression:`
         version = ${JSON.stringify(`v${macVersion} layout preview`)};
+        config.settings.language = 'ru';
         config.timezones = ['Europe/Moscow','Asia/Vladivostok','Asia/Yekaterinburg','Asia/Almaty','America/New_York'];
         meetingMode = false;
         meetingSelected = new Set(config.timezones);
@@ -101,6 +102,52 @@ async function connect() {
           pass &&= fits(document.querySelector('#reminderTooltip')); hideReminderTooltip();
         }
         hideContextTooltip(); probe.remove();
+        const baseIcon = document.querySelector('#baseClock .context-token');
+        baseIcon.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));
+        pass &&= document.querySelector('#contextTooltip')?.textContent === baseIcon.getAttribute('aria-label');
+        baseIcon.dispatchEvent(new PointerEvent('pointerout',{bubbles:true}));
+        pass &&= !document.querySelector('#contextTooltip');
+        const baseCard = document.querySelector('#baseClock');
+        baseCard.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+        pass &&= baseCard.getAttribute('aria-expanded') === 'true';
+        baseCard.click();
+        pass &&= baseCard.getAttribute('aria-expanded') === 'false';
+        const originalReminders=reminders;
+        const originalNow=Date.now;
+        const originalMode=config.settings.top_clock_mode;
+        const originalTimezone=config.settings.manual_top_timezone;
+        try {
+          let now=Math.floor(originalNow()/1000)*1000;
+          Date.now=()=>now;
+          const entry=(id,delay,source_type)=>({id,source_type,base_kind:'auto',zone:baseZone(),
+            alarm:Math.floor(now/1000)+delay,target:Math.floor(now/1000)+delay,state:'pending'});
+          reminders={...originalReminders,entries:[entry('later',180,'base'),entry('nearest',120,'base'),entry('city-only',30,'city')]};
+          render();
+          const basePin=document.querySelector('#baseClock .city-alarm-pin');
+          pass &&= !document.querySelector('#baseCountdown') && !document.querySelector('#reminderTooltip');
+          basePin.dispatchEvent(new MouseEvent('mouseenter'));
+          const popup=document.querySelector('#reminderTooltip');
+          pass &&= !!popup && popup.textContent.includes('Осталось 3:00') &&
+            popup.textContent.includes('Осталось 2:00') && !popup.textContent.includes('Осталось 0:30');
+          pass &&= popup.getBoundingClientRect().width<=280;
+          now+=1000;
+          renderAlarms();
+          pass &&= document.querySelector('#reminderTooltip')===popup &&
+            popup.textContent.includes('Осталось 1:59') && popup.textContent.includes('Осталось 2:59');
+          basePin.dispatchEvent(new MouseEvent('mouseleave'));
+          pass &&= !document.querySelector('#reminderTooltip');
+          config.settings.top_clock_mode='manual';
+          config.settings.manual_top_timezone='Asia/Tokyo';
+          render();
+          pass &&= document.querySelector('#baseClockTitle').textContent === 'Токио' &&
+            document.querySelector('#baseClock .clock-city').textContent === 'Выбрано вручную';
+        } finally {
+          Date.now=originalNow;
+          reminders=originalReminders;
+          config.settings.top_clock_mode=originalMode;
+          config.settings.manual_top_timezone=originalTimezone;
+          render();
+        }
         const previousLanguage=config.settings.language;
         for (const language of ['ru','en']) {
           config.settings.language=language;
@@ -345,39 +392,56 @@ async function connect() {
         const visibleCards = cards.filter(card => card.getBoundingClientRect().bottom <= cityRect.bottom + 1).length;
         const cityOverflow = getComputedStyle(document.querySelector('.cities')).overflowY;
         const hero = rect('.hero');
+        const panels = rect('.top-panels');
+        const baseCard = rect('#baseClock');
         const label = rect('.shift-label');
         const rail = rect('.slider-rail');
         const marks = rect('.marks span');
         const quickTitle = rect('.quick-title');
         const cityTitle = rect('.cities-title');
-        const firstCity = rect('.cities .card');
+        const firstCity = rect('.city-card');
+        const baseSummary = rect('.base-clock-row');
+        const baseBand = rect('#baseClock .temporal-band');
+        const baseIcon = rect('#baseClock .city-context');
+        const shell=document.querySelector('.shell');
+        shell.classList.add('meeting-mode');
+        const cardEdges=['#baseClock','.city-card'].map(selector => {
+          const card=document.querySelector(selector), box=card.getBoundingClientRect();
+          card.classList.remove('meeting-selected');
+          const outline=card.querySelector('.meeting-outline rect'), path=outline.getBoundingClientRect();
+          const stroke=parseFloat(getComputedStyle(outline).strokeWidth)/2;
+          const radius=parseFloat(getComputedStyle(outline).rx);
+          return [path.left-box.left-stroke, path.top-box.top-stroke, box.right-path.right-stroke,
+            box.bottom-path.bottom-stroke, radius+stroke-parseFloat(getComputedStyle(card).borderTopLeftRadius)];
+        });
+        shell.classList.remove('meeting-mode');
         const textWalker = document.createTreeWalker(document.querySelector('.shell'), NodeFilter.SHOW_TEXT);
         const fontSizes = new Set();
         for(let node=textWalker.nextNode();node;node=textWalker.nextNode()) {
           if(node.textContent.trim() && node.parentElement?.getClientRects().length)
             fontSizes.add(getComputedStyle(node.parentElement).fontSize);
         }
-        const del = rect('.city-summary>.delete');
-        const trash = rect('.city-summary>.delete .trash-icon');
-        const track = rect('.city-alarm-track');
-        const summary = rect('.city-summary');
-        const band = rect('.city-summary .temporal-band');
-        const icon = rect('.city-context');
-        const cityName = rect('.city-name');
+        const del = rect('.city-card .city-summary>.delete');
+        const trash = rect('.city-card .city-summary>.delete .trash-icon');
+        const track = rect('.city-card .city-alarm-track');
+        const summary = rect('.city-card .city-summary');
+        const band = rect('.city-card .city-summary .temporal-band');
+        const icon = rect('.city-card .city-context');
+        const cityName = rect('.city-card .city-name');
         const cityClockValue = rect('.city-time');
-        const cityDelete = rect('.city-summary>.delete');
+        const cityDelete = rect('.city-card .city-summary>.delete');
         const baseTextLeft = rect('.base-summary').left + parseFloat(getComputedStyle(document.querySelector('.base-summary')).paddingLeft);
         const baseTextRight = parseFloat(getComputedStyle(document.querySelector('.base-summary')).paddingRight);
-        const contentCenter = (rect('.city-name').top + rect('.offset').bottom) / 2;
+        const contentCenter = (rect('.city-card .city-name').top + rect('.offset').bottom) / 2;
         return {width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,
           cityHeight:cityRect?.height,cityTop:cityRect?.top,cardBounds:cards.map(card=>({top:card.getBoundingClientRect().top,bottom:card.getBoundingClientRect().bottom,height:card.getBoundingClientRect().height})),visibleCards,
           actionGap,groupGap,normalGroupGap,deleteCenter:(del.top + del.bottom)/2,contentCenter,
-          heroToLabel:label.top-hero.bottom,labelToRail:rail.top-label.bottom,
+          heroToLabel:label.top-panels.bottom,labelToRail:rail.top-label.bottom,
           heroBottom:hero.bottom,labelTop:label.top,sliderTop:rect('.slider').top,sliderMargin:getComputedStyle(document.querySelector('.slider')).marginTop,
           railToQuick:quickTitle.top-marks.bottom,
           quickToCities:cityTitle.top-rect('.quick .chip').bottom,
           cityTitleToCard:firstCity.top-cityTitle.bottom,
-          labelLeft:label.left,nowLabelLeft,railLeft:rail.left,heroLeft:hero.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,addLeft:rect('.add').left,
+          labelLeft:label.left,nowLabelLeft,railLeft:rail.left,heroLeft:panels.left,quickTitleLeft:quickTitle.left,cityTitleLeft:cityTitle.left,addLeft:rect('.add').left,
           statusWidths,shiftedStatusWidths,longStatusFits,
           deleteTop:del.top,deleteBottom:del.bottom,deleteRight:del.right,deleteLeft:del.left,
           trashX:(trash.left+trash.right)/2,trashY:(trash.top+trash.bottom)/2,deleteX:(del.left+del.right)/2,
@@ -391,8 +455,50 @@ async function connect() {
           cityHeading:document.querySelector('.cities-title')?.textContent,
           headingFont:getComputedStyle(document.querySelector('.cities-title')).fontSize,
           reminderHeadingFont:getComputedStyle(document.querySelector('.quick-title')).fontSize,
-          nameTop:rect('.city-name')?.top,timeTop:rect('.city-time')?.top,
+          nameTop:rect('.city-card .city-name')?.top,timeTop:rect('.city-time')?.top,
           contentBottom:Math.max(rect('.offset').bottom,rect('.until').bottom),
+          baseOutsideCities:!document.querySelector('#cities #baseClock'),
+          baseAboveSlider:document.querySelector('#sliderArea').previousElementSibling.contains(document.querySelector('#baseClock')),
+          firstCityBelowSlider:firstCity.top>rect('#sliderArea').bottom,
+          cardEdges,
+          hasBaseHeading:!!document.querySelector('.base-section h2'),
+          baseSectionLabel:document.querySelector('.base-section').getAttribute('aria-label'),
+          hasBaseMenu:!!document.querySelector('.base-menu'),
+          baseBandStart:baseBand.left-baseSummary.left,
+          baseBandEnd:baseSummary.right-baseBand.right,
+          baseTrackWidth:rect('#baseClock .city-alarm-track').width,
+          baseBandWidth:baseBand.width,
+          baseIconInset:(baseIcon.left+baseIcon.right)/2-baseSummary.left,
+          baseIconX:(baseIcon.left+baseIcon.right)/2,
+          baseRulerWidth:rect('#baseClock .availability-window').width,
+          cityRulerWidth:rect('.city-card .availability-window').width,
+          baseTextToBand:baseBand.top-Math.max(rect('#baseClock .clock-city').bottom,rect('#baseClock .date').bottom),
+          baseMarkerInset:(rect('#baseClock .temporal-marker').left+rect('#baseClock .temporal-marker').right)/2-baseSummary.left,
+          baseIconBottom:baseBand.top-baseIcon.bottom,
+          cityHeadingAligned:Math.abs(cityTitle.left-firstCity.left)<1,
+          sharedScrollbar:['scrollbarWidth','scrollbarColor'].every(property =>
+            getComputedStyle(document.querySelector('.cities'))[property] === getComputedStyle(document.querySelector('.saved-list'))[property]),
+          leftEdges:[baseCard.left-panels.left, firstCity.left-panels.left],
+          widePanelsAligned:baseCard.right < hero.left && Math.abs(baseCard.top-hero.top) < 1 && Math.abs(hero.right-panels.right) < 1,
+          narrowPanelsAligned:hero.bottom < baseCard.top && Math.abs(hero.left-baseCard.left) < 1,
+          baseRight:hero.right-rect('#baseClock').right,
+          cityRight:hero.right-Math.max(...cards.map(card=>card.getBoundingClientRect().right)),
+          firstCardNarrowing:rect('#baseClock').width-firstCity.width,
+          listGutter:document.querySelector('#cities').offsetWidth-document.querySelector('#cities').clientWidth,
+          listScrolls:document.querySelector('#cities').scrollHeight>document.querySelector('#cities').clientHeight,
+          baseClockBottom:rect('#baseClock').bottom,
+          baseCardTop:rect('#baseClock').top,
+          baseTitleSize:parseFloat(getComputedStyle(document.querySelector('#baseClock .city-name')).fontSize),
+          baseTimeSize:parseFloat(getComputedStyle(document.querySelector('#baseClock .clock-time')).fontSize),
+          cityTitleSize:parseFloat(getComputedStyle(document.querySelector('.city-card .city-name')).fontSize),
+          cityTimeSize:parseFloat(getComputedStyle(document.querySelector('.city-card .city-time')).fontSize),
+          baseSubtitleY:rect('#baseClock .clock-city').top,
+          baseDateY:rect('#baseClock .date').top,
+          baseTitleLeft:rect('#baseClock .city-name').left,
+          baseTimeLeft:rect('#baseClock .clock-time').left,
+          baseTimeRight:rect('#baseClock .clock-time').right,
+          baseRowTimeEdge:baseSummary.right-baseTextRight,
+          cardCursors:[document.querySelector('#baseClock'),...cards].map(card=>getComputedStyle(card.querySelector('.city-name')).cursor),
           heroColumns:getComputedStyle(document.querySelector('.hero')).gridTemplateColumns,
           heroWidth:rect('.hero')?.width,heroHeight:rect('.hero')?.height,summaryHeight:document.querySelector('.base-summary')?.scrollHeight,clockWidth:rect('.clock')?.width,savedWidth:rect('.saved-panel')?.width,
           clockText:document.querySelector('.clock-time')?.textContent,clockTextWidth:rect('.clock-time')?.width,clockTextScroll:document.querySelector('.clock-time')?.scrollWidth,
@@ -405,14 +511,40 @@ async function connect() {
       const layout = evaluated.result.value;
       console.log(`${width}x${height}: ${JSON.stringify(layout)}`);
       assert.equal(layout.scrollWidth, width, `horizontal overflow at ${width}x${height}`);
-      assert.deepEqual(layout.fontSizes, ['10px','12px','14px','16px','32px']);
+      assert.deepEqual(layout.fontSizes, ['10px','12px','14px','16px','22px']);
+      assert.ok(layout.baseOutsideCities && layout.baseAboveSlider && layout.firstCityBelowSlider, 'base and city sections sit on opposite sides of the slider');
+      assert.equal(layout.hasBaseHeading, false);
+      assert.ok(layout.cardEdges.flat().every(delta => Math.abs(delta)<.15), 'animated outlines follow both card borders and corner radii');
+      assert.equal(layout.baseSectionLabel, 'Основное время');
+      assert.ok(Math.abs(layout.savedWidth - layout.heroWidth) <= 1, 'saved panel fills the hero');
+      assert.equal(layout.hasBaseMenu, false);
+      assert.ok(Math.abs(layout.baseBandStart) <= 1 && Math.abs(layout.baseBandEnd) <= 1, 'base band fills the whole card');
+      assert.ok(Math.abs(layout.baseTrackWidth - layout.baseBandWidth) <= 1, 'base pin track covers the band');
+      assert.ok(Math.abs(layout.baseIconInset - layout.baseMarkerInset) <= 1, 'base availability icon aligns with the white marker');
+      assert.ok(Math.abs(layout.baseIconX - layout.iconX) <= 1, 'base and first city icons line up');
+      assert.ok(Math.abs(layout.baseRulerWidth - layout.cityRulerWidth) <= 1, 'both rulers use the same width for 24 hours');
+      assert.ok(Math.abs(layout.baseBandWidth - layout.baseRulerWidth - 36 - layout.firstCardNarrowing) <= 1, 'base band extends right by the width of the city action column');
+      assert.ok(layout.baseTextToBand >= 25, 'base secondary text has extra room above the band');
+      assert.ok(Math.abs(layout.baseIconBottom - 4) <= 1, 'availability icon keeps its vertical inset');
+      assert.ok(layout.cityHeadingAligned, 'city heading lines up with the cards');
+      assert.ok(layout.sharedScrollbar, 'cities and saved reminders have identical scrollbar width and color');
+      assert.ok(layout.leftEdges.every(delta=>Math.abs(delta)<1) && (width>=760 || Math.abs(layout.baseRight)<1), 'card and panel edges line up');
+      assert.ok(Math.abs(layout.cityRight-layout.listGutter)<1, 'city cards narrow by exactly the space taken by their scrollbar');
+      if (!layout.listScrolls) assert.equal(layout.listGutter, 0, 'no space is reserved when the city scrollbar is hidden');
+      assert.ok(layout.baseClockBottom < layout.sliderTop && (width>=760 ? layout.widePanelsAligned : layout.narrowPanelsAligned), 'base clock sits to the left on wide windows and below on narrow windows');
+      assert.equal(layout.baseTitleSize, layout.baseTimeSize, 'base time and title share the large type size');
+      assert.ok(layout.baseTitleSize > layout.cityTitleSize && layout.baseTimeSize > layout.cityTimeSize, 'base type leads the city type');
+      assert.ok(Math.abs(layout.baseSubtitleY - layout.baseDateY) <= 1, 'secondary lines share one horizontal anchor');
+      assert.ok(layout.baseTitleLeft < layout.baseTimeLeft, 'base time is to the right of the heading');
+      assert.ok(Math.abs(layout.baseTimeRight - layout.baseRowTimeEdge) <= 1, 'base time has the shared right inset');
+      assert.ok(layout.cardCursors.every(cursor => cursor === 'pointer'), 'every card has a pointer cursor');
       assert.equal(layout.cityHeading, 'Города');
       assert.equal(layout.headingFont, layout.reminderHeadingFont);
       assert.ok(Math.abs((layout.nameTop-layout.summaryTop)-(layout.bandTop-layout.contentBottom))<.1, 'city text top/bottom padding must match');
       assert.ok(layout.groupGap >= layout.actionGap * 2, `quick action hierarchy at ${width}x${height}`);
       assert.ok(layout.normalGroupGap >= layout.actionGap * 2, `quick disclosure hierarchy at ${width}x${height}`);
       assert.ok(layout.heroToLabel > layout.labelToRail, `slider label groups with the rail at ${width}x${height}`);
-      // Under 520 px, the whole shell scrolls and keeps a smaller section gap.
+      // Under 620 px, the whole shell scrolls and keeps a smaller section gap.
       assert.ok(layout.railToQuick >= layout.actionGap * 2, `slider labels and quick actions need separate space at ${width}x${height}`);
       assert.ok(Math.abs(layout.nowLabelLeft - layout.heroLeft) <= 1, `Now label is not aligned to the main blocks at ${width}x${height}`);
       assert.ok(Math.abs(layout.quickTitleLeft - layout.heroLeft) <= 1, `quick heading is not aligned to the main blocks at ${width}x${height}`);
@@ -433,13 +565,27 @@ async function connect() {
       assert.ok(layout.longStatusFits, `short day-shift status should be fully visible at ${width}x${height}`);
       if (width < 760 && height >= 520) {
         assert.ok(layout.quickToCities >= layout.cityTitleToCard * 2, `city section grouping at ${width}x${height}`);
-        assert.ok(Math.abs(layout.cityTitleLeft - layout.addLeft) <= 1, `city heading grid at ${width}x${height}`);
         assert.ok(Math.abs(layout.nameTop - layout.timeTop) <= 1, `city name/time misaligned at ${width}x${height}`);
-        assert.ok(layout.visibleCards >= (height >= 700 ? 3 : 2), `too few cities at ${width}x${height}`);
+        assert.ok(layout.visibleCards >= (height >= 700 ? 2 : 1), `too few cities at ${width}x${height}`);
       }
-      if (height < 520) assert.equal(layout.shellOverflow, 'auto');
-      if (width >= 800 && height <= 600) assert.equal(layout.wide, 'flex');
+      if (height < 620) assert.equal(layout.shellOverflow, 'auto');
+      if (width >= 800 && height <= 600) assert.equal(layout.shellOverflow, 'auto');
       console.log(`${width}x${height}: ${layout.visibleCards} complete cities, list ${layout.cityHeight}px`);
+      if (width === 360) {
+        const target = await send('Runtime.evaluate', {expression:`(() => {
+          const list = document.querySelector('#cities');
+          list.scrollTop = 0;
+          const bounds = list.getBoundingClientRect();
+          return {x:bounds.right - (list.offsetWidth-list.clientWidth)/2, y:bounds.top+20};
+        })()`,returnByValue:true});
+        const {x,y} = target.result.value;
+        await send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1});
+        await send('Input.dispatchMouseEvent',{type:'mouseMoved',x,y:y+28,button:'left',buttons:1});
+        await send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y:y+28,button:'left',buttons:0,clickCount:1});
+        await new Promise(resolve=>setTimeout(resolve,100));
+        const result = await send('Runtime.evaluate',{expression:"document.querySelector('#cities').scrollTop",returnByValue:true});
+        assert.ok(result.result.value > 0,'dragging the native city scrollbar moves the list');
+      }
       const meetingCheck = await send('Runtime.evaluate', {expression:`(async () => {
         const RealDate = Date;
         const fixed = RealDate.parse('2026-10-10T05:45:00Z');
@@ -452,7 +598,7 @@ async function connect() {
         meetingSelected = new Set(config.timezones);
         document.querySelector('#modal').innerHTML = '';
         render();
-        const summary = document.querySelector('.city-summary');
+        const summary = document.querySelector('.city-card .city-summary');
         const remove = summary.querySelector('.delete');
         const initialColumns = getComputedStyle(summary).gridTemplateColumns;
         toggleMeeting();
@@ -508,6 +654,19 @@ async function connect() {
         setOffset(meetingOffsetAt(meetingEarlier.at));
         result.rangeGradient = getComputedStyle(document.querySelector('#meetingRange')).backgroundImage;
         result.autoYellow = meetingShowingEarlier && document.querySelector('#meetingEarlier').getAttribute('aria-checked') === 'true';
+        const savedWindowMinutes = meetingWindowMinutes;
+        const edgeRange = document.querySelector('#meetingRange');
+        try {
+          meetingWindowMinutes = () => 480;
+          setOffset(23);
+          const bounds = node => node.getBoundingClientRect();
+          const clip = bounds(edgeRange.parentElement), rail = bounds(document.querySelector('.slider-rail'));
+          const range = bounds(edgeRange);
+          result.rangeClipped = getComputedStyle(edgeRange.parentElement).overflowX === 'hidden' &&
+            Math.abs(clip.left - rail.left) < 1 && Math.abs(clip.right - rail.right) < 1 &&
+            range.right > rail.right && Math.abs(range.left - (rail.left + rail.width * 23 / 24)) < 1 &&
+            Math.abs(range.width - rail.width / 3) < 1;
+        } finally { meetingWindowMinutes = savedWindowMinutes; }
         setOffset(16);
         const message = status.querySelector('.meeting-message');
         result.noWindow = message?.textContent;
@@ -548,6 +707,7 @@ async function connect() {
       assert.equal(meeting.checked, 'true');
       assert.ok(meeting.yellow);
       assert.ok(meeting.autoGreen, 'moving into work hours should select the green switch state');
+      assert.ok(meeting.rangeClipped, 'the meeting range is clipped to the rail without rescaling its colors');
       assert.match(meeting.rangeGradient, /linear-gradient/);
       assert.ok(meeting.rangeGradient.includes('rgb(67, 139, 103)') || meeting.rangeGradient.includes('rgb(93, 159, 123)'), 'shared window must contain the work-hour color');
       assert.ok(meeting.rangeGradient.includes('rgb(154, 124, 66)') || meeting.rangeGradient.includes('rgb(180, 148, 80)'), 'shared window must contain the acceptable-hour color');

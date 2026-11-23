@@ -5,7 +5,7 @@ import Security
 import ServiceManagement
 import WebKit
 
-private let appVersion = "v1.1.159"
+private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
 private let showNotification = Notification.Name("com.candflip.worldclockwidget.show")
 
 final class WidgetPanel: NSPanel {
@@ -18,6 +18,8 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
     private var webView: WKWebView!
     private var statusItem: NSStatusItem!
     private var openMenuItem: NSMenuItem!
+    private var quitMenuItem: NSMenuItem!
+    private var russianUi = Locale.preferredLanguages.first?.split(separator: "-").first == "ru"
     private var hotKeyRef: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
     private var currentModifiers: UInt32 = 1
@@ -99,7 +101,7 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             defer: false
         )
         panel.delegate = self
-        panel.title = "World Clock Widget"
+        panel.title = "World Clock Connect"
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -142,13 +144,14 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
 
     private func configureStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "clock.badge", accessibilityDescription: "World Clock Widget")
+        statusItem.button?.image = NSImage(systemSymbolName: "clock.badge", accessibilityDescription: "World Clock Connect")
         statusItem.button?.image?.isTemplate = true
         let menu = NSMenu()
-        openMenuItem = NSMenuItem(title: "Открыть", action: #selector(toggleWidget), keyEquivalent: "")
+        openMenuItem = NSMenuItem(title: "", action: #selector(toggleWidget), keyEquivalent: "")
         menu.addItem(openMenuItem)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Выход", action: #selector(quit), keyEquivalent: "q"))
+        quitMenuItem = NSMenuItem(title: russianUi ? "Выход" : "Quit", action: #selector(quit), keyEquivalent: "q")
+        menu.addItem(quitMenuItem)
         menu.items.forEach { $0.target = self }
         statusItem.menu = menu
         refreshOpenMenuShortcut()
@@ -197,19 +200,20 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
 
     private func refreshOpenMenuShortcut() {
         guard let openMenuItem else { return }
+        let openTitle = russianUi ? "Открыть" : "Open"
         if let equivalent = menuKeyEquivalent(for: currentKey) {
             var modifiers: NSEvent.ModifierFlags = []
             if currentModifiers & 1 != 0 { modifiers.insert(.option) }
             if currentModifiers & 2 != 0 { modifiers.insert(.control) }
             if currentModifiers & 4 != 0 { modifiers.insert(.shift) }
             if currentModifiers & 8 != 0 { modifiers.insert(.command) }
-            openMenuItem.title = "Открыть"
+            openMenuItem.title = openTitle
             openMenuItem.keyEquivalentModifierMask = modifiers
             openMenuItem.keyEquivalent = equivalent
         } else {
             openMenuItem.keyEquivalent = ""
             openMenuItem.keyEquivalentModifierMask = []
-            openMenuItem.title = "Открыть    \(menuShortcutLabel())"
+            openMenuItem.title = "\(openTitle)    \(menuShortcutLabel())"
         }
     }
 
@@ -504,6 +508,10 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
             frame.origin.x = min(max(frame.origin.x, work.minX), work.maxX - frame.width)
             frame.origin.y = min(max(frame.origin.y, work.minY), work.maxY - frame.height)
             panel.setFrame(frame, display: true)
+        } else if message == "setLanguage\nru" || message == "setLanguage\nen" {
+            russianUi = message == "setLanguage\nru"
+            refreshOpenMenuShortcut()
+            quitMenuItem?.title = russianUi ? "Выход" : "Quit"
         } else if message.hasPrefix("saveConfig\n") {
             writeDataFile(name: "widget_config.json", value: payload(message, prefix: "saveConfig\n"))
         } else if message.hasPrefix("saveReminders\n") {
@@ -563,7 +571,8 @@ final class WidgetController: NSObject, NSApplicationDelegate, WKScriptMessageHa
         let payload: [String: Any] = [
             "type": "init",
             "platform": "macos",
-            "version": appVersion + " macOS Beta",
+            "systemLanguage": Locale.preferredLanguages.first ?? "en",
+            "version": appVersion.map { "v\($0) macOS Beta" } ?? "macOS Beta",
             "configText": readDataFile(name: "widget_config.json", fallback: "{}"),
             "remindersText": remindersText,
             "syncCredential": selfTestMode ? "" : readSyncCredential(),

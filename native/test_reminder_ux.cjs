@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const nodes = new Map();
-const node = () => ({innerHTML:'',textContent:'',value:'',hidden:false,dataset:{},style:{},isConnected:true,scrollTop:0,listeners:{},scrollTo({top}){this.scrollTop=top;this.onscroll?.();},classList:{toggle(){},remove(){},add(){}},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(type,fn,options){this.listeners[type]={fn,options};},setAttribute(name,value){this[name]=value;},getAttribute(name){return this[name];},focus(){this.focused=true;}});
+const node = () => ({innerHTML:'',textContent:'',value:'',hidden:false,dataset:{},style:{setProperty(){}},isConnected:true,scrollTop:0,listeners:{},scrollTo({top}){this.scrollTop=top;this.onscroll?.();},classList:{toggle(){},remove(){},add(){}},querySelectorAll(){return [];},querySelector(){return null;},addEventListener(type,fn,options){this.listeners[type]={fn,options};},setAttribute(name,value){this[name]=value;},getAttribute(name){return this[name];},focus(){this.focused=true;}});
 const get = selector => {if (!nodes.has(selector)) nodes.set(selector,node()); return nodes.get(selector);};
 const FixedDate = class extends Date {constructor(...args){super(...(args.length ? args : ['2026-09-10T12:00:00Z']));} static now(){return Date.parse('2026-09-10T12:00:00Z');}};
 const scheduled=new Map();let nextScheduled=1;
@@ -11,7 +11,7 @@ for(const file of ['reminder_ui.js','app.js']) vm.runInContext(fs.readFileSync(_
 const run = script => vm.runInContext(script,context);
 const setPicker=(selector,value)=>{const root=get(selector);const numeric=selector==='#alarmDate'?Date.parse(value+'T00:00:00Z')/86400000:+value;const current=selector==='#alarmDate'?Date.parse(root.value+'T00:00:00Z')/86400000:+root.value;root.scrollTop+=(numeric-current)*40;root.onscroll();};
 const scrollPicker=(selector,delta)=>{const root=get(selector);root.scrollTop+=delta;root.onscroll();};
-run(`normalize(); const legacy = {id:'legacy',zone:'Asia/Bangkok',city:'Бангкок, Джакарта, Ханой',alarm:1799668800,target:1799668800,state:'pending'}; syncReminderModel(legacy);`);
+run(`normalize(); config.settings.language='ru'; const legacy = {id:'legacy',zone:'Asia/Bangkok',city:'Бангкок, Джакарта, Ханой',alarm:1799668800,target:1799668800,state:'pending'}; syncReminderModel(legacy);`);
 assert.equal(run('legacy.source_type'),'base');
 assert.equal(run('legacy.source_city_id'),null);
 assert.equal(run('legacy.id'),'legacy');
