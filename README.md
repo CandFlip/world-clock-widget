@@ -1,13 +1,14 @@
-# World Clock Widget
+# World Clock Connect
 
 **Находите время друг для друга, даже когда между вами несколько часовых поясов.**
 
-World Clock Widget показывает местное время ваших коллег, клиентов и близких, помогает выбрать удобный момент для звонка и напоминает о нём. Всё важное — в небольшом окне на рабочем столе.
+World Clock Connect показывает местное время ваших коллег, клиентов и близких, помогает выбрать удобный момент для звонка и напоминает о нём. Всё важное — в небольшом окне на рабочем столе.
 
-### Скачать v1.1.189
+### Скачать
 
-- **[Windows 10/11 — скачать установщик](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.189/WorldClockWidget-Setup-v1.1.189.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
-- **[macOS 13+ — скачать приложение](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.189/WorldClockWidget-macOS-v1.1.189.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
+- **[Windows 10/11 — скачать v1.1.205](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.205/WorldClockWidget-Setup-v1.1.205.exe)** · Запустите EXE и следуйте шагам установки. Больше ничего скачивать или настраивать не нужно.
+- **[Microsoft Store](https://apps.microsoft.com/detail/9N9X3T947SZ5)** · Откройте страницу World Clock Connect в магазине.
+- **[macOS 13+ — скачать v1.1.189](https://github.com/CandFlip/world-clock-widget/releases/download/v1.1.189/WorldClockWidget-macOS-v1.1.189.dmg)** · Откройте DMG и перенесите приложение в «Программы». Если macOS запросит подтверждение при первом запуске, воспользуйтесь [штатной инструкцией Apple](https://support.apple.com/102445).
 
 ## Что можно делать
 
@@ -21,12 +22,12 @@ World Clock Widget показывает местное время ваших к�
 
 ## Последнее обновление
 
-В v1.1.189 обучение стало короче и нагляднее: отдельные шаги, миниатюры элементов и сохранение места чтения при возврате из подсказки. Исправлена точность прокрутки минут при увеличенном масштабе. Масштаб 100–200% с шагом 5% и переключателем исходного размера доступен на обеих платформах.
+В Windows v1.1.205 основное время и напоминания располагаются рядом в широком окне. Наведите на будильник на цветной полосе, чтобы сразу увидеть обратный отсчёт.
 
-[Что нового в v1.1.189 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.189) · [История изменений →](CHANGELOG.md)
+[Что нового в v1.1.205 →](https://github.com/CandFlip/world-clock-widget/releases/tag/v1.1.205) · [История изменений →](CHANGELOG.md)
 
 ---
 
-[Исходный код v1.1.184](https://github.com/CandFlip/world-clock-widget/tree/v1.1.184) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
+[Исходный код v1.1.205](https://github.com/CandFlip/world-clock-widget/tree/v1.1.205) · [Сообщить о проблеме](https://github.com/CandFlip/world-clock-widget/issues)
 
 Каталог крупных городов основан на данных [GeoNames](https://www.geonames.org/) с указанием источника по лицензии CC BY 4.0.

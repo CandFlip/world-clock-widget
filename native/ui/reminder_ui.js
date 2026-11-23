@@ -45,16 +45,17 @@ function alarmLabel(entry) {
   return `${entry.repeat === 'daily' ? '↻ ' : ''}${compactAlarmDate(at, zone)} · ${timeAt(at, zone)}`;
 }
 
-// The city band spans 24 hours, centred on the selected moment.
-// Edge badges describe chronological direction relative to the visible band.
-function cityAlarmLayout(entries, zone, selected, width) {
+// The 24-hour ruler is centred on the selected moment.
+// The base band can show additional time to the right of this ruler.
+function cityAlarmLayout(entries, zone, selected, width, {axisWidth = width} = {}) {
   const left = [], right = [], marks = [];
+  const rightEdge = axisWidth > 0 ? width / axisWidth * 100 : 100;
   for (const entry of entries) {
     const at = new Date(entry.alarm * 1000);
     const position = 50 + (at - selected) / 864000;
     if (position < 0) left.push(entry);
-    else if (position > 100) right.push(entry);
-    else marks.push({entry, position, x:position * width / 100});
+    else if (position > rightEdge) right.push(entry);
+    else marks.push({entry, position, x:position * axisWidth / 100});
   }
   // Merge runs of 12px icons with less than 2px edge-to-edge clearance.
   // Keep the representative at the earliest actual alarm, without sun avoidance.
@@ -79,25 +80,49 @@ function reminderInfoLabel(entry) {
   return `${entry.repeat==='daily'?'↻ ':''}${day}${p.day!==current.day || p.month!==current.month || p.year!==current.year ? ` (${date})` : ''} · ${timeAt(at,zone)}`;
 }
 
-function reminderTooltipText(entries) {
+function reminderTooltipText(entries, showCountdown = false) {
   const heading = entries.length > 1 ? (lang() === 'ru' ? `Напоминаний: ${entries.length}` : `Reminders: ${entries.length}`) + '\n' : '';
-  return heading + entries.map(entry => `${reminderInfoLabel(entry)}${entry.title ? ` · ${entry.title}` : ''}`).join('\n');
+  return heading + entries.map(entry => {
+    const details = `${reminderInfoLabel(entry)}${entry.title ? ` · ${entry.title}` : ''}`;
+    return showCountdown ? `${details}\n${t('alarmRemaining')} ${reminderRemaining(entry)}` : details;
+  }).join('\n');
 }
 
-function hideReminderTooltip() { document.querySelector('#reminderTooltip')?.remove?.(); }
+let activeReminderTooltip;
+
+function hideReminderTooltip() {
+  if (!activeReminderTooltip) return;
+  const {button, popup} = activeReminderTooltip;
+  activeReminderTooltip = null;
+  popup.remove();
+  button.removeAttribute('aria-describedby');
+}
 document.addEventListener('scroll', hideReminderTooltip, true);
+
+function refreshReminderTooltip() {
+  if (!activeReminderTooltip) return;
+  const {button, popup, entries} = activeReminderTooltip;
+  if (!button.isConnected) return hideReminderTooltip();
+  const text = reminderTooltipText(entries, true);
+  if (popup.textContent !== text) popup.textContent = text;
+  placeInfoTooltip(popup, button);
+}
 
 function bindReminderTooltip(button, entries) {
   button.onmouseenter = button.onfocus = () => {
     hideReminderTooltip();
     const popup = document.createElement('div');
-    popup.id = 'reminderTooltip'; popup.className = 'reminder-tooltip'; popup.setAttribute('role','tooltip');
-    popup.textContent = reminderTooltipText(entries);
+    popup.id = 'reminderTooltip';
+    popup.className = 'reminder-tooltip';
+    popup.setAttribute('role', 'tooltip');
     document.body.appendChild(popup);
     button.setAttribute('aria-describedby', popup.id);
-    placeInfoTooltip(popup, button);
+    activeReminderTooltip = {button, popup, entries};
+    refreshReminderTooltip();
   };
-  button.onmouseleave = button.onblur = () => { hideReminderTooltip(); button.removeAttribute('aria-describedby'); };
+  button.onmouseleave = button.onblur = () => {
+    if (activeReminderTooltip?.button === button) hideReminderTooltip();
+  };
 }
 
 function showReminderList(ids) {
@@ -123,15 +148,18 @@ function renderCityAlarmTrack(card, entries) {
   const root = card.querySelector('.city-alarm-track');
   if (!root) return;
   const width = root.getBoundingClientRect().width;
+  const axis = card.querySelector('.availability-window');
+  const axisWidth = axis.getBoundingClientRect().width;
   if (typeof ResizeObserver === 'function') {
     cityAlarmResizeObserver ||= new ResizeObserver(changes => changes.forEach(change => {
-      const owner=change.target.closest('.city-card');
-      if (owner?.isConnected) renderCityAlarmTrack(owner, cityReminders(owner.dataset.zone));
+      const owner=change.target.closest('#baseClock, .city-card');
+      if (owner?.isConnected) renderCityAlarmTrack(owner, remindersForTrack(owner));
     }));
     cityAlarmResizeObserver.observe(root);
+    cityAlarmResizeObserver.observe(axis);
   }
   // Filled clock faces sit at the exact time, centred on the 7px band.
-  const layout = cityAlarmLayout(entries, zoneOf(card.dataset.zone), new Date(referenceTimestamp()), width);
+  const layout = cityAlarmLayout(entries, zoneOf(card.dataset.zone), new Date(referenceTimestamp()), width, {axisWidth});
   const allIds = entries.map(entry => entry.id);
   const markup =
     layout.groups.map((group,index) => `<button class="city-alarm-pin" data-alarm-group="${index}" style="left:${group.x}px" aria-label="${esc(reminderTooltipText(group.entries))}">${cityReminderIcon}${group.entries.length > 1 ? `<small>${group.entries.length}</small>` : ''}</button>`).join('') +

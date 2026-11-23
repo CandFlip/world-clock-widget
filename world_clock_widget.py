@@ -38,8 +38,8 @@ except ImportError:
     ImageTk = None
 
 
-APP_TITLE = "World Clock Widget"
-APP_VERSION = "v1.1.189"
+APP_TITLE = "World Clock Connect"
+APP_VERSION = "v1.1.205"
 APP_DIR_NAME = "WorldClockWidget"
 ROADMAP_URL = "https://world-clock-next.uuuraaaaa.workers.dev"
 MIN_WIDGET_HEIGHT = 640

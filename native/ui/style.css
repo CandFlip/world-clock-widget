@@ -1,5 +1,5 @@
 @font-face{font-family:Inter;src:url('Inter-Variable.ttf') format('truetype');font-weight:100 900;font-style:normal;font-display:swap}
-:root{--bg:#0b0e14;--surface:#161b22;--hover:#1c222b;--border:#30363d;--text:#f0f6fc;--muted:#8b949e;--accent:#7c5cfc;--danger:#f85149;--badge:#211b46;--availability-working:#438b67;--availability-okay:#9a7c42;--availability-dnd:#4a5060;--solar-daylight:#d7b960;--solar-twilight:#7d7099;--solar-night:#28344c;--marker:#fff;--reminder-marker:#fff;--motion-duration:220ms;--motion-ease:cubic-bezier(.25,.1,.25,1);--panel-inset:12px;--window-inset:18px;--header-height:40px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--type-micro:10px;--type-caption:12px;--type-body:14px;--type-subtitle:16px;--type-title:32px;color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif}
+:root{--bg:#0b0e14;--surface:#161b22;--hover:#1c222b;--border:#30363d;--text:#f0f6fc;--muted:#8b949e;--accent:#7c5cfc;--danger:#f85149;--badge:#211b46;--availability-working:#438b67;--availability-okay:#9a7c42;--availability-dnd:#4a5060;--solar-daylight:#d7b960;--solar-twilight:#7d7099;--solar-night:#28344c;--marker:#fff;--reminder-marker:#fff;--motion-duration:220ms;--motion-ease:cubic-bezier(.25,.1,.25,1);--panel-inset:12px;--window-inset:18px;--header-height:40px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--type-micro:10px;--type-caption:12px;--type-body:14px;--type-subtitle:16px;--type-main-clock:22px;--type-title:32px;color-scheme:dark;font-family:Inter,"Segoe UI",sans-serif}
 *{box-sizing:border-box}
 html,body,#app{height:100%;margin:0;overflow:hidden;background:transparent}
 body{color:var(--text);font-size:var(--type-body);line-height:1.25;user-select:none}
@@ -24,19 +24,15 @@ button{color:inherit}
 .icon:hover,.add:hover,.card:hover{border-color:var(--accent)}
 .drag{cursor:move}
 
-.hero{height:150px;display:grid;grid-template-columns:minmax(145px,.78fr) minmax(178px,1.22fr);gap:12px;margin-top:16px;flex:none;min-width:0}
+.hero{height:var(--hero-size,112px);margin-top:16px;flex:none;min-width:0}
 .panel{border:1px solid var(--border);border-radius:10px;min-width:0;overflow:hidden}
-.clock{position:relative;height:150px;padding:0;background:var(--surface);display:block;cursor:pointer;transition:border-color 120ms}
-.base-summary{position:relative;min-width:0;padding:12px;display:flex;flex-direction:column;align-items:flex-start}
-.base-summary>.base-solar{position:absolute;z-index:3;top:12px;right:12px}
-.clock.manual-base .clock-time{margin-top:22px}
-.source{height:18px;font-size:var(--type-caption);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.clock-time{font-size:var(--type-title);font-weight:750;line-height:1.08;letter-spacing:-1.5px;margin-top:4px}
-.clock-city{font-weight:700;font-size:var(--type-caption);line-height:1.25;margin-top:4px;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.clock.card{display:block;overflow:visible}
+.clock-time{white-space:nowrap;font-variant-numeric:tabular-nums}
+.clock-city{color:var(--muted);font-size:var(--type-caption);line-height:16px;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .date{color:var(--muted);font-size:var(--type-caption);margin-top:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.saved-panel{height:150px;padding:12px;background:var(--bg);display:flex;flex-direction:column}
+.saved-panel{height:100%;padding:12px;background:var(--bg);display:flex;flex-direction:column}
 .saved-heading{height:18px;flex:none;color:var(--muted);font-size:var(--type-caption);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.saved-list{flex:1;min-height:0;overflow:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.saved-list{flex:1;min-height:0;overflow:auto;padding-right:2px;}
 .saved-card{min-height:45px;margin-bottom:5px;border:1px solid var(--border);border-radius:6px;background:var(--surface);display:grid;grid-template-columns:minmax(0,1fr) 31px;overflow:hidden}
 .saved-content{padding:5px 7px;min-width:0;cursor:pointer}
 .saved-top,.saved-bottom{display:flex;align-items:center;gap:5px;min-width:0}
@@ -60,7 +56,8 @@ button{color:inherit}
 .quick-alarm-glyph{width:17px;height:17px;flex:none}.quick-chevron-glyph{width:11px;height:11px;flex:none;transition:transform 180ms ease}
 .quick-toggle[aria-expanded="true"] .quick-chevron-glyph{transform:rotate(180deg)}
 .slider-rail{position:absolute;left:var(--track-inset);right:var(--track-inset);top:36px;z-index:1;height:6px;border-radius:3px;background:var(--border);overflow:hidden;pointer-events:none}
-.meeting-range{position:absolute;top:34px;z-index:2;height:10px;border-radius:5px;background:var(--availability-working);pointer-events:none}
+.meeting-range-clip{position:absolute;left:var(--track-inset);right:var(--track-inset);top:34px;z-index:2;height:10px;overflow:hidden;border-radius:5px;pointer-events:none}
+.meeting-range{position:absolute;top:0;height:100%;border-radius:inherit;background:var(--availability-working)}
 .slider-fill{width:calc(var(--slider-x) - var(--track-inset));height:100%;border-radius:inherit;background:var(--accent)}
 .slider-thumb{position:absolute;left:var(--slider-x);top:29px;z-index:3;width:20px;height:20px;border:3px solid var(--accent);border-radius:50%;background:var(--bg);transform:translateX(-50%);pointer-events:none}
 .slider input[type=range]{appearance:none;-webkit-appearance:none;position:absolute;inset:25px 0 auto;z-index:4;width:100%;height:28px;margin:0;background:transparent;cursor:pointer;outline:none}
@@ -109,16 +106,16 @@ button{color:inherit}
 .period-switch:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.period-switch,.period-switch .period-thumb,.period-switch span{transition:none}}
 .meeting-mode .clock,.meeting-mode .city-card{cursor:pointer;border-color:transparent}
-.meeting-outline{display:none;position:absolute;inset:0;z-index:5;width:100%;height:100%;overflow:visible;pointer-events:none}
+.meeting-outline{--outline-inset:.75px;display:none;position:absolute;inset:-1px;z-index:5;width:calc(100% + 2px);height:calc(100% + 2px);overflow:visible;pointer-events:none}
 .meeting-mode .clock:not(.meeting-selected)>.meeting-outline,.meeting-mode .city-card:not(.meeting-selected)>.meeting-outline{display:block}
-.meeting-outline rect{fill:none;stroke:var(--accent);stroke-opacity:.68;stroke-width:1.5;stroke-linecap:round;stroke-dasharray:1 7;x:1px;y:1px;width:calc(100% - 2px);height:calc(100% - 2px);rx:8px;ry:8px;animation:meeting-outline 900ms linear infinite}
+.meeting-outline rect{fill:none;stroke:var(--accent);stroke-opacity:.68;stroke-width:1.5;stroke-linecap:round;stroke-dasharray:1 7;x:var(--outline-inset);y:var(--outline-inset);width:calc(100% - 2 * var(--outline-inset));height:calc(100% - 2 * var(--outline-inset));rx:calc(var(--card-radius) - var(--outline-inset));ry:calc(var(--card-radius) - var(--outline-inset));animation:meeting-outline 900ms linear infinite}
 .meeting-mode .clock.meeting-selected,.meeting-mode .city-card.meeting-selected{box-shadow:0 0 0 2px var(--accent);animation:none}
 .meeting-mode .card-actions-wrap{display:none}
 .meeting-mode .city-summary>.delete{opacity:0;visibility:hidden;pointer-events:none}
 .meeting-mode .city-summary{grid-template-columns:minmax(0,1fr) fit-content(50%) 0px}
 @keyframes meeting-outline{to{stroke-dashoffset:-8}}
 @media(prefers-reduced-motion:reduce){.quick-chevron-glyph{transition:none}.meeting-outline rect{animation:none}}
-.quick-title,.cities-title{font-weight:700;color:var(--muted);font-size:var(--type-caption);margin:0 0 8px}
+.quick-title,.city-section-title{font-weight:700;color:var(--muted);font-size:var(--type-caption);margin:0 0 8px}
 .quick{display:flex;gap:8px;min-width:0;overflow-x:auto;scrollbar-width:thin;padding-bottom:3px}
 .quick>.chip{flex:1 0 100px}
 .windows-icon{width:13px;height:13px;vertical-align:-1px;flex:none}
@@ -135,12 +132,18 @@ button{color:inherit}
 .choosing-city .city-card,.choosing-city .clock{border-color:var(--accent);cursor:pointer}
 .drop-target{border-color:var(--accent)!important;background:var(--hover)!important}
 
-.cities-title{margin-top:12px;margin-bottom:4px;flex:none}
-.cities{width:100%;min-width:0;flex:1;min-height:0;overflow:auto;padding:2px 2px 6px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
-.card{position:relative;width:100%;min-width:0;min-height:64px;border:1px solid var(--border);border-radius:8px;background:var(--surface);display:grid;grid-template-columns:minmax(0,1fr) auto 42px;align-items:stretch;margin-bottom:8px;transition:transform 140ms ease,border-color 120ms,opacity 120ms}
+/* Give card focus rings room without reserving space for a hidden scrollbar. */
+.cities{--city-gap:var(--space-2);--city-ring:2px;margin-top:var(--space-3);margin-inline:calc(-1 * var(--city-ring));width:calc(100% + 2 * var(--city-ring));min-width:0;flex:1;min-height:0;overflow:auto;padding:2px var(--city-ring) 6px}
+.cities,.saved-list{scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.card{--card-radius:8px;position:relative;width:100%;min-width:0;min-height:64px;border:1px solid var(--border);border-radius:var(--card-radius);background:var(--surface);display:grid;grid-template-columns:minmax(0,1fr) auto 42px;align-items:stretch;margin-bottom:8px;transition:transform 140ms ease,border-color 120ms,opacity 120ms}
 .card.dragging{opacity:.55}.card.reorder-target{transform:translateY(4px);border-color:var(--accent)}
 .city-card{display:block}
-.city-summary{position:relative;min-height:61px;display:grid;grid-template-columns:minmax(0,1fr) fit-content(50%) 36px;align-items:stretch}
+.cities .card{margin-bottom:var(--city-gap)}
+.cities .card,.base-section .card,.city-context .context-token{cursor:pointer}
+.base-section{margin-top:var(--space-2);min-width:0;flex:none}
+.base-section .card{margin-bottom:0}
+.city-section-title{line-height:16px;margin:0 0 var(--space-1)}
+.city-summary{--city-action-width:36px;position:relative;min-height:61px;display:grid;grid-template-columns:minmax(0,1fr) fit-content(50%) var(--city-action-width);align-items:stretch}
 .city-main{padding:8px 12px;min-width:0;align-self:start}
 .city-name{font-size:var(--type-subtitle);line-height:22px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .region,.offset,.until{color:var(--muted);font-size:var(--type-caption);line-height:16px}
@@ -154,6 +157,7 @@ button{color:inherit}
 .context-token:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 55%,transparent)}
 .until{max-width:100%;margin-top:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .temporal-band{position:absolute;z-index:2;left:0;right:0;bottom:0;height:7px;overflow:hidden;pointer-events:none;background:var(--border)}
+.availability-window{position:absolute;inset:0 var(--band-extension,0px) 0 0}
 .availability-layer{position:absolute;top:0;bottom:0;left:calc(-50% - var(--temporal-marker));width:300%;background-image:var(--availability-gradient);background-size:33.333333% 100%;background-repeat:repeat-x}
 .temporal-marker{position:absolute;z-index:2;top:0;bottom:0;left:50%;width:2px;background:var(--marker);box-shadow:0 0 0 1px color-mix(in srgb,var(--surface) 50%,transparent);transform:translateX(-1px)}
 .city-card{overflow:visible}
@@ -165,7 +169,7 @@ button{color:inherit}
 .card-actions button{min-width:0;height:36px;padding:0 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);cursor:pointer;text-align:center;font:inherit;font-size:var(--type-caption);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 0 color-mix(in srgb,var(--text) 5%,transparent)}
 .card-actions button:hover,.card-actions button:focus-visible{border-color:var(--accent);background:var(--hover);color:var(--text);outline:none}
 .card-actions button:active{transform:translateY(1px);box-shadow:none}
-.clock>.card-actions-wrap>.card-actions{grid-template-columns:1fr}
+.clock>.card-actions-wrap{border-radius:0 0 7px 7px}
 .delete{width:42px;border:0;border-left:1px solid var(--border);background:transparent;color:var(--danger);cursor:pointer;font-size:var(--type-subtitle)}
 .delete:hover{background:var(--hover)}
 .add{flex:none;margin-top:8px}
@@ -286,22 +290,19 @@ button{color:inherit}
 .resize-edge.sw{bottom:0;left:0;cursor:nesw-resize}.resize-edge.se{bottom:0;right:0;cursor:nwse-resize}
 
 @media (min-width:620px){
-  .hero{grid-template-columns:minmax(180px,.7fr) minmax(280px,1.3fr)}
   .saved-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:5px}
   .saved-card{margin-bottom:0}
 }
 @media (max-height:690px){
-  .shell{padding-top:14px}.hero{margin-top:10px;height:136px}.clock,.saved-panel{height:136px}.slider{height:82px;margin-top:10px}.marks{top:54px}.quick-section.open{max-height:150px}
+  .shell{padding-top:14px}.hero{margin-top:10px}.slider{height:82px;margin-top:10px}.marks{top:54px}.quick-section.open{max-height:150px}
 }
 
 /* Adjustable main section and city-local reminder times. */
-.hero{max-height:max(136px,calc(100vh - 350px))}
-.hero .clock,.hero .saved-panel{height:100%;min-height:0}
 .hero-resizer{height:14px;flex:none;cursor:ns-resize;touch-action:none;display:flex;align-items:center;justify-content:center}
 .hero-resizer:before{content:"";width:36px;height:3px;border-radius:2px;background:var(--border)}
 .hero-resizer:hover:before,.hero-resizer:focus-visible:before{background:var(--accent)}
 .hero-resizer:focus-visible{outline:1px solid var(--accent);border-radius:4px}
-.hero-resizer+.slider{margin-top:2px}
+.top-panels+.slider{margin-top:var(--space-2)}
 .saved-list{align-content:start}
 .saved-card{min-height:46px;flex-shrink:0}
 .saved-top{font-variant-numeric:tabular-nums}
@@ -368,35 +369,25 @@ button{color:inherit}
 .direction-choice{min-height:64px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
 .direction-choice.selected{border-color:var(--accent);background:var(--badge)}
 .direction-choice:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media(max-height:519px){
+@media(max-height:619px){
  .shell{overflow-y:auto}
  .cities{flex:none;min-height:90px;overflow:visible}
 }
 
 .main-controls,.city-section{display:contents}
+.top-panels{display:flex;flex-direction:column;flex:none;min-width:0}
 @media(min-width:760px){
- .cities{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));align-content:start;align-items:start;gap:10px}
- .cities .card{width:100%;max-width:600px;margin-bottom:0}
+ .cities,.top-panels{--city-gap:10px;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));align-content:start;align-items:start;column-gap:var(--city-gap)}
+ .top-panels{margin-top:var(--space-3);grid-template-rows:auto auto}
+ .top-panels>.hero{grid-column:2 / -1;grid-row:1;margin-top:0}
+ .top-panels>.hero-resizer{grid-column:2 / -1;grid-row:2}
+ .top-panels>.base-section{grid-column:1;grid-row:1 / 3;margin-top:0}
+ .cities .card,.base-card-lane .card{width:100%;max-width:600px}
+ .cities-title{grid-column:1 / -1}
 }
 @media(min-width:800px) and (max-height:600px){
- .shell{display:grid;grid-template-columns:380px minmax(0,1fr);grid-template-rows:40px minmax(0,1fr) 30px;column-gap:18px;row-gap:12px;padding:18px;overflow:hidden}
- .header{grid-column:1 / -1;grid-row:1;height:40px}
- .main-controls{display:flex;flex-direction:column;grid-column:1;grid-row:2;min-height:0;overflow-y:auto;padding:0 4px 6px 0;scrollbar-width:thin}
- .hero{height:150px!important;min-height:150px;max-height:none;margin-top:0;grid-template-columns:minmax(145px,.78fr) minmax(178px,1.22fr)}
- .hero-resizer{display:none}
- .hero .clock,.hero .saved-panel{height:150px}
- .slider{height:90px;min-height:90px}
- .hero-resizer+.slider{margin-top:12px}
- .marks{top:58px}
- .quick-section.open{margin-top:8px}
- .city-section{display:flex;flex-direction:column;grid-column:2;grid-row:2;min-height:0;overflow:hidden}
- .cities-title{margin:0 0 4px}
- .cities{flex:1;min-height:0;overflow-y:auto;padding:2px 2px 6px}
- .cities .card{min-height:64px;align-self:flex-start}
- .add{height:40px;min-height:40px;margin-top:8px}
- .footer{grid-column:1 / -1;grid-row:3;height:30px;padding-top:0}
- .saved-list{display:block}
- .saved-card{margin-bottom:5px}
+ .shell{overflow-y:auto}
+ .cities{flex:none;overflow:visible}
 }
 
 .delete,.saved-delete,.result button.trash,.guide-city-result button.trash{color:var(--muted);transition:color 160ms ease,background-color 160ms ease}
@@ -417,28 +408,16 @@ button{color:inherit}
 .name-option{border:0;border-radius:5px;background:transparent;padding:8px;text-align:left;cursor:pointer;font-size:var(--type-caption);max-width:100%;overflow-wrap:anywhere}
 .name-option:hover,.name-option:focus-visible{background:var(--badge);outline:1px solid var(--accent)}
 #nameForm{margin-top:8px}
-.base-reminders{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;max-width:100%}
-.base-reminders:empty{display:none}
-.base-reminders .city-reminder{font-size:var(--type-micro);padding:2px 4px;max-width:100%;white-space:nowrap}
-.hero{height:var(--hero-size,150px)!important;min-height:0;max-height:none;transition:height 220ms cubic-bezier(.25,.1,.25,1)}
-.hero .clock,.hero .saved-panel{height:100%}
-.clock .date{margin-top:4px}
+.hero{transition:height 220ms cubic-bezier(.25,.1,.25,1)}
 /* Compact desktop rhythm follows Fluent 2's 4px spacing ramp and type roles. */
 @media(max-width:759px){
 .shell{padding:var(--space-3)}
 .header{height:36px}
 .header h1{font-size:var(--type-subtitle);line-height:22px}
-.hero{gap:var(--space-2);margin-top:var(--space-3)}
-.base-summary{padding:var(--space-2)}
-.base-summary>.base-solar{top:var(--space-2);right:var(--space-2)}
-.source,.date,.saved-heading{font-size:var(--type-caption);line-height:16px}
-.source{height:16px}
+.hero{margin-top:var(--space-3)}
+.date,.saved-heading{font-size:var(--type-caption);line-height:16px}
 .saved-top{font-size:var(--type-caption)}
 .saved-bottom{font-size:var(--type-caption)}
-.clock-time{font-size:var(--type-title);line-height:40px;margin-top:0;letter-spacing:-1px}
-.clock.manual-base .clock-time{margin-top:16px}
-.clock-city{font-size:var(--type-caption);line-height:16px;margin-top:0}
-.clock .date{margin-top:var(--space-1)}
 .saved-panel{padding:var(--space-2)}
 .hero-resizer{height:var(--space-2)}
 .slider{height:76px}
@@ -447,16 +426,15 @@ button{color:inherit}
 .marks .timeline-minutes{font-size:var(--type-micro)}
 .quick-section.open{margin-top:var(--space-3)}
 .timeline-actions{height:24px;min-height:24px;margin-bottom:var(--space-3)}
-.timeline-actions .quick-title,.cities-title{font-size:var(--type-caption);line-height:16px}
+.timeline-actions .quick-title,.city-section-title{font-size:var(--type-caption);line-height:16px}
 .meeting-status{min-height:16px;font-size:var(--type-caption);line-height:16px}
 .meeting-toggle,.meeting-status button,.selection-status{font-size:var(--type-caption)}
 .quick{gap:var(--space-2);padding-bottom:2px}
 .quick>.chip{height:36px}
 .selection-status{height:20px}
 .selection-status:empty{height:0}
-.cities-title{margin-top:var(--space-3);margin-bottom:var(--space-1)}
 .card{min-height:64px;margin-bottom:var(--space-2)}
-.city-summary{min-height:61px;grid-template-columns:minmax(0,1fr) fit-content(50%) 36px}
+.city-summary{min-height:61px;grid-template-columns:minmax(0,1fr) fit-content(50%) var(--city-action-width)}
 .city-main{padding:var(--space-2) var(--space-2);align-self:start}
 .city-name,.city-time{font-size:var(--type-subtitle);line-height:22px}
 .region,.offset,.until{font-size:var(--type-caption);line-height:16px}
@@ -469,7 +447,6 @@ button{color:inherit}
 @media(max-height:800px){
   .hero{margin-top:var(--space-2)}
   .slider{height:72px}
-  .cities-title{margin-top:var(--space-3)}
 }
 }
 .alarm-detail{max-width:520px;margin:0 auto;text-align:center;padding:12px 0}
@@ -522,7 +499,7 @@ button{color:inherit}
 .city-alarm-edge:hover,.city-alarm-edge:focus-visible{color:var(--accent);border-color:var(--accent);outline:none}
 
 
-.reminder-tooltip{position:fixed;z-index:2000;max-width:calc(100vw - 16px);max-height:60vh;overflow:auto;white-space:pre-line;overflow-wrap:anywhere;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);box-shadow:0 5px 18px #0005;font-size:var(--type-caption);line-height:1.5;pointer-events:none}
+.reminder-tooltip{position:fixed;z-index:2000;max-width:min(280px,calc(100vw - 16px));max-height:60vh;overflow:auto;white-space:pre-line;overflow-wrap:anywhere;padding:8px 10px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);box-shadow:0 5px 18px #0005;font-size:var(--type-caption);line-height:1.5;pointer-events:none}
 .reminder-list-row{display:grid;grid-template-columns:minmax(0,1fr) 36px;border:1px solid var(--border);border-radius:7px;background:var(--surface);overflow:hidden;margin-bottom:8px}
 .reminder-list-open{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:10px;border:0;background:transparent;text-align:left;cursor:pointer;overflow-wrap:anywhere}
 .reminder-list-open span{color:var(--muted);font-size:var(--type-caption)}
@@ -566,8 +543,7 @@ button{color:inherit}
 .header h1,.modal-head h2{font-size:var(--type-subtitle);line-height:22px;font-weight:750}
 .modal-head{gap:var(--space-3)}
 .modal-body{padding-top:var(--space-3)}
-.base-summary,.saved-panel{padding:var(--panel-inset)}
-.base-summary>.base-solar{top:var(--panel-inset);right:var(--panel-inset)}
+.saved-panel{padding:var(--panel-inset)}
 .city-main{padding:var(--space-2) var(--panel-inset) calc(var(--space-2) + 7px)}
 .city-clock{padding:var(--space-2) var(--panel-inset) calc(var(--space-2) + 7px)}
 .row{padding-inline:var(--panel-inset);gap:var(--space-2);font-size:var(--type-body);line-height:20px}
@@ -622,3 +598,13 @@ button{color:inherit}
 .guide-figure .guide-control{height:auto;display:flex;justify-content:flex-start;margin:0;vertical-align:baseline}
 .guide-figure .guide-control-visual{zoom:1;width:100%;justify-content:flex-start}
 .guide-figure .guide-city-scale{width:240px}
+
+/* The base band spans the card while its availability icon keeps the city anchor. */
+.base-clock-row.city-summary{--band-extension:calc(var(--city-action-width) + var(--city-list-narrowing,0px));grid-template-columns:minmax(0,1fr) fit-content(50%)}
+.meeting-mode .base-clock-row{--band-extension:var(--city-list-narrowing,0px)}
+.base-clock-row>.city-main,.base-clock-row>.city-clock{padding-bottom:calc(25px + var(--space-2))}
+.base-clock-row>.temporal-band{border-bottom-right-radius:7px}
+.base-clock-row>.city-context{bottom:11px;left:calc((100% - var(--band-extension)) / 2)}
+.base-clock-row .base-title,.base-clock-row .clock-time{font-size:var(--type-main-clock);line-height:28px;font-weight:750;letter-spacing:-.35px}
+.base-clock-row .date{margin-top:0;line-height:16px}
+#baseClock:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}

@@ -24,6 +24,12 @@
 
 using Microsoft::WRL::ComPtr;
 
+#ifdef WORLD_CLOCK_STORE
+#include "store_startup.h"
+#include <wintrust.h>
+#include <softpub.h>
+#endif
+
 namespace {
 #ifdef WORLD_CLOCK_QA
 constexpr wchar_t kClassName[] = L"WorldClockWidgetNativeQA";
@@ -41,11 +47,29 @@ constexpr UINT kShowMessage = WM_APP + 2;
 constexpr UINT kShutdownMessage = WM_APP + 3;
 constexpr UINT kOutsideClick = WM_APP + 4;
 constexpr UINT kUpdateDownloaded = WM_APP + 5;
+#ifdef WORLD_CLOCK_STORE
+constexpr UINT kStartupStateMessage = WM_APP + 6;
+constexpr UINT kRuntimeInstallFinished = WM_APP + 7;
+bool g_runtimeInstallPending = false;
+bool g_runtimeMissing = false;
+
+void requestStoreStartupState(HWND window, int requested) {
+    std::thread([window, requested] {
+        const HRESULT hr = RoInitialize(RO_INIT_MULTITHREADED);
+        const auto state = SUCCEEDED(hr) ? storeStartup::queryOrChangeState(requested) : storeStartup::Unavailable;
+        if (SUCCEEDED(hr)) RoUninitialize();
+        PostMessageW(window, kStartupStateMessage, 0, state);
+    }).detach();
+}
+#endif
 constexpr UINT kHotkey = 1;
 constexpr UINT_PTR kTickTimer = 1;
 constexpr UINT_PTR kUiReadyTimer = 2;
 constexpr UINT_PTR kTrayRetryTimer = 3;
-constexpr wchar_t kVersion[] = L"v1.1.189";
+#ifndef WORLD_CLOCK_BUILD_VERSION
+#define WORLD_CLOCK_BUILD_VERSION L"v1.1.205"
+#endif
+constexpr wchar_t kVersion[] = WORLD_CLOCK_BUILD_VERSION;
 constexpr wchar_t kSyncCredentialTarget[] = L"WorldClockWidget/PhoneSync";
 constexpr wchar_t kStartupValueName[] = L"World Clock Widget";
 std::atomic_bool g_updateDownloading{false};
@@ -406,13 +430,18 @@ void postInitialState() {
     if (!g_webview) return;
     UINT wheelLines = 3;
     SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &wheelLines, 0);
+    const wchar_t* systemLanguage = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN ? L"ru" : L"en";
     auto config = readUtf8(dataDir() / L"widget_config.json", L"{}");
     auto reminders = readUtf8(dataDir() / L"reminders.json", L"{\"lead\":15,\"entries\":[]}");
     std::wstring payload = L"{\"type\":\"init\",\"version\":" + jsonQuote(kVersion) +
+        L",\"systemLanguage\":" + jsonQuote(systemLanguage) +
         L",\"configText\":" + jsonQuote(config) + L",\"remindersText\":" + jsonQuote(reminders) +
         L",\"syncCredential\":" + jsonQuote(readSyncCredential()) +
         L",\"hotkeyModifiers\":" + std::to_wstring(g_hotkeyModifiers) +
         L",\"hotkeyKey\":" + std::to_wstring(g_hotkeyKey) +
+#ifdef WORLD_CLOCK_STORE
+        L",\"storeStartup\":true" +
+#endif
         L",\"wheelScrollLines\":" + std::to_wstring(wheelLines) + L"}";
     g_webview->PostWebMessageAsJson(payload.c_str());
 }
@@ -478,7 +507,13 @@ RECT loadWindow() {
 }
 
 void showWidget(bool show) {
-    if(show && !g_uiReady) { g_showWhenReady=true; return; }
+    if(show && !g_uiReady) {
+        g_showWhenReady=true;
+#ifdef WORLD_CLOCK_STORE
+        if (g_runtimeMissing && !g_runtimeInstallPending) initializeWebView();
+#endif
+        return;
+    }
     if(!show) g_showWhenReady=false;
     if (g_animating || show==g_visible) return;
     g_animating=true;
@@ -594,14 +629,18 @@ std::wstring shortcutLabel() {
     return label + shortcutKeyName(g_hotkeyKey);
 }
 
+bool g_russianUi = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
+
 void trayMenu() {
     g_trayMenuOpen=true;
     POINT point{}; GetCursorPos(&point);
     HMENU menu = CreatePopupMenu();
-    const std::wstring toggleCaption=std::wstring(g_visible ? L"Скрыть\t" : L"Открыть\t")+shortcutLabel();
+    const auto openCaption = g_russianUi ? L"Открыть\t" : L"Open\t";
+    const auto hideCaption = g_russianUi ? L"Скрыть\t" : L"Hide\t";
+    const std::wstring toggleCaption = std::wstring(g_visible ? hideCaption : openCaption) + shortcutLabel();
     AppendMenuW(menu, MF_STRING, 1, toggleCaption.c_str());
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(menu, MF_STRING, 2, L"Выход");
+    AppendMenuW(menu, MF_STRING, 2, g_russianUi ? L"Выход" : L"Quit");
     SetForegroundWindow(g_window);
     UINT result = TrackPopupMenu(menu, TPM_RETURNCMD|TPM_RIGHTBUTTON, point.x, point.y, 0, g_window, nullptr);
     DestroyMenu(menu);
@@ -728,6 +767,7 @@ void handleMessage(const std::wstring& message) {
         }
         postHotkeyResult(valid && registerHotkey(modifiers,key));
     }
+    else if (message == L"setLanguage\nru" || message == L"setLanguage\nen") g_russianUi = message == L"setLanguage\nru";
     else if (message.rfind(L"saveConfig\n", 0) == 0) writeUtf8Atomic(dataDir()/L"widget_config.json", payload(L"saveConfig\n"));
     else if (message.rfind(L"saveReminders\n", 0) == 0) writeUtf8Atomic(dataDir()/L"reminders.json", payload(L"saveReminders\n"));
     else if (message.rfind(L"copyText\n", 0) == 0) copyTextToClipboard(payload(L"copyText\n"));
@@ -739,6 +779,12 @@ void handleMessage(const std::wstring& message) {
     }
     else if (message.rfind(L"openExternal\n", 0) == 0) {
         const auto url = payload(L"openExternal\n");
+#ifdef WORLD_CLOCK_STORE
+        if (url == L"ms-windows-store://pdp/?ProductId=9N9X3T947SZ5") {
+            ShellExecuteW(g_window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            return;
+        }
+#endif
         if (url.rfind(L"https://", 0) == 0) ShellExecuteW(g_window, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     }
     else if (message.rfind(L"downloadUpdate\n", 0) == 0) {
@@ -746,7 +792,12 @@ void handleMessage(const std::wstring& message) {
         const auto separator=argument.find(L'\n');
         if (separator != std::wstring::npos) downloadUpdate(argument.substr(0,separator),argument.substr(separator+1));
     }
+#ifdef WORLD_CLOCK_STORE
+    else if (message == L"getStartup") requestStoreStartupState(g_window, -1);
+    else if (message.rfind(L"setStartup\n", 0) == 0) requestStoreStartupState(g_window, payload(L"setStartup\n") == L"1" ? 1 : 0);
+#else
     else if (message.rfind(L"setStartup\n", 0) == 0 && !setStartupEnabled(payload(L"setStartup\n") == L"1")) logStartup(L"Failed to update Windows startup setting");
+#endif
     else if (message == L"systemBeep" || message == L"beep") {
 #ifndef WORLD_CLOCK_QA
         MessageBeep(MB_ICONEXCLAMATION);
@@ -754,7 +805,97 @@ void handleMessage(const std::wstring& message) {
     }
 }
 
+#ifdef WORLD_CLOCK_STORE
+bool hasSystemWebView() {
+    LPWSTR version = nullptr;
+    HRESULT result = GetAvailableCoreWebView2BrowserVersionString(nullptr, &version);
+    const bool available = SUCCEEDED(result) && version && *version;
+    CoTaskMemFree(version);
+    return available;
+}
+
+bool isMicrosoftInstaller(const wchar_t* path) {
+    WINTRUST_FILE_INFO file{sizeof(file)};
+    file.pcwszFilePath = path;
+    WINTRUST_DATA trust{sizeof(trust)};
+    trust.dwUIChoice = WTD_UI_NONE;
+    trust.dwUnionChoice = WTD_CHOICE_FILE;
+    trust.pFile = &file;
+    trust.dwStateAction = WTD_STATEACTION_VERIFY;
+    GUID action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    bool valid = false;
+    if (WinVerifyTrust(nullptr, &action, &trust) == ERROR_SUCCESS) {
+        auto* provider = WTHelperProvDataFromStateData(trust.hWVTStateData);
+        auto* signer = provider ? WTHelperGetProvSignerFromChain(provider, 0, FALSE, 0) : nullptr;
+        if (signer && signer->csCertChain && signer->pasCertChain[0].pCert) {
+            wchar_t name[128]{};
+            CertGetNameStringW(signer->pasCertChain[0].pCert, CERT_NAME_ATTR_TYPE, 0,
+                const_cast<char*>(szOID_ORGANIZATION_NAME), name, ARRAYSIZE(name));
+            valid = wcscmp(name, L"Microsoft Corporation") == 0;
+        }
+    }
+    trust.dwStateAction = WTD_STATEACTION_CLOSE;
+    WinVerifyTrust(nullptr, &action, &trust);
+    return valid;
+}
+
+bool installSystemWebView(const std::filesystem::path& folder) {
+    wchar_t temporary[MAX_PATH]{};
+    if (!GetTempFileNameW(folder.c_str(), L"wcv", 0, temporary)) return false;
+    const auto installer = std::filesystem::path(temporary).replace_extension(L".exe");
+    if (!MoveFileW(temporary, installer.c_str())) {
+        DeleteFileW(temporary);
+        return false;
+    }
+    constexpr wchar_t url[] = L"https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+    bool success = false;
+    if (SUCCEEDED(URLDownloadToFileW(nullptr, url, installer.c_str(), 0, nullptr)) &&
+        isMicrosoftInstaller(installer.c_str())) {
+        std::wstring command = L"\"" + installer.wstring() + L"\" /silent /install";
+        STARTUPINFOW startup{sizeof(startup)};
+        PROCESS_INFORMATION process{};
+        if (CreateProcessW(installer.c_str(), command.data(), nullptr, nullptr, FALSE, 0,
+                           nullptr, folder.c_str(), &startup, &process)) {
+            CloseHandle(process.hThread);
+            WaitForSingleObject(process.hProcess, INFINITE);
+            CloseHandle(process.hProcess);
+            success = hasSystemWebView();
+        }
+    }
+    DeleteFileW(installer.c_str());
+    return success;
+}
+
+void promptForWebView() {
+    if (g_runtimeInstallPending || !g_showWhenReady) return;
+    g_runtimeInstallPending = true;
+    const bool ru = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
+    const auto message = ru
+        ? L"Для открытия виджета нужен компонент отображения Microsoft. Скачать и установить его сейчас?"
+        : L"The widget needs a Microsoft component to display its interface. Download and install it now?";
+    if (MessageBoxW(nullptr, message, L"World Clock Connect", MB_YESNO | MB_ICONQUESTION) != IDYES) {
+        g_runtimeInstallPending = false;
+        return;
+    }
+    const auto folder = dataDir();
+    const HWND window = g_window;
+    std::thread([folder, window] {
+        const HRESULT apartment = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+        const bool success = SUCCEEDED(apartment) && installSystemWebView(folder);
+        if (SUCCEEDED(apartment)) CoUninitialize();
+        PostMessageW(window, kRuntimeInstallFinished, success, 0);
+    }).detach();
+}
+#endif
+
 void initializeWebView() {
+#ifdef WORLD_CLOCK_STORE
+    g_runtimeMissing = !hasSystemWebView();
+    if (g_runtimeMissing) {
+        promptForWebView();
+        return;
+    }
+#endif
     auto userData = (dataDir()/L"WebView2").wstring();
     auto* environmentHandler = new EnvironmentHandler(
         [](HRESULT result, ICoreWebView2Environment* environment)->HRESULT {
@@ -796,8 +937,10 @@ void initializeWebView() {
                 });
             HRESULT created=environment->CreateCoreWebView2Controller(g_window,controllerHandler); controllerHandler->Release(); return created;
         });
-    HRESULT created=CreateCoreWebView2EnvironmentWithOptions(nullptr,userData.c_str(),nullptr,environmentHandler);
+    const HRESULT created = CreateCoreWebView2EnvironmentWithOptions(
+        nullptr, userData.c_str(), nullptr, environmentHandler);
     environmentHandler->Release();
+    if (FAILED(created)) logStartup(L"WebView2 environment creation failed: " + std::to_wstring(created));
 }
 
 DWORD WINAPI eventWatcher(void*) {
@@ -841,6 +984,27 @@ LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         case WM_GETMINMAXINFO: { auto* info=(MINMAXINFO*)lParam; info->ptMinTrackSize={LONG(400*g_interfaceScale),LONG(320*g_interfaceScale)}; return 0; }
         case WM_HOTKEY: if (wParam==kHotkey) showWidget(!g_visible); return 0;
         case kShowMessage: showWidget(true); return 0;
+#ifdef WORLD_CLOCK_STORE
+        case kRuntimeInstallFinished: {
+            g_runtimeInstallPending = false;
+            if (wParam) {
+                initializeWebView();
+            } else {
+                const bool ru = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_RUSSIAN;
+                MessageBoxW(nullptr,
+                    ru ? L"Не удалось установить компонент. Проверьте подключение к интернету и откройте виджет снова."
+                       : L"The component could not be installed. Check your internet connection and open the widget again.",
+                    L"World Clock Connect", MB_OK | MB_ICONERROR);
+            }
+            return 0;
+        }
+        case kStartupStateMessage:
+            if (g_webview) {
+                const auto response = L"{\"type\":\"startupState\",\"state\":" + std::to_wstring(lParam) + L"}";
+                g_webview->PostWebMessageAsJson(response.c_str());
+            }
+            return 0;
+#endif
         case WM_TIMECHANGE:
             if(!g_visible) SetTimer(window,kTickTimer,60000,nullptr);
             if(g_webview) g_webview->ExecuteScript(g_visible
@@ -923,11 +1087,20 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     if(qaLength == 0 || qaLength >= MAX_PATH || !std::filesystem::path(qaData).is_absolute()) return 7;
 #endif
     g_startedByWindows = commandLine && wcsstr(commandLine,L"--startup");
+#ifdef WORLD_CLOCK_STORE
+    const HRESULT startupApartment = RoInitialize(RO_INIT_SINGLETHREADED);
+    if (SUCCEEDED(startupApartment)) {
+        g_startedByWindows = g_startedByWindows || storeStartup::isStartupActivation();
+        RoUninitialize();
+    }
+#else
     if(g_startedByWindows && !autostartAllowed()) return 0;
+#endif
     g_visible = false;
     g_showWhenReady = !g_startedByWindows;
     HANDLE mutex=CreateMutexW(nullptr,TRUE,kMutexName);
     if (mutex && GetLastError()==ERROR_ALREADY_EXISTS) {
+        if (g_startedByWindows) { CloseHandle(mutex); return 0; }
         HANDLE show=OpenEventW(EVENT_MODIFY_STATE,FALSE,kShowEventName); if(show){SetEvent(show);CloseHandle(show);} return 0;
     }
     logStartup(L"Process started");
@@ -941,7 +1114,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     wc.hIcon=appIcon; wc.hIconSm=appSmallIcon;
     wc.hCursor=LoadCursorW(nullptr,IDC_ARROW); wc.hbrBackground=(HBRUSH)GetStockObject(BLACK_BRUSH); RegisterClassExW(&wc);
     RECT p=loadWindow(); g_target=p;
-    g_window=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kClassName,L"World Clock Widget Native",
+    g_window=CreateWindowExW(WS_EX_TOPMOST|WS_EX_TOOLWINDOW,kClassName,L"World Clock Connect",
         WS_POPUP|WS_THICKFRAME,p.left,p.top,p.right-p.left,p.bottom-p.top,nullptr,nullptr,instance,nullptr);
     if(!g_window) return 2;
     const int cornerPreference = 2; // DWMWCP_ROUND on Windows 11; older systems ignore the request.
@@ -965,7 +1138,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
         logStartup(L"Configured hotkey unavailable; using default");
     }
     g_tray.cbSize=sizeof(g_tray); g_tray.hWnd=g_window; g_tray.uID=1; g_tray.uFlags=NIF_MESSAGE|NIF_ICON|NIF_TIP;
-    g_tray.uCallbackMessage=kTrayMessage; g_tray.hIcon=appSmallIcon; wcscpy_s(g_tray.szTip,L"World Clock Widget");
+    g_tray.uCallbackMessage=kTrayMessage; g_tray.hIcon=appSmallIcon; wcscpy_s(g_tray.szTip,L"World Clock Connect");
     if(g_startedByWindows) SetTimer(g_window,kTrayRetryTimer,500,nullptr);
     else retryTrayIcon();
 #endif

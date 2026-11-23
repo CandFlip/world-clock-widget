@@ -1,5 +1,5 @@
-#define MyAppName "World Clock Widget"
-#define MyAppVersion "1.1.189"
+#define MyAppName "World Clock Connect"
+#define MyAppVersion "1.1.205"
 #define MyAppExeName "WorldClockWidget.exe"
 #define MyAppPublisher "CandFlip"
 #define MyAppURL "https://github.com/CandFlip/world-clock-widget"
@@ -36,8 +36,22 @@ SetupLogging=yes
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName}
 VersionInfoProductName={#MyAppName}
-VersionInfoVersion=1.1.189.0
+VersionInfoVersion=1.1.205.0
 SetupIconFile=native\app-icon.ico
+
+LanguageDetectionMethod=uilanguage
+ShowLanguageDialog=no
+UsePreviousLanguage=no
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+
+[CustomMessages]
+english.InstallWebView2=Installing Microsoft WebView2...
+russian.InstallWebView2=Установка компонента Microsoft WebView2...
+english.LaunchWidget=Launch %1
+russian.LaunchWidget=Запустить %1
 
 [InstallDelete]
 Type: files; Name: "{userstartup}\WorldClockWidget.lnk"
@@ -52,11 +66,11 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 
 [Run]
-Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Установка компонента Microsoft WebView2..."; Flags: waituntilterminated; Check: not WebView2Installed
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "{cm:InstallWebView2}"; Flags: waituntilterminated; Check: not WebView2Installed
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""WorldClockWidget"" /F"; Flags: runhidden waituntilterminated
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -Command ""$identity = [Security.Principal.WindowsIdentity]::GetCurrent(); $enabled = '1'; $configPath = Join-Path $env:LOCALAPPDATA 'WorldClockWidget\widget_config.json'; if (Test-Path -LiteralPath $configPath) {{ try {{ $config = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json; if ($config.settings.autostart -eq $false) {{ $enabled = '0' } } catch {{ } }; @($identity.User.Value, $identity.Name, $enabled) | Set-Content -LiteralPath '{tmp}\WorldClockWidget-install-user.txt' -Encoding Unicode"""; Flags: runhidden waituntilterminated runasoriginaluser
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -Command ""$identity = Get-Content -LiteralPath '{tmp}\WorldClockWidget-install-user.txt'; $sid = $identity[0]; $run = 'Registry::HKEY_USERS\' + $sid + '\Software\Microsoft\Windows\CurrentVersion\Run'; if (-not (Test-Path -LiteralPath $run)) {{ New-Item -Path $run -ErrorAction Stop | Out-Null }; if ($identity[2] -eq '1') {{ $command = [char]34 + '{app}\{#MyAppExeName}' + [char]34 + ' --startup'; Set-ItemProperty -Path $run -Name 'World Clock Widget' -Type String -Value $command } else {{ Remove-ItemProperty -Path $run -Name 'World Clock Widget' -ErrorAction SilentlyContinue }; Remove-ItemProperty -Path $run -Name 'WorldClockWidget' -ErrorAction SilentlyContinue; $meta = 'HKLM:\Software\WorldClockWidget'; if (-not (Test-Path -LiteralPath $meta)) {{ New-Item -Path $meta -ErrorAction Stop | Out-Null }; Set-ItemProperty -Path $meta -Name 'InstallUserSid' -Type String -Value $sid"""; Flags: runhidden waituntilterminated
-Filename: "{app}\{#MyAppExeName}"; Description: "Запустить {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchWidget,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -WindowStyle Hidden -Command ""Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -eq '{app}\{#MyAppExeName}' } | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force }"""; Flags: runhidden waituntilterminated; RunOnceId: "StopWorldClockWidget"

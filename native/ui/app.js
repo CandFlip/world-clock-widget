@@ -5,7 +5,7 @@ const quickChevronIcon = `<svg class="quick-chevron-glyph" viewBox="0 0 16 16" f
 const copyIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2"/></svg>`;
 const checkUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.8 9A7 7 0 0 1 18 6.8L20 12M4 12l2 5.2A7 7 0 0 0 18.2 15"/></svg>`;
 const downloadUpdateIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 17v3h16v-3"/></svg>`;
-const meetingOutlineSvg = `<svg class="meeting-outline" aria-hidden="true" focusable="false"><rect x="1" y="1" width="100%" height="100%" rx="8" ry="8"/></svg>`;
+const meetingOutlineSvg = `<svg class="meeting-outline" aria-hidden="true" focusable="false"><rect/></svg>`;
 function sunGlyph(horizon = false) {
   const radius = 4;
   const upperRays = '<path d="M12 2v3M5 5l2 2M17 7l2-2"/>';
@@ -33,7 +33,7 @@ const defaults = {
   favorites: ['Asia/Tokyo', 'America/New_York', 'Europe/London', 'Asia/Dubai', 'Australia/Sydney', 'Europe/Berlin'],
   settings: {
     top_clock_mode: 'auto', manual_top_timezone: 'Asia/Ho_Chi_Minh', base_timezone: '',
-    overlay_direction: 'right', time_format: 'system', theme: 'system', language: 'ru', interface_scale: 100, interface_scale_default: true,
+    overlay_direction: 'right', time_format: 'system', theme: 'system', language: 'en', interface_scale: 100, interface_scale_default: true,
     availabilityDefault: {...defaultAvailability}, baseAvailabilityOverride: null,
     reminder_intervals: [15, 30, 60], autostart: true,
   },
@@ -44,6 +44,9 @@ const defaults = {
 let config = structuredClone(defaults);
 let reminders = {lead: 15, entries: []};
 let version = 'native';
+let storeStartup = false;
+let storeStartupState = -1;
+let startupRequestPending = false;
 const updateState = {checking:false, release:null};
 const updateCheckKey = 'worldClockLastUpdateCheck';
 const updateReleaseKey = 'worldClockLatestRelease';
@@ -257,7 +260,7 @@ for (const city of catalog) {
 const strings = {
   ru: {
     title: 'Мировое время', cities: 'Города', add: 'Добавить город', reminders: 'Напоминания', none: 'Пока нет',
-    settings: 'Настройки', theme: 'Тема', systemTheme: 'Системная', dark: 'Тёмная', light: 'Светлая', language: 'Язык', base: 'Базовый город',
+    settings: 'Настройки', theme: 'Тема', systemTheme: 'Системная', dark: 'Тёмная', light: 'Светлая', language: 'Язык', base: 'Базовый город', baseTime: 'Основное время', manualBase: 'Выбрано вручную', alarmRemaining: 'Осталось',
     timeFormat: 'Формат времени', systemFormat: 'Системный', hour24: '24-часовой', hour12: '12-часовой',
     typicalSchedule: 'Общий график', citySettings: 'Имена и графики городов', defaultSchedule: 'График по умолчанию', addedCities: 'ДОБАВЛЕННЫЕ ГОРОДА', baseTimeSection: 'БАЗОВОЕ ВРЕМЯ', nameAndSchedule: 'Имя и график',
     working: 'Рабочее время', okay: 'Можно связаться', dnd: 'Не беспокоить', daylight: 'Светло', twilight: 'Сумерки', night: 'Темно',
@@ -272,7 +275,7 @@ const strings = {
   },
   en: {
     title: 'World time', cities: 'Cities', add: 'Add city', reminders: 'Reminders', none: 'None yet',
-    settings: 'Settings', theme: 'Theme', systemTheme: 'System', dark: 'Dark', light: 'Light', language: 'Language', base: 'Base city',
+    settings: 'Settings', theme: 'Theme', systemTheme: 'System', dark: 'Dark', light: 'Light', language: 'Language', base: 'Base city', baseTime: 'Base time', manualBase: 'Manually selected', alarmRemaining: 'Remaining',
     timeFormat: 'Time format', systemFormat: 'System', hour24: '24-hour', hour12: '12-hour',
     typicalSchedule: 'Shared schedule', citySettings: 'City names and schedules', defaultSchedule: 'Default schedule', addedCities: 'ADDED CITIES', baseTimeSection: 'BASE TIME', nameAndSchedule: 'Name and schedule',
     working: 'Working', okay: 'Okay to contact', dnd: 'Do not disturb', daylight: 'Daylight', twilight: 'Twilight', night: 'Night',
@@ -287,7 +290,12 @@ const strings = {
   },
 };
 
-const lang = () => config.settings.language === 'en' ? 'en' : 'ru';
+const lang = () => config.settings.language === 'ru' ? 'ru' : 'en';
+
+function initialLanguage(savedLanguage, systemLanguage) {
+  if (savedLanguage === 'ru' || savedLanguage === 'en') return savedLanguage;
+  return /^ru(?:-|$)/i.test(systemLanguage || '') ? 'ru' : 'en';
+}
 const platformStrings = {
   ru: {macos: {autostart: 'Запускать при входе в macOS', system: 'Время Mac'}},
   en: {macos: {autostart: 'Open at login on macOS', system: 'Mac time'}},
@@ -701,8 +709,8 @@ function updateMeetingUI() {
     rail.hidden = !minutes;
     if (!rail.hidden) {
       rail.style.background = meetingRangeGradient(referenceTimestamp(), meetingMembers(), minutes);
-      rail.style.left = `${sliderPosition(offset, $('#sliderArea').clientWidth)}px`;
-      rail.style.width = `${Math.max(3, $('#sliderArea').clientWidth - 20) * (minutes / 60) / 24}px`;
+      rail.style.left = `${offset / 24 * 100}%`;
+      rail.style.width = `${minutes / (24 * 60) * 100}%`;
     }
   }
 }
@@ -795,12 +803,15 @@ function localMinute(selected, zone) {
 }
 
 function temporalContext(selected, key) {
-  const zone = zoneOf(key), minute = localMinute(selected, zone);
-  const availability = availabilityAt(scheduleFor(key), minute);
-  const city = item(key);
+  const isBase = key === baseScheduleKey;
+  const zone = isBase ? baseZone() : zoneOf(key);
+  const minute = localMinute(selected, zone);
+  const schedule = isBase ? baseSchedule() : scheduleFor(key);
+  const availability = availabilityAt(schedule, minute);
+  const city = item(isBase ? baseSolarKey() : key);
   const solar = solarStateAt(selected, city.lat, city.lon);
   return {availability, solar, marker: minute / 14.4,
-    availabilityGradient: availabilityGradient(scheduleFor(key))};
+    availabilityGradient: availabilityGradient(schedule)};
 }
 
 function relativeDateContext(selected, zone) {
@@ -821,7 +832,14 @@ function availabilityGlyph(state) { return solarGlyph(state === 'working' ? 'day
 function temporalBandHtml(selected, key) {
   const context = temporalContext(selected, key);
   const description = t(context.availability);
-  return `<div class="temporal-band" role="img" aria-label="${esc(description)}" title="${esc(description)}" style="--temporal-marker:${context.marker}%;--availability-gradient:${context.availabilityGradient}"><span class="availability-layer"></span><i class="temporal-marker"></i></div>`;
+  return `<div class="temporal-band" role="img" aria-label="${esc(description)}" title="${esc(description)}" style="--temporal-marker:${context.marker}%;--availability-gradient:${context.availabilityGradient}"><span class="availability-window"><span class="availability-layer"></span><i class="temporal-marker"></i></span></div>`;
+}
+
+function updateTemporalBand(band, context) {
+  band.style.setProperty('--temporal-marker', `${context.marker}%`);
+  band.style.setProperty('--availability-gradient', context.availabilityGradient);
+  band.setAttribute('aria-label', t(context.availability));
+  band.title = t(context.availability);
 }
 
 function secondaryContext(selected, zone) {
@@ -898,6 +916,7 @@ function scheduleBackgroundTick() {
 }
 
 function render() {
+  document.documentElement.lang = lang();
   hideContextTooltip();
   hideReminderTooltip();
   liveOffset = null;
@@ -906,11 +925,10 @@ function render() {
   document.body.classList.toggle('light', config.settings.theme === 'light' || (config.settings.theme === 'system' && systemLight));
   const selected = new Date(referenceTimestamp());
   const zone = baseZone();
-  const source = config.settings.top_clock_mode === 'auto' ? `<div class="source">${t('system')}</div>` : '';
-  const city = config.settings.top_clock_mode === 'auto' ? systemCities() : cityName(config.settings.manual_top_timezone);
-  const baseSolar = temporalContext(selected, baseSolarKey()).solar;
-  const baseAvailability = availabilityAt(baseSchedule(), localMinute(selected, baseZone()));
-  const baseSolarLabel = `${t(baseAvailability)}; ${t(baseSolar)}`;
+  const automaticBase = config.settings.top_clock_mode === 'auto';
+  const baseName = automaticBase ? t('system') : cityName(config.settings.manual_top_timezone);
+  const baseContext = temporalContext(selected, baseScheduleKey);
+  const baseSolarLabel = esc(contextAccessibility(baseContext));
   const shift = shiftCaption(offset);
   const quickClass = offset > 0 || quickAtNowOpen || meetingMode ? 'quick-section open' : 'quick-section';
 
@@ -921,24 +939,38 @@ function render() {
       <button class="icon" data-action="hide" aria-label="${lang() === 'ru' ? 'Закрыть виджет' : 'Close widget'}" title="${esc(lang() === 'ru' ? `Скрыть; открыть снова: ${hotkeyLabel()}` : `Hide; reopen: ${hotkeyLabel()}`)}">×</button>
     </div>
     <div class="main-controls">
-    <section class="hero" style="height:${heroHeight()}px">
-       <article class="clock panel ${config.settings.top_clock_mode === 'manual' ? 'manual-base ' : ''}${expandedBase ? 'expanded' : ''}" id="baseClock" data-zone="${esc(zone)}" aria-expanded="${expandedBase}">
-        <div class="base-summary">
-          <span class="base-solar solar-glyph" role="img" aria-label="${esc(baseSolarLabel)}">${availabilityGlyph(baseAvailability)}</span>
-          ${source}<div class="clock-time">${timeAt(selected, zone)}</div>
-          <div class="clock-city">${esc(city)}</div><div class="date">${displayDate(selected, zone)}</div><div class="base-reminders" id="baseReminders"></div>
+    <div class="top-panels">
+      <section class="hero" style="--hero-size:${heroHeight()}px">
+        <article class="saved-panel panel"><div class="saved-heading" id="savedHeading"></div><div class="saved-list" id="alarmList"></div></article>
+      </section>
+      <div class="hero-resizer" id="heroResizer" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="${lang() === 'ru' ? 'Высота панели напоминаний' : 'Reminders panel height'}"></div>
+      <section class="base-section" aria-label="${t('baseTime')}">
+        <div class="base-card-lane">
+          <article class="clock card ${expandedBase ? 'expanded' : ''}" id="baseClock" data-zone="${esc(zone)}" tabindex="0" aria-labelledby="baseClockTitle" aria-controls="baseClockActions" aria-expanded="${expandedBase}">
+            <div class="city-summary base-clock-row">
+              <div class="city-main base-summary">
+                <div class="city-name base-title" id="baseClockTitle">${esc(baseName)}</div>
+                <div class="clock-city">${esc(automaticBase ? systemCities() : t('manualBase'))}</div>
+              </div>
+              <div class="city-clock">
+                <div class="clock-time">${timeAt(selected, zone)}</div>
+                <div class="date">${displayDate(selected, zone)}</div>
+              </div>
+              <span class="city-context"><span class="base-solar solar-glyph context-token" role="img" tabindex="0" aria-label="${baseSolarLabel}" data-tooltip="${baseSolarLabel}">${availabilityGlyph(baseContext.availability)}</span></span>
+              ${temporalBandHtml(selected, baseScheduleKey)}
+              <div class="city-alarm-track"></div>
+            </div>
+            <div id="baseClockActions" class="card-actions-wrap" aria-hidden="${!expandedBase}" ${expandedBase ? '' : 'inert'}><div class="card-actions"><button data-base-action="alarm">${t('alarmAction')}</button><button data-base-action="replace">${t('changeCity')}</button><button data-base-action="schedule">${t('contactHours')}</button></div></div>
+            ${meetingOutlineSvg}
+          </article>
         </div>
-         <div class="card-actions-wrap" aria-hidden="${!expandedBase}"><div class="card-actions"><button data-base-action="alarm">${t('alarmAction')}</button><button data-base-action="replace">${t('changeCity')}</button><button data-base-action="schedule">${t('contactHours')}</button></div></div>
-         ${meetingOutlineSvg}
-      </article>
-      <article class="saved-panel panel"><div class="saved-heading" id="savedHeading"></div><div class="saved-list" id="alarmList"></div></article>
-    </section>
-    <div class="hero-resizer" id="heroResizer" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="${lang() === 'ru' ? 'Высота секции времени и напоминаний' : 'Time and reminders section height'}"></div>
+      </section>
+    </div>
     <section class="slider" id="sliderArea">
       <div class="shift-label ${offset === 0 ? 'start' : offset === 24 ? 'end' : ''}" id="shiftLabel">${shift}</div>
        <button class="quick-toggle ${offset > 0 ? 'away-from-now' : ''}" id="quickToggle" type="button" aria-label="${lang() === 'ru' ? 'Быстрые напоминания' : 'Quick reminders'}" title="${lang() === 'ru' ? 'Быстрые напоминания' : 'Quick reminders'}" aria-controls="quickSection" aria-expanded="${offset > 0 || quickAtNowOpen || meetingMode}">${quickAlarmIcon}${quickChevronIcon}</button>
        <div class="slider-rail" aria-hidden="true"><div class="slider-fill"></div></div>
-       <div class="meeting-range" id="meetingRange" hidden></div>
+       <div class="meeting-range-clip" aria-hidden="true"><div class="meeting-range" id="meetingRange" hidden></div></div>
       <div class="slider-thumb" aria-hidden="true"></div>
       <input id="timeSlider" type="range" min="0" max="24" step="1" value="${offset}" aria-label="${t('moveFuture')}" aria-valuetext="${shift}">
       <div class="marks"><span id="originLabel">${timelineCaption(0)}</span>${[6,12,18,24].map(hours => `<span data-timeline-hour="${hours}">${timelineCaption(hours)}</span>`).join('')}</div>
@@ -951,8 +983,9 @@ function render() {
     </section>
     </div>
     <div class="city-section">
-    <div class="cities-title">${t('cities')}</div>
-    <div class="cities" id="cities"></div>
+    <div class="cities" id="cities">
+      <h2 class="city-section-title cities-title">${t('cities')}</h2>
+    </div>
     <button class="add" data-action="add">＋ &nbsp; ${t('add')}</button>
     </div>
     <div class="footer"><button class="version-button" id="versionButton" type="button">${esc(version)}</button><button class="update-button context-token" id="updateButton" type="button">${checkUpdateIcon}</button><button class="whats-next" data-action="whats-next">${t('whatsNext')}</button></div>
@@ -964,15 +997,27 @@ function render() {
   updateMeetingUI();
 }
 
+let cityListResizeObserver;
+
+function syncBaseRuler() {
+  const base = $('#baseClock .city-summary');
+  const first = $('#cities .city-summary');
+  if (!base) return;
+  const narrowing = first ? Math.max(0, base.getBoundingClientRect().width - first.getBoundingClientRect().width) : 0;
+  base.style.setProperty('--city-list-narrowing', `${narrowing}px`);
+}
+
 function renderCities() {
   const root = $('#cities');
   if (!root) return;
+  cityListResizeObserver?.disconnect();
   cityAlarmResizeObserver?.disconnect();
   const selected = new Date(referenceTimestamp());
   const baseOffset = offsetHours(baseZone(), selected);
   const remaining = until(selected.getTime());
   if (expandedCityKey && !config.timezones.includes(expandedCityKey)) expandedCityKey = null;
-  root.innerHTML = config.timezones.map((key, index) => {
+  root.querySelectorAll(':scope > [data-city]').forEach(card => card.remove());
+  root.insertAdjacentHTML('beforeend', config.timezones.map((key, index) => {
     const zone = zoneOf(key);
     const delta = offsetHours(zone, selected) - baseOffset;
     const context = temporalContext(selected, key);
@@ -990,8 +1035,13 @@ function renderCities() {
        <div class="card-actions-wrap" aria-hidden="${!expanded}"><div class="card-actions"><button data-city-action="alarm">${t('alarmAction')}</button><button data-city-action="base">${t('makeBase')}</button><button data-city-action="replace">${t('changeCity')}</button><button data-city-action="schedule">${t('nameAndSchedule')}</button></div></div>
        ${meetingOutlineSvg}
     </article>`;
-  }).join('');
+  }).join(''));
   bindCards();
+  syncBaseRuler();
+  if (typeof ResizeObserver === 'function') {
+    cityListResizeObserver ||= new ResizeObserver(syncBaseRuler);
+    cityListResizeObserver.observe(root);
+  }
   renderCityAlarms();
   updateMeetingUI();
 }
@@ -1011,15 +1061,15 @@ function cityReminders(key) {
     entry.source_type !== 'base' && reminderCityKey(entry) === key).sort((a, b) => a.alarm - b.alarm);
 }
 
+function remindersForTrack(card) {
+  if (card.id !== 'baseClock') return cityReminders(card.dataset.zone);
+  return reminders.entries.filter(entry => entry.source_type === 'base' &&
+    ['pending', 'ringing'].includes(entry.state)).sort((a, b) => a.alarm - b.alarm);
+}
+
 function renderCityAlarms() {
-  $$('.city-card').forEach(card => renderCityAlarmTrack(card, cityReminders(card.dataset.zone)));
-  const base = $('#baseReminders');
-  if (base) {
-    const entries = reminders.entries.filter(entry => entry.source_type === 'base' && entry.active).sort((a,b) => a.alarm-b.alarm);
-    renderAlarmLabels(base, entries);
-    $('#baseClock')?.classList.toggle('has-reminders', entries.length > 0);
-    syncHeroHeight();
-  }
+  $$('#baseClock, .city-card').forEach(card => renderCityAlarmTrack(card, remindersForTrack(card)));
+  refreshReminderTooltip();
 }
 
 function reminderRemaining(entry) {
@@ -1061,6 +1111,7 @@ function renderAlarms() {
     return;
   }
   root.alarmSignature = signature;
+  syncHeroHeight();
   if (!active.length) {
     root.innerHTML = `<div class="empty">${t('none')}</div>`;
     return;
@@ -1094,36 +1145,18 @@ function renderAlarms() {
 }
 
 function heroHeight(value = config.settings.hero_height) {
-  return clamp(Number(value) || 124, 112, Math.max(112, window.innerHeight - 350));
+  const hasReminders = reminders.entries.some(entry => ['pending', 'ringing'].includes(entry.state));
+  const preferred = hasReminders ? 112 : 64;
+  return clamp(Number(value) || preferred, 60, Math.max(60, window.innerHeight - 300));
 }
 
-// Measure the natural summary and the full action row, never the animating parent height.
 function syncHeroHeight() {
-  const hero = $('.hero'), clock = $('#baseClock');
-  if(!hero || !clock || !window.getComputedStyle) return;
-  const style = window.getComputedStyle(clock);
-  const px = value => parseFloat(value) || 0;
-  const summary = clock.querySelector('.base-summary');
-  let minimum = px(style.borderTopWidth)+px(style.borderBottomWidth)+(summary?.scrollHeight || 0);
-  if(expandedBase) {
-    const wrap = clock.querySelector('.card-actions-wrap');
-    const actions = wrap?.firstElementChild;
-    const actionsStyle = actions ? window.getComputedStyle(actions) : null;
-    const wrapStyle = wrap ? window.getComputedStyle(wrap) : null;
-    const expandedPadding = actionsStyle ? px(actionsStyle.getPropertyValue('--card-actions-padding')) : 0;
-    const currentPadding = actionsStyle ? px(actionsStyle.paddingTop) + px(actionsStyle.paddingBottom) : 0;
-    minimum += Math.max(0, (actions?.scrollHeight || 0) - currentPadding) + expandedPadding * 2
-      + (wrapStyle ? px(wrapStyle.borderTopWidth) + px(wrapStyle.borderBottomWidth) : 0);
-  }
-  minimum = Math.ceil(minimum);
-  const manual = Number(config.settings.hero_height);
-  const requested = manual > 0 ? heroHeight(manual) : heroHeight();
-  const quickOpen = $('#quickSection')?.classList.contains('open');
-  const compactLimit = window.innerHeight <= 800 && quickOpen && !expandedBase ? 124 : Infinity;
-  const height = Math.max(minimum, Math.min(requested, compactLimit));
-  hero.style.setProperty('--hero-size',`${height}px`);
-  $('#heroResizer')?.setAttribute('aria-valuenow',height);
-  $('#heroResizer')?.setAttribute('aria-valuemin',minimum);
+  const hero = $('.hero');
+  if (!hero) return;
+  const height = heroHeight();
+  hero.style.setProperty('--hero-size', `${height}px`);
+  $('#heroResizer')?.setAttribute('aria-valuenow', height);
+  $('#heroResizer')?.setAttribute('aria-valuemin', 60);
 }
 
 function bindHeroResize() {
@@ -1159,6 +1192,7 @@ function bindHeroResize() {
 }
 
 window.addEventListener?.('resize', () => {
+  syncBaseRuler();
   syncHeroHeight();
   updateSliderVisual(liveOffset ?? offset);
   renderCityAlarms();
@@ -1230,10 +1264,21 @@ function bindMain() {
   const baseClock = $('#baseClock');
   bindReminderDrop(baseClock, config.settings.top_clock_mode === 'auto' ? baseZone() : config.settings.manual_top_timezone, config.settings.top_clock_mode === 'auto' ? systemCities() : cityName(config.settings.manual_top_timezone), 'base');
   const reminderClick = baseClock?.onclick;
-  if (baseClock) baseClock.onclick = event => {
+  baseClock.onclick = event => {
     if (event.target.closest('button,input,label')) return;
     if (meetingMode) { toggleMeetingMember(baseScheduleKey); return; }
     if (pendingLead !== null) return reminderClick?.(event);
+    toggleExpandedBase();
+    applyExpandedBaseState();
+  };
+  baseClock.onkeydown = event => {
+    if (event.target !== baseClock || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    baseClock.click();
+  };
+  baseClock.oncontextmenu = event => {
+    event.preventDefault();
+    if (meetingMode || expandedBase) return;
     toggleExpandedBase();
     applyExpandedBaseState();
   };
@@ -1295,6 +1340,13 @@ function updateQuickVisibility() {
   button.setAttribute('aria-expanded', String(offset > 0 || quickAtNowOpen || meetingMode));
 }
 
+function updateAvailabilityIcon(icon, context) {
+  const label = contextAccessibility(context);
+  icon.innerHTML = availabilityGlyph(context.availability);
+  icon.setAttribute('aria-label', label);
+  icon.dataset.tooltip = label;
+}
+
 function updateDynamic() {
   const selected = new Date(referenceTimestamp());
   const zone = baseZone();
@@ -1302,14 +1354,9 @@ function updateDynamic() {
   if (!clock) return;
   clock.textContent = timeAt(selected, zone);
   $('.date').textContent = displayDate(selected, zone);
-  const baseSolar = temporalContext(selected, baseSolarKey()).solar;
-  const baseAvailability = availabilityAt(baseSchedule(), localMinute(selected, baseZone()));
-  const baseSolarNode = $('.base-solar');
-  if (baseSolarNode) {
-    const label = `${t(baseAvailability)}; ${t(baseSolar)}`;
-    baseSolarNode.innerHTML = availabilityGlyph(baseAvailability);
-    baseSolarNode.setAttribute('aria-label', label);
-  }
+  const baseContext = temporalContext(selected, baseScheduleKey);
+  updateTemporalBand($('#baseClock .temporal-band'), baseContext);
+  updateAvailabilityIcon($('.base-solar'), baseContext);
   const shift = shiftCaption(offset);
   $('#timeSlider').value = liveOffset ?? offset;
   const timelineNow = new Date();
@@ -1325,19 +1372,12 @@ function updateDynamic() {
     const delta = offsetHours(cityZone, selected) - baseOffset;
     const context = temporalContext(selected, card.dataset.zone);
     card.querySelector('.clock-value').textContent = timeAt(selected, cityZone);
-    const contextNode = card.querySelector('.city-context');
-    const solarNode = contextNode.querySelector('.solar-glyph');
-    solarNode.innerHTML = availabilityGlyph(context.availability);
-    solarNode.setAttribute('aria-label', contextAccessibility(context));
-    solarNode.dataset.tooltip = contextAccessibility(context);
+    updateAvailabilityIcon(card.querySelector('.city-context .solar-glyph'), context);
     card.querySelector('.offset').textContent = `${delta >= 0 ? '+' : ''}${delta} ${lang() === 'ru' ? 'ч.' : 'h'} ${t('from')}`;
     const extra = secondaryContext(selected, cityZone);
     card.querySelector('.until').textContent = `${until(selected.getTime())}${extra ? ` · ${extra}` : ''}`;
     const band = card.querySelector('.temporal-band');
-    band.style.setProperty('--temporal-marker', `${context.marker}%`);
-    band.style.setProperty('--availability-gradient', context.availabilityGradient);
-    band.setAttribute('aria-label', t(context.availability));
-    band.title = t(context.availability);
+    updateTemporalBand(band, context);
   });
   $$('.chip[data-preset]').forEach(chip => { chip.querySelector('.chip-caption').textContent = intervalCaption(+chip.dataset.lead); });
   renderAlarms();
@@ -1458,8 +1498,11 @@ function applyExpandedBaseState() {
   if (!card?.classList) return;
   card.classList.toggle('expanded', expandedBase);
   card.setAttribute('aria-expanded', String(expandedBase));
-  card.querySelector('.card-actions-wrap')?.setAttribute('aria-hidden', String(!expandedBase));
-  syncHeroHeight();
+  const actions = card.querySelector('#baseClockActions');
+  if (actions) {
+    actions.setAttribute('aria-hidden', String(!expandedBase));
+    actions.inert = !expandedBase;
+  }
 }
 
 function applyExpandedCityState() {
@@ -1905,7 +1948,7 @@ function openFeatureGuide({restore = false} = {}) {
   ];
   const items = new Map(featureGuideItems().map(item => [item[0], item]));
   const view = restore ? featureGuideViewState : null;
-  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Widget ${esc(version)}</strong><p>${ru ? 'Большие часы показывают время компьютера или выбранного базового города. Ползунок меняет показанный момент сразу во всех городах. Выберите раздел и тему; образцы в тексте помогают узнать нужный элемент, а «Показать в интерфейсе» — найти его.' : 'The large clock shows computer time or your chosen base city. The slider changes the displayed moment in every city. Choose a section and topic; illustrations help you recognize controls, and “Show in the widget” helps you find them.'}</p></div>${groups.map(([name, ids], index) => `<details class="feature-group" data-guide-section="${index}" ${view?.section === String(index) ? 'open' : ''}><summary><h3>${esc(name)}</h3><span class="feature-count">${ids.length}</span></summary><div class="feature-group-content">${ids.map(id => { const [, title, press, result] = items.get(id); return `<details class="feature-card" data-guide-topic="${id}" ${view?.topic === id ? 'open' : ''}><summary><h4>${esc(title)}</h4></summary><div class="feature-content">${guideSteps(press)}${guideParagraphs(result)}<button class="feature-show" data-feature="${id}" type="button">${ru ? 'Показать в интерфейсе' : 'Show in the widget'} ›</button></div></details>`; }).join('')}</div></details>`).join('')}</div>`);
+  modal(ru ? 'Возможности' : 'Features', `<div class="feature-guide"><div class="feature-intro"><strong>World Clock Connect ${esc(version)}</strong><p>${ru ? 'Большие часы показывают время компьютера или выбранного базового города. Ползунок меняет показанный момент сразу во всех городах. Выберите раздел и тему; образцы в тексте помогают узнать нужный элемент, а «Показать в интерфейсе» — найти его.' : 'The large clock shows computer time or your chosen base city. The slider changes the displayed moment in every city. Choose a section and topic; illustrations help you recognize controls, and “Show in the widget” helps you find them.'}</p></div>${groups.map(([name, ids], index) => `<details class="feature-group" data-guide-section="${index}" ${view?.section === String(index) ? 'open' : ''}><summary><h3>${esc(name)}</h3><span class="feature-count">${ids.length}</span></summary><div class="feature-group-content">${ids.map(id => { const [, title, press, result] = items.get(id); return `<details class="feature-card" data-guide-topic="${id}" ${view?.topic === id ? 'open' : ''}><summary><h4>${esc(title)}</h4></summary><div class="feature-content">${guideSteps(press)}${guideParagraphs(result)}<button class="feature-show" data-feature="${id}" type="button">${ru ? 'Показать в интерфейсе' : 'Show in the widget'} ›</button></div></details>`; }).join('')}</div></details>`).join('')}</div>`);
   const sections = $$('.feature-group'), topics = $$('.feature-card');
   sections.forEach(section => section.addEventListener('toggle', () => {
     if (section.open) sections.filter(other => other !== section).forEach(other => { other.open = false; });
@@ -1961,7 +2004,7 @@ function showFeatureInApp(id) {
     if (config.timezones.length) { expandedCityKey = config.timezones[0]; applyExpandedCityState(); selector = '[data-city-action=alarm]'; }
     else { expandedBase = true; applyExpandedBaseState(); selector = '[data-base-action=alarm]'; }
   }
-  else if (id === 'reminderTrack') selector = config.timezones.length ? '.city-card .city-alarm-track' : '#baseClock';
+  else if (id === 'reminderTrack') selector = config.timezones.length ? '.city-card .city-alarm-track' : '#baseClock .city-alarm-track';
   else if (id === 'reminderManage') selector = reminders.entries.length ? '.saved-card' : '#savedHeading';
   else if (id === 'reminderPrefs') { openSettings(); selector = '#intervals'; }
   else if (id === 'settings') { openSettings(); selector = '#theme'; }
@@ -2012,6 +2055,7 @@ function updateUpdateButton() {
 }
 
 async function checkForUpdates(manual = false) {
+  if (storeStartup) return;
   if (updateState.checking) return;
   const now = Date.now();
   let last = updateState.lastCheck || 0;
@@ -2058,6 +2102,10 @@ function restoreUpdateState() {
 }
 
 function updateButtonClick() {
+  if (storeStartup) {
+    send('openExternal\nms-windows-store://pdp/?ProductId=9N9X3T947SZ5');
+    return;
+  }
   const release = updateState.release;
   if (!release || !newerVersion(release.tag, version)) { checkForUpdates(true); return; }
   if (platform === 'macos') {
@@ -2227,6 +2275,22 @@ function openInterfaceScale() {
   refresh();
 }
 
+function refreshStoreStartupSwitch() {
+  const button = $('#autostartSwitch');
+  if (!button) return;
+  const enabled = storeStartupState === 2 || storeStartupState === 4;
+  button.classList.toggle('on', enabled);
+  button.setAttribute('aria-checked', String(enabled));
+  button.disabled = startupRequestPending || ![0, 1, 2].includes(storeStartupState);
+}
+
+function requestStoreStartup(message) {
+  if (startupRequestPending) return;
+  startupRequestPending = true;
+  refreshStoreStartupSwitch();
+  send(message);
+}
+
 function openSettings() {
   const themeName = config.settings.theme === 'system' ? t('systemTheme') : t(config.settings.theme);
   const formatName = config.settings.time_format === 'system' ? t('systemFormat') : t(config.settings.time_format === '12' ? 'hour12' : 'hour24');
@@ -2251,7 +2315,7 @@ function openSettings() {
   $('#base').onclick = () => openCities('base-settings');
   $('#interfaceScale').onclick = openInterfaceScale;
   $('#language').onclick = () => choice(t('language'), [['ru', 'Русский'], ['en', 'English']], lang(), value => {
-    config.settings.language = value; saveConfig(); render(); openSettings();
+    config.settings.language = value; send('setLanguage\n' + value); saveConfig(); render(); openSettings();
   });
   $('#citySettings').onclick = openCitySettingsList;
   $('#intervals').onclick = openIntervals;
@@ -2260,11 +2324,23 @@ function openSettings() {
   $('#hotkey').onclick = openHotkey;
   $('#quickTitles').onclick = openQuickTitles;
   $('#autostartSwitch').onclick = () => {
+    if (storeStartup) {
+      if (storeStartupState === 1) {
+        toast(lang() === 'ru' ? 'Включите виджет в настройках автозагрузки Windows' : 'Enable the widget in Windows Startup settings');
+        return;
+      }
+      requestStoreStartup(`setStartup\n${storeStartupState === 2 ? '0' : '1'}`);
+      return;
+    }
     config.settings.autostart = !config.settings.autostart;
     saveConfig();
     send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
     openSettings();
   };
+  if (storeStartup) {
+    refreshStoreStartupSwitch();
+    requestStoreStartup('getStartup');
+  }
 }
 
 async function openAlarmSound() {
@@ -2654,7 +2730,7 @@ document.addEventListener('keydown', event => {
 document.addEventListener('pointerdown', event => {
   if (event.button !== 0) return;
   // Do not move an interactive target between pointerdown and click.
-  const interactiveTarget = event.target.closest('button,input,.card,.panel,.slider,.quick-section,.modal-root,#resize,.hero-resizer');
+  const interactiveTarget = event.target.closest('button,input,.card,.panel,.cities,.slider,.quick-section,.modal-root,#resize,.hero-resizer');
   const collapsedCard = interactiveTarget ? false : closeExpandedCardsOutside(event.target);
   if (event.target.closest('#namePopover')) return;
   closeNamePopover();
@@ -2671,6 +2747,12 @@ document.addEventListener('click', event => {
 }, true);
 
 host?.addEventListener('message', event => {
+  if (event.data?.type === 'startupState') {
+    startupRequestPending = false;
+    storeStartupState = event.data.state;
+    refreshStoreStartupSwitch();
+    return;
+  }
   if (event.data?.type === 'updateResult') {
     toast(event.data.success
       ? (lang() === 'ru' ? 'Открываем установщик обновления…' : 'Opening update installer…')
@@ -2714,8 +2796,11 @@ host?.addEventListener('message', event => {
   version = event.data.version || version;
   restoreUpdateState();
   const previousConfig = JSON.stringify(config);
+  const savedLanguage = config?.settings?.language;
   const previousReminders = JSON.stringify(reminders);
   normalize();
+  config.settings.language = initialLanguage(savedLanguage, event.data.systemLanguage);
+  send('setLanguage\n' + lang());
   activeHotkey = Number.isInteger(event.data.hotkeyModifiers) && Number.isInteger(event.data.hotkeyKey)
     ? {modifiers: event.data.hotkeyModifiers, key: event.data.hotkeyKey}
     : {...(config.settings.hotkey || defaultHotkeyForPlatform())};
@@ -2724,7 +2809,8 @@ host?.addEventListener('message', event => {
   soundLibraryReady = loadSoundLibrary();
   if (JSON.stringify(reminders) !== previousReminders) saveReminders();
   if (JSON.stringify(config) !== previousConfig) saveConfig();
-  send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
+  storeStartup = event.data.storeStartup === true;
+  if (!storeStartup) send(`setStartup\n${config.settings.autostart ? '1' : '0'}`);
   applyInterfaceScale();
   render();
   send('rendered');

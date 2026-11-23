@@ -1,4 +1,4 @@
-# World Clock Widget Native
+# World Clock Connect Native
 
 Native Win32/C++ implementation released as v1.1.48. It replaces the Python
 runtime while preserving the existing configuration and reminder files.

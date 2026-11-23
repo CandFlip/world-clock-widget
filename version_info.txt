@@ -1,7 +1,7 @@
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 1, 189, 0),
-    prodvers=(1, 1, 189, 0),
+    filevers=(1, 1, 205, 0),
+    prodvers=(1, 1, 205, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -14,13 +14,13 @@ VSVersionInfo(
       StringTable(
         '040904B0',
          [StringStruct('CompanyName', 'CandFlip'),
-         StringStruct('FileDescription', 'World Clock Widget'),
-        StringStruct('FileVersion', '1.1.189.0'),
+         StringStruct('FileDescription', 'World Clock Connect'),
+        StringStruct('FileVersion', '1.1.205.0'),
          StringStruct('InternalName', 'WorldClockWidget'),
          StringStruct('LegalCopyright', 'Copyright (c) 2026 CandFlip'),
          StringStruct('OriginalFilename', 'WorldClockWidget.exe'),
-         StringStruct('ProductName', 'World Clock Widget'),
-        StringStruct('ProductVersion', '1.1.189.0')])
+         StringStruct('ProductName', 'World Clock Connect'),
+        StringStruct('ProductVersion', '1.1.205.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
